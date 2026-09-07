@@ -12,8 +12,8 @@ The `attendance-service` records daily attendance for both students (per class) 
 |----------|-------|
 | ArtifactId | `attendance-service` |
 | Package root | `com.artacademy.attendance` |
-| Server port | **8084** (registered in Eureka as `ATTENDANCE-SERVICE`) |
-| Database | `artacademy_attendance` (PostgreSQL) |
+| Server port | **8084** local/dev · **8084** Docker container (host-mapped `8084:8084`) |
+| Database | `attendance_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

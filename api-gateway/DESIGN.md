@@ -12,7 +12,7 @@ The `api-gateway` is the single entry point for all client traffic. It is built 
 |----------|-------|
 | ArtifactId | `api-gateway` |
 | Package root | `com.artacademy.gateway` |
-| Server port | **8080** |
+| Server port | **8080** (local/dev) · **18080** Docker host-mapped (`18080:8080`) |
 
 ---
 

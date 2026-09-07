@@ -12,8 +12,8 @@ The `reporting-service` is a read-optimised, event-sourced projection layer. It 
 |----------|-------|
 | ArtifactId | `reporting-service` |
 | Package root | `com.artacademy.reporting` |
-| Server port | **8088** (registered in Eureka as `REPORTING-SERVICE`) |
-| Database | `artacademy_reporting` (PostgreSQL) |
+| Server port | **8088** local/dev · **8088** Docker container (host-mapped `8088:8088`) |
+| Database | `reporting_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

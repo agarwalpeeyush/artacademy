@@ -12,8 +12,8 @@ The `auth-service` is responsible for user authentication, JWT access token gene
 |----------|-------|
 | ArtifactId | `auth-service` |
 | Package root | `com.artacademy.auth` |
-| Server port | **8081** (registered in Eureka as `AUTH-SERVICE`) |
-| Database | `artacademy_auth` (PostgreSQL) |
+| Server port | **8081** local/dev · **8081** Docker container (host-mapped `8081:8081`) |
+| Database | `auth_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

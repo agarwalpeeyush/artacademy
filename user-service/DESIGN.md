@@ -12,8 +12,8 @@ The `user-service` manages the master data for the two human actor types in the 
 |----------|-------|
 | ArtifactId | `user-service` |
 | Package root | `com.artacademy.userservice` |
-| Server port | **8082** (registered in Eureka as `USER-SERVICE`) |
-| Database | `artacademy_users` (PostgreSQL) |
+| Server port | **8082** local/dev · **8082** Docker container (host-mapped `8082:8082`) |
+| Database | `user_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

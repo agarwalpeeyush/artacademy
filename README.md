@@ -2,6 +2,15 @@
 
 Enterprise-grade Art Academy and Tuition Center Management Platform built with Microservices Architecture.
 
+## Design Documentation
+
+The full architecture and design details for every service live in `DESIGN.md` files co-located with each module.
+
+- **[DESIGN.md](DESIGN.md)** — Platform overview, service inventory, startup order, Kafka event flow, and route summary
+- Each service folder contains its own `DESIGN.md` (e.g. `auth-service/DESIGN.md`, `payment-service/DESIGN.md`)
+
+---
+
 ## Technology Stack
 
 | Layer | Technology |

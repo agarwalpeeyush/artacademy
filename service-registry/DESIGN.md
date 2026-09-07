@@ -67,17 +67,17 @@ On startup the service sends a `POST /eureka/apps/{appName}` registration. Heart
 
 ## 6. Registered Services
 
-| Eureka App Name | Default Port |
-|-----------------|-------------|
-| `API-GATEWAY` | 8080 |
-| `AUTH-SERVICE` | 8081 |
-| `USER-SERVICE` | 8082 |
-| `COURSE-ENROLLMENT-SERVICE` | 8083 |
-| `ATTENDANCE-SERVICE` | 8084 |
-| `SCHEDULING-SERVICE` | 8085 |
-| `PAYMENT-SERVICE` | 8086 |
-| `NOTIFICATION-SERVICE` | 8087 |
-| `REPORTING-SERVICE` | 8088 |
+| Eureka App Name | Local/Dev Port | Docker Container Port | Docker Host Port |
+|-----------------|---------------|-----------------------|-----------------|
+| `API-GATEWAY` | 8080 | 8080 | 18080 |
+| `AUTH-SERVICE` | 8081 | 8081 | 8081 |
+| `USER-SERVICE` | 8082 | 8082 | 8082 |
+| `COURSE-ENROLLMENT-SERVICE` | 8083 | 8083 | 8083 |
+| `ATTENDANCE-SERVICE` | 8084 | 8084 | 8084 |
+| `SCHEDULING-SERVICE` | 8085 | 8085 | 8085 |
+| `PAYMENT-SERVICE` | 8086 | 8086 | 8086 |
+| `NOTIFICATION-SERVICE` | 8087 | 8087 | 8087 |
+| `REPORTING-SERVICE` | 8088 | 8088 | 8088 |
 
 ---
 

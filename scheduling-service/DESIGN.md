@@ -12,8 +12,8 @@ The `scheduling-service` manages physical rooms and the weekly timetable (Schedu
 |----------|-------|
 | ArtifactId | `scheduling-service` |
 | Package root | `com.artacademy.scheduling` |
-| Server port | **8085** (registered in Eureka as `SCHEDULING-SERVICE`) |
-| Database | `artacademy_scheduling` (PostgreSQL) |
+| Server port | **8085** local/dev · **8085** Docker container (host-mapped `8085:8085`) |
+| Database | `schedule_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

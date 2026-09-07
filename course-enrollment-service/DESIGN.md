@@ -12,8 +12,8 @@ The `course-enrollment-service` manages the academy's course catalogue, the sche
 |----------|-------|
 | ArtifactId | `course-enrollment-service` |
 | Package root | `com.artacademy.courseenrollment` |
-| Server port | **8083** (registered in Eureka as `COURSE-ENROLLMENT-SERVICE`) |
-| Database | `artacademy_courses` (PostgreSQL) |
+| Server port | **8083** local/dev · **8083** Docker container (host-mapped `8083:8083`) |
+| Database | `academic_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

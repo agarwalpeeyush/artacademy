@@ -24,20 +24,20 @@ The Art Academy Platform is a microservices-based educational management system 
 
 ## Service Inventory
 
-| # | Document | Service | Port | Database |
-|---|----------|---------|------|----------|
-| 0 | [00-common-library.md](00-common-library.md) | Common Library | — | — |
-| 1 | [01-service-registry.md](01-service-registry.md) | Service Registry (Eureka) | 8761 | — |
-| 2 | [02-config-server.md](02-config-server.md) | Config Server | 8888 | — |
-| 3 | [03-api-gateway.md](03-api-gateway.md) | API Gateway | 8080 | — |
-| 4 | [04-auth-service.md](04-auth-service.md) | Auth Service | 8081 | artacademy_auth |
-| 5 | [05-user-service.md](05-user-service.md) | User Service | 8082 | artacademy_users |
-| 6 | [06-course-enrollment-service.md](06-course-enrollment-service.md) | Course Enrollment Service | 8083 | artacademy_courses |
-| 7 | [07-attendance-service.md](07-attendance-service.md) | Attendance Service | 8084 | artacademy_attendance |
-| 8 | [08-scheduling-service.md](08-scheduling-service.md) | Scheduling Service | 8085 | artacademy_scheduling |
-| 9 | [09-payment-service.md](09-payment-service.md) | Payment Service | 8086 | artacademy_payments |
-| 10 | [10-notification-service.md](10-notification-service.md) | Notification Service | 8087 | artacademy_notifications |
-| 11 | [11-reporting-service.md](11-reporting-service.md) | Reporting Service | 8088 | artacademy_reporting |
+| # | Document | Service | Port (local/Docker) | Database |
+|---|----------|---------|---------------------|----------|
+| 0 | [Common Library](common-library/DESIGN.md) | Common Library | — | — |
+| 1 | [Service Registry](service-registry/DESIGN.md) | Service Registry (Eureka) | 8761 / 8761 | — |
+| 2 | [Config Server](config-server/DESIGN.md) | Config Server | 8888 / 8888 | — |
+| 3 | [API Gateway](api-gateway/DESIGN.md) | API Gateway | 8080 / 18080 | — |
+| 4 | [Auth Service](auth-service/DESIGN.md) | Auth Service | 8081 / 8081 | `auth_db` |
+| 5 | [User Service](user-service/DESIGN.md) | User Service | 8082 / 8082 | `user_db` |
+| 6 | [Course Enrollment Service](course-enrollment-service/DESIGN.md) | Course Enrollment Service | 8083 / 8083 | `academic_db` |
+| 7 | [Attendance Service](attendance-service/DESIGN.md) | Attendance Service | 8084 / 8084 | `attendance_db` |
+| 8 | [Scheduling Service](scheduling-service/DESIGN.md) | Scheduling Service | 8085 / 8085 | `schedule_db` |
+| 9 | [Payment Service](payment-service/DESIGN.md) | Payment Service | 8086 / 8086 | `payment_db` |
+| 10 | [Notification Service](notification-service/DESIGN.md) | Notification Service | 8087 / 8087 | `notification_db` |
+| 11 | [Reporting Service](reporting-service/DESIGN.md) | Reporting Service | 8088 / 8088 | `reporting_db` |
 
 ---
 
@@ -93,7 +93,7 @@ Any service ──► notification.request
 
 ## API Gateway Route Summary
 
-All requests enter at `http://localhost:8080`.
+All requests enter at `http://localhost:8080` (local) or `http://localhost:18080` (Docker).
 
 | Path prefix | Downstream service | JWT required |
 |-------------|-------------------|--------------|

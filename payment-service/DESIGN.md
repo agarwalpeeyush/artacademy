@@ -12,8 +12,8 @@ The `payment-service` manages the complete financial lifecycle for students: aut
 |----------|-------|
 | ArtifactId | `payment-service` |
 | Package root | `com.artacademy.payment` |
-| Server port | **8086** (registered in Eureka as `PAYMENT-SERVICE`) |
-| Database | `artacademy_payments` (PostgreSQL) |
+| Server port | **8086** local/dev · **8086** Docker container (host-mapped `8086:8086`) |
+| Database | `payment_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 

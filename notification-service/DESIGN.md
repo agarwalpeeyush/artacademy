@@ -12,8 +12,8 @@ The `notification-service` is a pure consumer service. It listens to multiple Ka
 |----------|-------|
 | ArtifactId | `notification-service` |
 | Package root | `com.artacademy.notification` |
-| Server port | **8087** (registered in Eureka as `NOTIFICATION-SERVICE`) |
-| Database | `artacademy_notifications` (PostgreSQL) |
+| Server port | **8087** local/dev · **8087** Docker container (host-mapped `8087:8087`) |
+| Database | `notification_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
 
 ---
 
