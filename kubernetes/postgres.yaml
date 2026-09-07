@@ -1,0 +1,133 @@
+###############################################################################
+# PostgreSQL — StatefulSet + PersistentVolumeClaim + Service
+###############################################################################
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: artacademy
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: artacademy
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: artacademy
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: artacademy-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artacademy-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: artacademy
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - artacademy
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - artacademy
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: init-script
+          configMap:
+            name: postgres-init-script
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: artacademy
+data:
+  init-databases.sql: |
+    SELECT 'CREATE DATABASE auth_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'auth_db')\gexec
+    SELECT 'CREATE DATABASE user_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'user_db')\gexec
+    SELECT 'CREATE DATABASE academic_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'academic_db')\gexec
+    SELECT 'CREATE DATABASE attendance_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'attendance_db')\gexec
+    SELECT 'CREATE DATABASE schedule_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'schedule_db')\gexec
+    SELECT 'CREATE DATABASE payment_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payment_db')\gexec
+    SELECT 'CREATE DATABASE notification_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notification_db')\gexec
+    SELECT 'CREATE DATABASE reporting_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'reporting_db')\gexec
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: artacademy
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

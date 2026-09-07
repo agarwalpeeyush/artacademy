@@ -1,0 +1,298 @@
+version: "3.9"
+
+networks:
+  artacademy-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  kafka-data:
+  redis-data:
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reusable fragments
+# ──────────────────────────────────────────────────────────────────────────────
+x-svc: &svc
+  image: eclipse-temurin:21-jre-alpine
+  restart: unless-stopped
+  networks:
+    - artacademy-network
+  depends_on:
+    postgres:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    config-server:
+      condition: service_started
+    service-registry:
+      condition: service_started
+
+x-env: &env
+  SPRING_PROFILES_ACTIVE: docker
+  EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://service-registry:8761/eureka/
+  SPRING_CLOUD_CONFIG_URI: http://config-server:8888
+  SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  SPRING_DATASOURCE_USERNAME: artacademy
+  SPRING_DATASOURCE_PASSWORD: artacademy123
+
+services:
+
+  # ────────────────────────── Infrastructure ──────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: artacademy-postgres
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: artacademy
+      POSTGRES_PASSWORD: artacademy123
+      POSTGRES_DB: artacademy
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artacademy -d artacademy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: artacademy-zookeeper
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "12181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: artacademy-kafka
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "19092:9092"
+      - "29093:29092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  redis:
+    image: redis:7-alpine
+    container_name: artacademy-redis
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ────────────────────────── Spring Cloud Core ────────────────────────────────
+  service-registry:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: artacademy-service-registry
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "8761:8761"
+    volumes:
+      - ../service-registry/target/service-registry-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      SERVER_PORT: 8761
+      SPRING_PROFILES_ACTIVE: docker
+
+  config-server:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: artacademy-config-server
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../config-server/target/config-server-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    depends_on:
+      - service-registry
+    environment:
+      SERVER_PORT: 8888
+      SPRING_PROFILES_ACTIVE: native
+      SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS: classpath:/config
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://service-registry:8761/eureka/
+
+  # ────────────────────────── API Gateway ──────────────────────────────────────
+  api-gateway:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: artacademy-api-gateway
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "18080:8080"
+    volumes:
+      - ../api-gateway/target/api-gateway-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    depends_on:
+      - service-registry
+      - config-server
+      - redis
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://service-registry:8761/eureka/
+      SPRING_CLOUD_CONFIG_URI: http://config-server:8888
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+  # ────────────────────────── Application Services ─────────────────────────────
+  auth-service:
+    <<: *svc
+    container_name: artacademy-auth-service
+    ports:
+      - "8081:8081"
+    volumes:
+      - ../auth-service/target/auth-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+
+  user-service:
+    <<: *svc
+    container_name: artacademy-user-service
+    ports:
+      - "8082:8082"
+    volumes:
+      - ../user-service/target/user-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
+
+  course-enrollment-service:
+    <<: *svc
+    container_name: artacademy-course-enrollment-service
+    ports:
+      - "8083:8083"
+    volumes:
+      - ../course-enrollment-service/target/course-enrollment-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8083
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/academic_db
+
+  attendance-service:
+    <<: *svc
+    container_name: artacademy-attendance-service
+    ports:
+      - "8084:8084"
+    volumes:
+      - ../attendance-service/target/attendance-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8084
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/attendance_db
+
+  scheduling-service:
+    <<: *svc
+    container_name: artacademy-scheduling-service
+    ports:
+      - "8085:8085"
+    volumes:
+      - ../scheduling-service/target/scheduling-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8085
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/schedule_db
+
+  payment-service:
+    <<: *svc
+    container_name: artacademy-payment-service
+    ports:
+      - "8086:8086"
+    volumes:
+      - ../payment-service/target/payment-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8086
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
+
+  notification-service:
+    <<: *svc
+    container_name: artacademy-notification-service
+    ports:
+      - "8087:8087"
+    volumes:
+      - ../notification-service/target/notification-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8087
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+
+  reporting-service:
+    <<: *svc
+    container_name: artacademy-reporting-service
+    ports:
+      - "8088:8088"
+    volumes:
+      - ../reporting-service/target/reporting-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+    entrypoint: ["java", "-jar", "/app.jar"]
+    environment:
+      <<: *env
+      SERVER_PORT: 8088
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/reporting_db
+
+  # ────────────────────────── Frontend ─────────────────────────────────────────
+  frontend-react:
+    build:
+      context: ..
+      dockerfile: frontend-react/Dockerfile
+    image: artacademy/frontend-react:latest
+    container_name: artacademy-frontend
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway

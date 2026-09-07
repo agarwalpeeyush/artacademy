@@ -1,0 +1,32 @@
+app:
+  jwt:
+    secret: YXJ0YWNhZGVteS1zdXBlci1zZWNyZXQtand0LXNpZ25pbmcta2V5LW11c3QtYmUtYXQtbGVhc3QtMjU2LWJpdHM=
+    expiration-ms: 900000
+    refresh-expiration-ms: 604800000
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:19092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: artacademy
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.artacademy.*"

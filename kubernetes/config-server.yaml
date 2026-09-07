@@ -1,0 +1,78 @@
+###############################################################################
+# Config Server — Deployment + Service
+###############################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+  namespace: artacademy
+  labels:
+    app: config-server
+    app.kubernetes.io/part-of: artacademy
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+    spec:
+      initContainers:
+        - name: wait-for-registry
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until wget -q --spider http://service-registry:8761/actuator/health; do echo "Waiting for service-registry..."; sleep 5; done
+      containers:
+        - name: config-server
+          image: artacademy/config-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8888
+              name: http
+          envFrom:
+            - configMapRef:
+                name: artacademy-config
+          env:
+            - name: SERVER_PORT
+              value: "8888"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8888
+            initialDelaySeconds: 40
+            periodSeconds: 15
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8888
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: config-server
+  namespace: artacademy
+  labels:
+    app: config-server
+spec:
+  type: ClusterIP
+  selector:
+    app: config-server
+  ports:
+    - name: http
+      port: 8888
+      targetPort: 8888

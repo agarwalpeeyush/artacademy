@@ -1,0 +1,30 @@
+{{/*
+Art Academy — Generic Service Template
+Renders one Kubernetes Service per entry in .Values.services.
+*/}}
+
+{{- $root := . -}}
+{{- range $key, $svc := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svc.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    app: {{ $svc.name }}
+    app.kubernetes.io/name: {{ $svc.name }}
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+    app.kubernetes.io/part-of: artacademy
+    helm.sh/chart: {{ printf "%s-%s" $root.Chart.Name $root.Chart.Version }}
+spec:
+  type: {{ $svc.serviceType | default "ClusterIP" }}
+  selector:
+    app: {{ $svc.name }}
+    app.kubernetes.io/instance: {{ $root.Release.Name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: {{ $svc.port }}
+      protocol: TCP
+{{- end }}

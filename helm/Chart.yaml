@@ -1,0 +1,16 @@
+apiVersion: v2
+name: artacademy
+description: Art Academy Platform — full microservices deployment chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - artacademy
+  - microservices
+  - spring-boot
+  - react
+home: https://github.com/your-org/artacademy
+maintainers:
+  - name: Art Academy Team
+    email: devops@artacademy.local
+dependencies: []

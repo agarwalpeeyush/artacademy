@@ -1,0 +1,46 @@
+# Java build artifacts
+*/target/
+*.class
+*.jar
+!*/target/*.jar
+
+# Node.js
+frontend-react/node_modules/
+frontend-react/.env.local
+frontend-react/.env.development.local
+frontend-react/.env.test.local
+frontend-react/.env.production.local
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker/
+
+# Other services (not needed for frontend build)
+common-library/src/
+auth-service/src/
+user-service/src/
+course-enrollment-service/src/
+attendance-service/src/
+scheduling-service/src/
+payment-service/src/
+notification-service/src/
+reporting-service/src/
+api-gateway/src/
+service-registry/src/
+config-server/src/
+
+# Maven wrapper
+.mvn/
+mvnw
+mvnw.cmd
+
+# Logs
+*.log

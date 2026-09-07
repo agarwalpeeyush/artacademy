@@ -1,0 +1,86 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: optional:configserver:http://localhost:8888
+  cloud:
+    gateway:
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 200
+            redis-rate-limiter.requestedTokens: 1
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/teachers/**,/students/**
+          filters:
+            - JwtAuth
+        - id: course-enrollment-service
+          uri: lb://course-enrollment-service
+          predicates:
+            - Path=/courses/**,/classes/**,/enrollments/**
+          filters:
+            - JwtAuth
+        - id: attendance-service
+          uri: lb://attendance-service
+          predicates:
+            - Path=/attendance/**
+          filters:
+            - JwtAuth
+        - id: scheduling-service
+          uri: lb://scheduling-service
+          predicates:
+            - Path=/schedules/**
+          filters:
+            - JwtAuth
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/fees/**,/payments/**
+          filters:
+            - JwtAuth
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/notifications/**
+          filters:
+            - JwtAuth
+        - id: reporting-service
+          uri: lb://reporting-service
+          predicates:
+            - Path=/reports/**
+          filters:
+            - JwtAuth
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+app:
+  jwt:
+    secret: YXJ0YWNhZGVteS1zdXBlci1zZWNyZXQtand0LXNpZ25pbmcta2V5LW11c3QtYmUtYXQtbGVhc3QtMjU2LWJpdHM=
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway

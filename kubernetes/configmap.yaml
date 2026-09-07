@@ -1,0 +1,29 @@
+###############################################################################
+# ConfigMap — shared environment variables for all Spring Boot services
+###############################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: artacademy-config
+  namespace: artacademy
+  labels:
+    app.kubernetes.io/part-of: artacademy
+data:
+  # Eureka
+  EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: "http://service-registry:8761/eureka/"
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  # Spring Cloud Config
+  SPRING_CLOUD_CONFIG_URI: "http://config-server:8888"
+  SPRING_PROFILES_ACTIVE: "kubernetes"
+  # Kafka
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  # Redis
+  SPRING_REDIS_HOST: "redis"
+  SPRING_REDIS_PORT: "6379"
+  # Database host
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  # Logging
+  LOGGING_LEVEL_ROOT: "INFO"
+  LOGGING_LEVEL_COM_ARTACADEMY: "DEBUG"

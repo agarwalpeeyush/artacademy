@@ -1,0 +1,25 @@
+-- V2__update_schedule_schema_uuid.sql
+DROP TABLE IF EXISTS schedules CASCADE;
+DROP TABLE IF EXISTS rooms CASCADE;
+
+CREATE TABLE ROOMS (
+    ID        UUID         PRIMARY KEY,
+    ROOM_NAME VARCHAR(100) NOT NULL,
+    CAPACITY  INT          NOT NULL
+);
+
+CREATE TABLE SCHEDULES (
+    ID          UUID        PRIMARY KEY,
+    CLASS_ID    UUID        NOT NULL,
+    TEACHER_ID  UUID        NOT NULL,
+    ROOM_ID     UUID        NOT NULL,
+    START_TIME  TIME        NOT NULL,
+    END_TIME    TIME        NOT NULL,
+    DAY_OF_WEEK VARCHAR(20) NOT NULL,
+    CONSTRAINT fk_schedules_room FOREIGN KEY (ROOM_ID) REFERENCES ROOMS(ID) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE INDEX idx_schedules_teacher_id  ON SCHEDULES(TEACHER_ID);
+CREATE INDEX idx_schedules_class_id    ON SCHEDULES(CLASS_ID);
+CREATE INDEX idx_schedules_room_id     ON SCHEDULES(ROOM_ID);
+CREATE INDEX idx_schedules_day_of_week ON SCHEDULES(DAY_OF_WEEK);

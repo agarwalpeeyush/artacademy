@@ -1,0 +1,120 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Box, Card, CardContent, Typography, Chip, MenuItem, TextField, Grid,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+} from '@mui/material';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../../store/store';
+import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
+import { fetchFeeCycles } from '../../store/slices/feeSlice';
+import studentService from '../../services/studentService';
+import { Student, FeeCycle } from '../../types';
+import PageHeader from '../../components/common/PageHeader';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { formatCurrency, formatMonthYear } from '../../utils/formatters';
+
+const FeeStatusPage: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { teacherSchedules } = useSelector((state: RootState) => state.schedules);
+  const { feeCycles } = useSelector((state: RootState) => state.fees);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(false);
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+
+  useEffect(() => {
+    if (user?.id) dispatch(fetchTeacherSchedules(user.id));
+  }, [dispatch, user]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      setLoading(true);
+      studentService.getByClass(selectedClassId)
+        .then(data => {
+          setStudents(data);
+          data.forEach(s => dispatch(fetchFeeCycles({ studentId: s.id, month: currentMonth, year: currentYear })));
+        })
+        .catch(() => setStudents([]))
+        .finally(() => setLoading(false));
+    }
+  }, [selectedClassId, dispatch, currentMonth, currentYear]);
+
+  const getStudentFeeStatus = (studentId: string): FeeCycle | undefined => {
+    return feeCycles.find(f => f.studentId === studentId && f.month === currentMonth && f.year === currentYear);
+  };
+
+  const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+    PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', PENDING: 'default',
+  };
+
+  const uniqueClasses = [...new Map(teacherSchedules.map(s => [s.classId, s])).values()];
+
+  return (
+    <Box>
+      <PageHeader
+        title="Fee Status"
+        subtitle={`Student fee status for ${formatMonthYear(currentMonth, currentYear)}`}
+        breadcrumbs={[{ label: 'Teacher' }, { label: 'Fee Status' }]}
+      />
+
+      <Box mb={3}>
+        <TextField
+          select label="Select Class" size="small" sx={{ minWidth: 300 }}
+          value={selectedClassId}
+          onChange={e => setSelectedClassId(e.target.value)}
+        >
+          <MenuItem value="">-- Select a class --</MenuItem>
+          {uniqueClasses.map(s => (
+            <MenuItem key={s.classId} value={s.classId}>{s.className}</MenuItem>
+          ))}
+        </TextField>
+      </Box>
+
+      {loading ? (
+        <LoadingSpinner />
+      ) : selectedClassId && students.length > 0 ? (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Student</TableCell>
+                <TableCell align="right">Total Amount</TableCell>
+                <TableCell align="right">Paid</TableCell>
+                <TableCell align="right">Due</TableCell>
+                <TableCell align="center">Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {students.map(student => {
+                const fee = getStudentFeeStatus(student.id);
+                return (
+                  <TableRow key={student.id}>
+                    <TableCell sx={{ fontWeight: 500 }}>{student.firstName} {student.lastName}</TableCell>
+                    <TableCell align="right">{fee ? formatCurrency(fee.totalAmount) : '-'}</TableCell>
+                    <TableCell align="right" sx={{ color: 'success.main' }}>{fee ? formatCurrency(fee.paidAmount) : '-'}</TableCell>
+                    <TableCell align="right" sx={{ color: fee && (fee.dueAmount ?? 0) > 0 ? 'error.main' : 'inherit' }}>
+                      {fee ? formatCurrency(fee.dueAmount ?? 0) : '-'}
+                    </TableCell>
+                    <TableCell align="center">
+                      {fee ? (
+                        <Chip label={fee.status} color={statusColorMap[fee.status] || 'default'} size="small" />
+                      ) : (
+                        <Chip label="No Data" color="default" size="small" />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : selectedClassId ? (
+        <Typography color="text.secondary">No students found in this class.</Typography>
+      ) : null}
+    </Box>
+  );
+};
+
+export default FeeStatusPage;

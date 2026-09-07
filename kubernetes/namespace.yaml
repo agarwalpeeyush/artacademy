@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: artacademy
+  labels:
+    name: artacademy
+    managed-by: kubectl
