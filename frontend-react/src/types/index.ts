@@ -60,29 +60,26 @@ export interface Student {
 
 export interface Course {
   id: string;
-  courseCode?: string;
-  name: string;
-  description: string;
-  duration: number;
+  courseCode: string;
+  courseName: string;
+  courseType?: string;
+  description?: string;
   monthlyFee: number;
   admissionFee: number;
-  maxStudents: number;
-  active: boolean;
-  createdAt?: string;
+  durationMonths: number;
+  status: string;
 }
 
 export interface CourseClass {
   id: string;
   courseId: string;
   courseName?: string;
-  teacherId: string;
+  teacherId?: string;
   teacherName?: string;
   className: string;
-  schedule: string;
-  startDate: string;
-  endDate?: string;
-  active: boolean;
-  currentEnrollments?: number;
+  roomNumber?: string;
+  capacity: number;
+  status: string;
 }
 
 export interface Enrollment {
@@ -121,6 +118,12 @@ export interface StudentAttendance {
   remarks?: string;
 }
 
+export interface Room {
+  id: string;
+  roomName: string;
+  capacity: number;
+}
+
 export interface Schedule {
   id: string;
   classId: string;
@@ -132,7 +135,7 @@ export interface Schedule {
   dayOfWeek: string;
   startTime: string;
   endTime: string;
-  room?: string;
+  roomId?: string;
   roomName?: string;
   active: boolean;
 }

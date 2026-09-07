@@ -10,8 +10,8 @@ const norm = (s: any): Schedule => ({
   className: s.className ?? '',
   teacherId: s.teacherId,
   teacherName: s.teacherName ?? '',
-  room: s.roomName ?? s.room ?? '',
-  roomName: s.roomName ?? s.room ?? '',
+  roomId: s.roomId,
+  roomName: s.roomName ?? '',
   startTime: s.startTime,
   endTime: s.endTime,
   dayOfWeek: s.dayOfWeek,
@@ -50,12 +50,12 @@ const scheduleService = {
     return toArray(unwrap(response)).map(norm);
   },
 
-  create: async (data: Omit<Schedule, 'id'>): Promise<Schedule> => {
+  create: async (data: { classId: string; teacherId: string; roomId: string; startTime: string; endTime: string; dayOfWeek: string }): Promise<Schedule> => {
     const response = await api.post('/schedules', data);
     return norm(unwrap(response));
   },
 
-  update: async (id: string, data: Partial<Schedule>): Promise<Schedule> => {
+  update: async (id: string, data: { classId?: string; teacherId?: string; roomId?: string; startTime?: string; endTime?: string; dayOfWeek?: string }): Promise<Schedule> => {
     const response = await api.put(`/schedules/${id}`, data);
     return norm(unwrap(response));
   },

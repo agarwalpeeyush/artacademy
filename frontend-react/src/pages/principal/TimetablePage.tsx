@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Grid, Chip, Alert, Snackbar, MenuItem, Table, TableBody,
+  TextField, Grid, Alert, Snackbar, MenuItem, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Paper, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import AutorenewIcon from '@mui/icons-material/Autorenew';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -15,9 +14,9 @@ import { AppDispatch, RootState } from '../../store/store';
 import { fetchSchedules, createSchedule, deleteSchedule } from '../../store/slices/scheduleSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
-import { Schedule } from '../../types';
+import { Schedule, Room, CourseClass } from '../../types';
 import courseService from '../../services/courseService';
-import { CourseClass } from '../../types';
+import roomService from '../../services/roomService';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { getDayName, formatTime } from '../../utils/formatters';
@@ -30,22 +29,30 @@ const schema = yup.object({
   dayOfWeek: yup.string().required('Day is required'),
   startTime: yup.string().required('Start time is required'),
   endTime: yup.string().required('End time is required'),
-  room: yup.string().optional(),
+  roomId: yup.string().required('Room is required'),
 });
 
-type ScheduleFormData = Omit<Schedule, 'id' | 'active' | 'className' | 'teacherName' | 'courseName' | 'courseId'>;
+type ScheduleFormData = {
+  classId: string;
+  teacherId: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  roomId: string;
+};
 
 const TimetablePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { list: schedules, loading } = useSelector((state: RootState) => state.schedules);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [classes, setClasses] = useState<CourseClass[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<ScheduleFormData>({
     resolver: yupResolver(schema) as never,
-    defaultValues: { classId: '', teacherId: '', dayOfWeek: 'MONDAY', startTime: '09:00', endTime: '10:00', room: '' },
+    defaultValues: { classId: '', teacherId: '', dayOfWeek: 'MONDAY', startTime: '09:00', endTime: '10:00', roomId: '' },
   });
 
   useEffect(() => {
@@ -53,11 +60,12 @@ const TimetablePage: React.FC = () => {
     dispatch(fetchTeachers());
     dispatch(fetchCourses());
     courseService.getAllClasses().then(setClasses).catch(() => {});
+    roomService.getAll().then(setRooms).catch(() => {});
   }, [dispatch]);
 
   const handleSubmitForm = async (data: ScheduleFormData) => {
     try {
-      await dispatch(createSchedule({ ...data, active: true })).unwrap();
+      await dispatch(createSchedule(data)).unwrap();
       setSnackbar({ open: true, message: 'Schedule added successfully', severity: 'success' });
       setDialogOpen(false);
       reset();
@@ -121,7 +129,7 @@ const TimetablePage: React.FC = () => {
                   <TableCell>{s.className}</TableCell>
                   <TableCell>{s.teacherName}</TableCell>
                   <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
-                  <TableCell>{s.room || '-'}</TableCell>
+                  <TableCell>{s.roomName || '-'}</TableCell>
                   <TableCell align="center">
                     <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(s.id)}>
                       Remove
@@ -168,8 +176,13 @@ const TimetablePage: React.FC = () => {
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Controller name="room" control={control} render={({ field }) => (
-                  <TextField {...field} label="Room (Optional)" fullWidth size="small" />
+                <Controller name="roomId" control={control} render={({ field }) => (
+                  <TextField {...field} select label="Room" fullWidth size="small" error={!!errors.roomId} helperText={errors.roomId?.message}>
+                    {rooms.length === 0
+                      ? <MenuItem value="" disabled>No rooms available</MenuItem>
+                      : rooms.map(r => <MenuItem key={r.id} value={r.id}>{r.roomName} (cap: {r.capacity})</MenuItem>)
+                    }
+                  </TextField>
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>

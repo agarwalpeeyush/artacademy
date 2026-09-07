@@ -54,7 +54,7 @@ export const fetchStudentSchedules = createAsyncThunk<Schedule[], string>(
   }
 );
 
-export const createSchedule = createAsyncThunk<Schedule, Omit<Schedule, 'id'>>(
+export const createSchedule = createAsyncThunk<Schedule, { classId: string; teacherId: string; roomId: string; startTime: string; endTime: string; dayOfWeek: string }>(
   'schedules/create',
   async (data, { rejectWithValue }) => {
     try {

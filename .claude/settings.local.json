@@ -60,7 +60,21 @@
       "Bash(docker restart *)",
       "Bash(docker start *)",
       "Bash(xargs grep -l \"routes\\\\|uri\")",
-      "mcp__github-tools__get_me"
+      "mcp__github-tools__get_me",
+      "Bash(xargs grep -l \"register\\\\|Register\")",
+      "Bash(xargs grep -l \"PostMapping\\\\|RequestMapping\")",
+      "Bash(xargs grep -l \"PostMapping\")",
+      "Bash(python -c \"import bcrypt; print\\(bcrypt.hashpw\\(b'admin123', bcrypt.gensalt\\(10\\)\\).decode\\(\\)\\)\")",
+      "Bash(htpasswd -nbB admin admin123)",
+      "Bash(node -e \"const bcrypt = require\\('bcryptjs'\\); console.log\\(bcrypt.hashSync\\('admin123', 10\\)\\);\")",
+      "Bash(node -e \"const bcrypt = require\\('bcrypt'\\); console.log\\(bcrypt.hashSync\\('admin123', 10\\)\\);\")",
+      "Bash(xargs grep -h \"Mapping\\\\|RequestMapping\")",
+      "Bash(xargs grep -l \"CreateStudent\\\\|StudentRequest\\\\|StudentDto\")",
+      "Bash(git *)",
+      "Bash(xargs grep -l -i \"student\")",
+      "Bash(xargs grep -h \"RequestMapping\\\\|GetMapping\\\\|PostMapping\\\\|PutMapping\\\\|DeleteMapping\")",
+      "Bash(xargs grep -n \"courseId\\\\|teacherId\\\\|findBy\\\\|getAllClasses\")",
+      "Bash(xargs grep -l \"Request\\\\|Response\")"
     ]
   }
 }

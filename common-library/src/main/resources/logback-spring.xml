@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!--
+        Local / default profile: human-readable console output.
+        Docker profile: JSON sent over TCP to Logstash.
+
+        The appender that is actually used is selected by the active Spring profile
+        via springProfile elements below.
+
+        Every log line includes:
+          - service    : resolved from ${spring.application.name}
+          - level      : INFO / WARN / ERROR etc.
+          - logger     : the class that produced the log
+          - message    : the log message
+          - stack_trace: included automatically on exceptions
+    -->
+
+    <springProperty scope="context" name="SERVICE_NAME"
+                    source="spring.application.name" defaultValue="artacademy-service"/>
+
+    <!-- ───────────── Console appender (local dev) ───────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [${SERVICE_NAME}] [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ───────────── Logstash appender (docker profile) ──────── -->
+    <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+        <!-- LOGSTASH_HOST is injected as an env var in Docker Compose; falls back to localhost for safety -->
+        <destination>${LOGSTASH_HOST:-localhost}:5000</destination>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${SERVICE_NAME}"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <includeCallerData>false</includeCallerData>
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerCause>20</maxDepthPerCause>
+                <shortenedClassNameLength>35</shortenedClassNameLength>
+                <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+        </encoder>
+        <!-- If Logstash is temporarily down, buffer up to 1 000 events then drop rather than block the app -->
+        <reconnectionDelay>5 seconds</reconnectionDelay>
+    </appender>
+
+    <!-- ───────────── Profile selection ──────────────────────── -->
+    <springProfile name="!docker">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="docker">
+        <!-- Keep console output too so `docker compose logs` still works -->
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="LOGSTASH"/>
+        </root>
+        <!-- Reduce noise from infrastructure libraries -->
+        <logger name="org.springframework" level="WARN"/>
+        <logger name="org.hibernate" level="WARN"/>
+        <logger name="com.netflix.eureka" level="WARN"/>
+        <logger name="com.netflix.discovery" level="WARN"/>
+        <logger name="org.apache.kafka" level="WARN"/>
+    </springProfile>
+
+</configuration>

@@ -67,7 +67,7 @@ const StudentSchedulePage: React.FC = () => {
                     <TableCell>{s.courseName || '-'}</TableCell>
                     <TableCell>{s.teacherName}</TableCell>
                     <TableCell><strong>{formatTime(s.startTime)}</strong> – {formatTime(s.endTime)}</TableCell>
-                    <TableCell>{s.room || 'TBD'}</TableCell>
+                    <TableCell>{s.roomName || 'TBD'}</TableCell>
                   </TableRow>
                 ));
               })}

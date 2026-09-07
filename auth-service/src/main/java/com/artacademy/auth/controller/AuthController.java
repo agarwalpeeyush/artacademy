@@ -11,7 +11,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -32,8 +31,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(@AuthenticationPrincipal UserDetails userDetails) {
-        authService.logout(userDetails.getUsername());
+    public ResponseEntity<ApiResponse<Void>> logout(@AuthenticationPrincipal String username) {
+        authService.logout(username);
         return ResponseEntity.ok(ApiResponse.success("Logged out", null));
     }
 
@@ -44,15 +43,15 @@ public class AuthController {
 
     @PostMapping("/change-password")
     public ResponseEntity<ApiResponse<Void>> changePassword(
-            @AuthenticationPrincipal UserDetails userDetails,
+            @AuthenticationPrincipal String username,
             @Valid @RequestBody ChangePasswordRequest request) {
-        authService.changePassword(userDetails.getUsername(), request);
+        authService.changePassword(username, request);
         return ResponseEntity.ok(ApiResponse.success("Password changed", null));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> me(@AuthenticationPrincipal UserDetails userDetails) {
-        User user = authService.getMe(userDetails.getUsername());
+    public ResponseEntity<ApiResponse<Map<String, Object>>> me(@AuthenticationPrincipal String username) {
+        User user = authService.getMe(username);
         Map<String, Object> profile = Map.of(
                 "id", user.getId(),
                 "username", user.getUsername(),

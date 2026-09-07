@@ -8,6 +8,7 @@ volumes:
   postgres-data:
   kafka-data:
   redis-data:
+  elasticsearch-data:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Reusable fragments
@@ -35,6 +36,7 @@ x-env: &env
   SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   SPRING_DATASOURCE_USERNAME: artacademy
   SPRING_DATASOURCE_PASSWORD: artacademy123
+  LOGSTASH_HOST: logstash
 
 services:
 
@@ -133,6 +135,7 @@ services:
     environment:
       SERVER_PORT: 8761
       SPRING_PROFILES_ACTIVE: docker
+      LOGSTASH_HOST: logstash
 
   config-server:
     image: eclipse-temurin:21-jre-alpine
@@ -152,6 +155,7 @@ services:
       SPRING_PROFILES_ACTIVE: native
       SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS: classpath:/config
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://service-registry:8761/eureka/
+      LOGSTASH_HOST: logstash
 
   # ────────────────────────── API Gateway ──────────────────────────────────────
   api-gateway:
@@ -176,6 +180,7 @@ services:
       SPRING_CLOUD_CONFIG_URI: http://config-server:8888
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      LOGSTASH_HOST: logstash
 
   # ────────────────────────── Application Services ─────────────────────────────
   auth-service:
@@ -281,6 +286,59 @@ services:
       <<: *env
       SERVER_PORT: 8088
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/reporting_db
+
+  # ────────────────────────── Observability (ELK) ──────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+    container_name: artacademy-elasticsearch
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.14.0
+    container_name: artacademy-logstash
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logstash/pipeline/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    environment:
+      - LS_JAVA_OPTS=-Xms256m -Xmx256m
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.0
+    container_name: artacademy-kibana
+    restart: unless-stopped
+    networks:
+      - artacademy-network
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
 
   # ────────────────────────── Frontend ─────────────────────────────────────────
   frontend-react:

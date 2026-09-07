@@ -119,3 +119,43 @@ All requests enter at `http://localhost:8080` (local) or `http://localhost:18080
 | `PRINCIPAL` | Full access to all endpoints |
 | `TEACHER` | Mark/view attendance; view assigned students; view schedules |
 | `STUDENT` | View own profile, enrollments, schedule, attendance, fees |
+
+---
+
+## Observability — Centralised Logging (ELK Stack)
+
+All services ship structured JSON logs to a central ELK stack running inside Docker Compose.
+
+### Components
+
+| Container | Image | Port | Purpose |
+|-----------|-------|------|---------|
+| `elasticsearch` | `elasticsearch:8.14.0` | 9200 | Log storage and full-text search |
+| `logstash` | `logstash:8.14.0` | 5000 (TCP) | Receives JSON from services, indexes to Elasticsearch |
+| `kibana` | `kibana:8.14.0` | 5601 | UI — search, filter, and visualise logs |
+
+### How it works
+
+1. Each Spring Boot service has `logback-spring.xml` (from `common-library`) that configures two appenders:
+   - **Local/dev profile** — plain text to stdout only.
+   - **Docker profile** — JSON to stdout AND JSON over TCP to `logstash:5000`.
+2. Logstash receives JSON events, normalises the `level` field to uppercase, and writes them to Elasticsearch under the daily index `artacademy-logs-YYYY.MM.dd`.
+3. Every log line carries the `service` field set to `${spring.application.name}`, so you can filter by service in Kibana.
+
+### Accessing Kibana
+
+Open `http://localhost:5601` after `docker compose up`.
+
+**First-time setup:**
+1. Go to **Stack Management → Index Patterns**.
+2. Create index pattern `artacademy-logs-*` with `@timestamp` as the time field.
+3. Open **Discover** to search logs across all services.
+
+### Useful Kibana filters
+
+| Goal | KQL query |
+|------|-----------|
+| Logs from one service | `service: "auth-service"` |
+| All errors | `level: "ERROR"` |
+| Errors from payment-service | `service: "payment-service" AND level: "ERROR"` |
+| Logs containing a keyword | `message: "fee.generated"` |

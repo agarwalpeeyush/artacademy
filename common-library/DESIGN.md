@@ -287,6 +287,22 @@ Any service           ──► notification.request   ──► notification-se
   <dependency>jjwt-api (v0.12.6)</dependency>
   <dependency>jjwt-impl (v0.12.6)</dependency>
   <dependency>jjwt-jackson (v0.12.6)</dependency>
+  <dependency>logstash-logback-encoder (v8.0)</dependency>
   <dependency>lombok (v1.18.34)</dependency>
 </dependencies>
 ```
+
+---
+
+## 10. Centralised Logging
+
+`common-library` ships a `logback-spring.xml` resource that is automatically picked up by every service that depends on it (Spring Boot's default Logback classpath scanning).
+
+| Profile | Behaviour |
+|---------|-----------|
+| local (default) | Plain-text `ConsoleAppender` only |
+| `docker` | Plain-text console **+** JSON over TCP to `logstash:5000` via `LogstashTcpSocketAppender` |
+
+Every log line produced in the `docker` profile is structured JSON containing: `@timestamp`, `service`, `level`, `logger`, `thread`, `message`, and `stack_trace` (when present). The `service` field is set to `${spring.application.name}` so logs from all services can be distinguished in Kibana.
+
+The `LOGSTASH_HOST` environment variable controls the Logstash address (defaults to `localhost`, overridden to `logstash` in Docker Compose).

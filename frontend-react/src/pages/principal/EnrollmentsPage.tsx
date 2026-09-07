@@ -75,7 +75,7 @@ const EnrollmentsPage: React.FC = () => {
       await dispatch(createEnrollment({
         ...data, status: 'ACTIVE',
         studentName: students.find(s => s.id === data.studentId)?.firstName || '',
-        courseName: courses.find(c => c.id === data.courseId)?.name || '',
+        courseName: courses.find(c => c.id === data.courseId)?.courseName || "",
       })).unwrap();
       setSnackbar({ open: true, message: 'Student enrolled successfully', severity: 'success' });
       setDialogOpen(false);
@@ -152,7 +152,7 @@ const EnrollmentsPage: React.FC = () => {
               <Grid item xs={12}>
                 <Controller name="courseId" control={control} render={({ field }) => (
                   <TextField {...field} select label="Course" fullWidth size="small" error={!!errors.courseId} helperText={errors.courseId?.message}>
-                    {courses.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+                    {courses.map(c => <MenuItem key={c.id} value={c.id}>{c.courseName}</MenuItem>)}
                   </TextField>
                 )} />
               </Grid>

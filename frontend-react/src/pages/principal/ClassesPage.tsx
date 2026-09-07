@@ -19,17 +19,17 @@ import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatDate } from '../../utils/formatters';
 
 const schema = yup.object({
   courseId: yup.string().required('Course is required'),
-  teacherId: yup.string().required('Teacher is required'),
+  teacherId: yup.string().optional(),
   className: yup.string().required('Class name is required'),
-  schedule: yup.string().required('Schedule description is required'),
-  startDate: yup.string().required('Start date is required'),
+  roomNumber: yup.string().optional(),
+  capacity: yup.number().required('Capacity is required').min(1),
+  status: yup.string().required('Status is required'),
 });
 
-type ClassFormData = Omit<CourseClass, 'id' | 'active' | 'courseName' | 'teacherName' | 'currentEnrollments'>;
+type ClassFormData = Omit<CourseClass, 'id' | 'courseName' | 'teacherName'>;
 
 const ClassesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -61,15 +61,26 @@ const ClassesPage: React.FC = () => {
     finally { setLoading(false); }
   };
 
+  const emptyForm: ClassFormData = {
+    courseId: '', teacherId: '', className: '', roomNumber: '', capacity: 20, status: 'ACTIVE',
+  };
+
   const handleAdd = () => {
     setEditing(null);
-    reset({ courseId: '', teacherId: '', className: '', schedule: '', startDate: new Date().toISOString().split('T')[0] });
+    reset(emptyForm);
     setDialogOpen(true);
   };
 
   const handleEdit = (cls: CourseClass) => {
     setEditing(cls);
-    reset({ courseId: cls.courseId, teacherId: cls.teacherId, className: cls.className, schedule: cls.schedule, startDate: cls.startDate, endDate: cls.endDate || '' });
+    reset({
+      courseId: cls.courseId,
+      teacherId: cls.teacherId || '',
+      className: cls.className,
+      roomNumber: cls.roomNumber || '',
+      capacity: cls.capacity,
+      status: cls.status,
+    });
     setDialogOpen(true);
   };
 
@@ -79,7 +90,7 @@ const ClassesPage: React.FC = () => {
         await courseService.updateClass(editing.id, data);
         setSnackbar({ open: true, message: 'Class updated successfully', severity: 'success' });
       } else {
-        await courseService.createClass({ ...data, active: true });
+        await courseService.createClass(data);
         setSnackbar({ open: true, message: 'Class created successfully', severity: 'success' });
       }
       setDialogOpen(false);
@@ -103,12 +114,20 @@ const ClassesPage: React.FC = () => {
 
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'className', label: 'Class Name', minWidth: 150 },
-    { id: 'courseName', label: 'Course', minWidth: 150 },
-    { id: 'teacherName', label: 'Teacher', minWidth: 150 },
-    { id: 'schedule', label: 'Schedule', minWidth: 160 },
-    { id: 'startDate', label: 'Start Date', minWidth: 120, format: (v) => formatDate(v as string) },
-    { id: 'currentEnrollments', label: 'Enrollments', minWidth: 100, align: 'center' },
-    { id: 'active', label: 'Status', minWidth: 80, format: (v) => <Chip label={v ? 'Active' : 'Inactive'} color={v ? 'success' : 'default'} size="small" /> },
+    {
+      id: 'courseId', label: 'Course', minWidth: 150,
+      format: (v) => courses.find(c => c.id === v)?.courseName || (v as string),
+    },
+    {
+      id: 'teacherId', label: 'Teacher', minWidth: 150,
+      format: (v) => {
+        const t = teachers.find(t => t.id === v);
+        return t ? `${t.firstName} ${t.lastName}` : '—';
+      },
+    },
+    { id: 'roomNumber', label: 'Room', minWidth: 80 },
+    { id: 'capacity', label: 'Capacity', minWidth: 80, align: 'center' },
+    { id: 'status', label: 'Status', minWidth: 80, format: (v) => <Chip label={v as string} color={v === 'ACTIVE' ? 'success' : 'default'} size="small" /> },
     {
       id: 'actions', label: 'Actions', minWidth: 100, align: 'center',
       format: (_v, row) => {
@@ -148,30 +167,34 @@ const ClassesPage: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <Controller name="courseId" control={control} render={({ field }) => (
                   <TextField {...field} select label="Course" fullWidth size="small" error={!!errors.courseId} helperText={errors.courseId?.message}>
-                    {courses.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+                    {courses.map(c => <MenuItem key={c.id} value={c.id}>{c.courseName}</MenuItem>)}
                   </TextField>
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Controller name="teacherId" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Teacher" fullWidth size="small" error={!!errors.teacherId} helperText={errors.teacherId?.message}>
+                  <TextField {...field} select label="Teacher (optional)" fullWidth size="small">
+                    <MenuItem value="">— None —</MenuItem>
                     {teachers.map(t => <MenuItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</MenuItem>)}
                   </TextField>
                 )} />
               </Grid>
-              <Grid item xs={12}>
-                <Controller name="schedule" control={control} render={({ field }) => (
-                  <TextField {...field} label="Schedule Description" fullWidth size="small" placeholder="e.g. Mon/Wed/Fri 10:00-11:00 AM" error={!!errors.schedule} helperText={errors.schedule?.message} />
+              <Grid item xs={12} sm={6}>
+                <Controller name="roomNumber" control={control} render={({ field }) => (
+                  <TextField {...field} label="Room Number (optional)" fullWidth size="small" />
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Controller name="startDate" control={control} render={({ field }) => (
-                  <TextField {...field} label="Start Date" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.startDate} helperText={errors.startDate?.message} />
+                <Controller name="capacity" control={control} render={({ field }) => (
+                  <TextField {...field} label="Capacity" type="number" fullWidth size="small" error={!!errors.capacity} helperText={errors.capacity?.message} />
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Controller name="endDate" control={control} render={({ field }) => (
-                  <TextField {...field} label="End Date" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} />
+                <Controller name="status" control={control} render={({ field }) => (
+                  <TextField {...field} select label="Status" fullWidth size="small" error={!!errors.status} helperText={errors.status?.message}>
+                    <MenuItem value="ACTIVE">Active</MenuItem>
+                    <MenuItem value="INACTIVE">Inactive</MenuItem>
+                  </TextField>
                 )} />
               </Grid>
             </Grid>
