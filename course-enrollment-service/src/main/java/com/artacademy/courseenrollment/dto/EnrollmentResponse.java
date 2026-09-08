@@ -18,6 +18,8 @@ public class EnrollmentResponse {
     private UUID studentId;
     private UUID courseId;
     private UUID classId;
+    private String courseName;
+    private String className;
     private LocalDate enrollmentDate;
     private String status;
 }

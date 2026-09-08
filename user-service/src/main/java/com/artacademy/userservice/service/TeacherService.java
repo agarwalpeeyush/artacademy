@@ -35,6 +35,9 @@ import java.util.UUID;
 @Transactional
 public class TeacherService {
 
+    /** Default initial auth password when the UI does not supply one. LOCAL/TESTING default — rotate before production. */
+    private static final String DEFAULT_TEMPORARY_PASSWORD = "Welcome@123";
+
     private final TeacherRepository teacherRepository;
     private final TeacherAvailabilityRepository availabilityRepository;
     private final TeacherAvailabilityExceptionRepository availabilityExceptionRepository;
@@ -65,7 +68,7 @@ public class TeacherService {
                         .teacherId(saved.getId())
                         .username(saved.getLoginId())
                         .email(saved.getEmail())
-                        .temporaryPassword(request.getTemporaryPassword())
+                        .temporaryPassword(resolveTemporaryPassword(request.getTemporaryPassword()))
                         .employeeCode(saved.getEmployeeCode())
                         .firstName(saved.getFirstName())
                         .lastName(saved.getLastName())
@@ -74,6 +77,10 @@ public class TeacherService {
                         .build());
         log.info("Published TeacherCreatedEvent for teacher id={} roles={}", saved.getId(), roles);
         return teacherMapper.toResponse(saved);
+    }
+
+    private String resolveTemporaryPassword(String requested) {
+        return (requested == null || requested.isBlank()) ? DEFAULT_TEMPORARY_PASSWORD : requested;
     }
 
     public TeacherResponse updateTeacher(UUID id, TeacherRequest request) {
@@ -90,8 +97,7 @@ public class TeacherService {
         Teacher teacher = findById(id);
         availabilityExceptionRepository.deleteByTeacherId(teacher.getId());
         availabilityRepository.deleteByTeacherId(teacher.getId());
-        teacherRepository.delete(teacher);
-        log.info("Deleted teacher id={}", id);
+        teacherRepository.delete(teacher);        log.info("Deleted teacher id={}", id);
     }
 
     @Transactional(readOnly = true)

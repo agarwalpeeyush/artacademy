@@ -26,6 +26,10 @@ public class ClassRequest {
 
     private String roomNumber;
 
+    private UUID roomId;
+
+    private String roomName;
+
     @Positive(message = "Capacity must be greater than zero")
     private Integer capacity;
 

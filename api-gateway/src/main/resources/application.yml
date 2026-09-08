@@ -46,7 +46,7 @@ spring:
         - id: scheduling-service
           uri: lb://scheduling-service
           predicates:
-            - Path=/schedules/**
+            - Path=/schedules/**,/rooms/**
           filters:
             - JwtAuth
         - id: payment-service

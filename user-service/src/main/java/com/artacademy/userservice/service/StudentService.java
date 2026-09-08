@@ -27,6 +27,9 @@ import java.util.UUID;
 @Transactional
 public class StudentService {
 
+    /** Default initial auth password when the UI does not supply one. LOCAL/TESTING default — rotate before production. */
+    private static final String DEFAULT_TEMPORARY_PASSWORD = "Welcome@123";
+
     private final StudentRepository studentRepository;
     private final StudentMapper studentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -62,7 +65,7 @@ public class StudentService {
                         .studentId(saved.getId())
                         .username(saved.getLoginId())
                         .email(saved.getEmail())
-                        .temporaryPassword(request.getTemporaryPassword())
+                        .temporaryPassword(resolveTemporaryPassword(request.getTemporaryPassword()))
                         .firstName(saved.getFirstName())
                         .lastName(saved.getLastName())
                         .roles(roles)
@@ -86,6 +89,10 @@ public class StudentService {
     public void deleteStudent(UUID id) {
         studentRepository.delete(findById(id));
         log.info("Deleted student id={}", id);
+    }
+
+    private String resolveTemporaryPassword(String requested) {
+        return (requested == null || requested.isBlank()) ? DEFAULT_TEMPORARY_PASSWORD : requested;
     }
 
     private Student findById(UUID id) {

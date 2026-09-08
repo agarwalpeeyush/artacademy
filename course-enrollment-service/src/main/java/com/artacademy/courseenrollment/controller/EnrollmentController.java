@@ -31,6 +31,12 @@ public class EnrollmentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(created));
     }
 
+    @GetMapping
+    @Operation(summary = "Get all enrollments")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getAllEnrollments() {
+        return ResponseEntity.ok(ApiResponse.success(enrollmentService.getAllEnrollments()));
+    }
+
     @GetMapping("/student/{studentId}")
     @Operation(summary = "Get all enrollments for a student")
     public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByStudent(
@@ -45,6 +51,14 @@ public class EnrollmentController {
             @PathVariable("courseId") UUID courseId) {
         return ResponseEntity.ok(ApiResponse.success(
                 enrollmentService.getEnrollmentsByCourseId(courseId)));
+    }
+
+    @GetMapping("/class/{classId}")
+    @Operation(summary = "Get all enrollments for a class")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByClass(
+            @PathVariable("classId") UUID classId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                enrollmentService.getEnrollmentsByClassId(classId)));
     }
 
     @DeleteMapping("/{id}")

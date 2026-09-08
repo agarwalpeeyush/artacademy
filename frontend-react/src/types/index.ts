@@ -93,6 +93,8 @@ export interface CourseClass {
   teacherName?: string;
   className: string;
   roomNumber?: string;
+  roomId?: string;
+  roomName?: string;
   capacity: number;
   status: string;
 }
@@ -115,7 +117,7 @@ export interface TeacherAttendance {
   teacherId: string;
   teacherName?: string;
   date: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'LEAVE';
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
   checkIn?: string;
   checkOut?: string;
   remarks?: string;

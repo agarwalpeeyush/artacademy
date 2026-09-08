@@ -516,5 +516,13 @@ Run from the `docker/` directory:
 ```bash
 docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana service-registry config-server
 ```
-
 Useful when starting business services selectively, or running them locally from an IDE during development without starting the full stack.
+
+```bash
+docker compose up -d service-registry config-server api-gateway auth-service
+```
+
+```bash
+docker compose up -d --no-deps user-service course-enrollment-service attendance-service scheduling-service payment-service notification-service reporting-service
+```
+

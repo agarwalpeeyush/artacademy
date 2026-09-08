@@ -71,6 +71,12 @@ public class ClassService {
 
     public void deleteClass(UUID id) {
         CourseClass courseClass = findClassById(id);
+        long currentEnrollments = enrollmentRepository.countByClassId(id);
+        if (currentEnrollments > 0) {
+            throw ApiException.conflict(
+                    "Cannot delete class because " + currentEnrollments
+                    + " enrollment(s) still reference it. Cancel those enrollments first.");
+        }
         courseClassRepository.delete(courseClass);
         log.info("Deleted class id={}", id);
     }

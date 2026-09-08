@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Grid, Chip, Alert, Snackbar, MenuItem, Typography,
+  IconButton, Tooltip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -11,12 +13,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchStudents } from '../../store/slices/studentSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
-import { fetchEnrollments, createEnrollment, updateEnrollmentStatus } from '../../store/slices/enrollmentSlice';
+import { fetchEnrollments, createEnrollment, updateEnrollmentStatus, deleteEnrollment } from '../../store/slices/enrollmentSlice';
 import { Enrollment } from '../../types';
 import courseService from '../../services/courseService';
 import { CourseClass } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDate } from '../../utils/formatters';
 
@@ -47,6 +50,7 @@ const EnrollmentsPage: React.FC = () => {
   const { list: courses } = useSelector((state: RootState) => state.courses);
   const [classes, setClasses] = useState<CourseClass[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Enrollment | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   const { control, handleSubmit, reset, watch, formState: { errors } } = useForm<EnrollmentFormData>({
@@ -94,6 +98,17 @@ const EnrollmentsPage: React.FC = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await dispatch(deleteEnrollment(deleteTarget.id)).unwrap();
+      setSnackbar({ open: true, message: 'Enrollment cancelled', severity: 'success' });
+    } catch (err: unknown) {
+      setSnackbar({ open: true, message: String(err) || 'Cancel failed', severity: 'error' });
+    }
+    setDeleteTarget(null);
+  };
+
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'studentName', label: 'Student', minWidth: 150 },
     { id: 'courseName', label: 'Course', minWidth: 150 },
@@ -122,9 +137,31 @@ const EnrollmentsPage: React.FC = () => {
         );
       },
     },
+    {
+      id: 'actions', label: 'Actions', minWidth: 90, align: 'center',
+      format: (_v, row) => {
+        const enrollment = row as unknown as Enrollment;
+        return (
+          <Tooltip title="Cancel enrollment">
+            <IconButton size="small" color="error" onClick={() => setDeleteTarget(enrollment)}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        );
+      },
+    },
   ];
 
   if (loading && enrollments.length === 0) return <LoadingSpinner />;
+
+  const rows = enrollments.map((e) => {
+    const student = students.find(s => s.id === e.studentId);
+    return {
+      ...e,
+      studentName: e.studentName || (student ? `${student.firstName} ${student.lastName}`.trim() : ''),
+      courseName: e.courseName || courses.find(c => c.id === e.courseId)?.courseName || '',
+    };
+  });
 
   return (
     <Box>
@@ -135,7 +172,7 @@ const EnrollmentsPage: React.FC = () => {
         action={<Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>Enroll Student</Button>}
       />
 
-      <DataTable columns={columns} rows={enrollments as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search enrollments..." />
+      <DataTable columns={columns} rows={rows as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search enrollments..." />
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Enroll Student</DialogTitle>
@@ -187,6 +224,16 @@ const EnrollmentsPage: React.FC = () => {
           </DialogActions>
         </Box>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Cancel Enrollment"
+        message={`Cancel enrollment of "${deleteTarget?.studentName || 'this student'}" in "${deleteTarget?.courseName || 'this course'}"? This cannot be undone.`}
+        severity="error"
+        confirmLabel="Cancel Enrollment"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(s => ({ ...s, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>{snackbar.message}</Alert>

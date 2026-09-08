@@ -17,10 +17,12 @@ import ClassIcon from '@mui/icons-material/Class';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
+import RoomPreferencesIcon from '@mui/icons-material/RoomPreferences';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import PublishIcon from '@mui/icons-material/Publish';
 import HistoryIcon from '@mui/icons-material/History';
 import EventNoteIcon from '@mui/icons-material/EventNote';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
 import RuleIcon from '@mui/icons-material/Rule';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import WarningIcon from '@mui/icons-material/Warning';
@@ -36,6 +38,7 @@ const navItems = [
   { label: 'Students', icon: <SchoolIcon />, path: '/principal/students' },
   { label: 'Courses', icon: <MenuBookIcon />, path: '/principal/courses' },
   { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
+  { label: 'Rooms', icon: <RoomPreferencesIcon />, path: '/principal/rooms' },
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/principal/enrollments' },
   { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },
   { label: 'Room Availability', icon: <MeetingRoomIcon />, path: '/principal/room-availability' },
@@ -43,6 +46,7 @@ const navItems = [
   { label: 'Publish Schedule', icon: <PublishIcon />, path: '/principal/schedule-publish' },
   { label: 'Schedule History', icon: <HistoryIcon />, path: '/principal/schedule-history' },
   { label: 'Attendance', icon: <EventNoteIcon />, path: '/principal/attendance' },
+  { label: 'Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/teacher-attendance' },
   { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
   { label: 'Revenue', icon: <AttachMoneyIcon />, path: '/principal/revenue' },
   { label: 'Defaulters', icon: <WarningIcon />, path: '/principal/defaulters' },

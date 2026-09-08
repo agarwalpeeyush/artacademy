@@ -13,6 +13,14 @@ const normStudentAttendance = (a: any): StudentAttendance => ({
   remarks: a.remarks,
 });
 
+const normTeacherAttendance = (a: any): TeacherAttendance => ({
+  id: a.id,
+  teacherId: a.teacherId,
+  date: a.attendanceDate ?? a.date ?? '',
+  status: a.status,
+  remarks: a.remarks,
+});
+
 const toArray = (d: any): any[] => {
   if (Array.isArray(d)) return d;
   if (d?.content) return d.content;
@@ -31,7 +39,11 @@ const attendanceService = {
   },
 
   markStudentAttendance: async (data: StudentAttendance[]): Promise<StudentAttendance[]> => {
-    const response = await api.post('/attendance/students/bulk', data);
+    const payload = data.map(({ id, ...rest }) => ({
+      ...rest,
+      attendanceDate: rest.attendanceDate ?? rest.date,
+    }));
+    const response = await api.post('/attendance/students/bulk', payload);
     return toArray(unwrap(response)).map(normStudentAttendance);
   },
 
@@ -46,12 +58,13 @@ const attendanceService = {
     endDate?: string;
   }): Promise<TeacherAttendance[]> => {
     const response = await api.get('/attendance/teachers', { params });
-    return toArray(unwrap(response));
+    return toArray(unwrap(response)).map(normTeacherAttendance);
   },
 
   markTeacherAttendance: async (data: Omit<TeacherAttendance, 'id'>): Promise<TeacherAttendance> => {
-    const response = await api.post('/attendance/teachers', data);
-    return unwrap(response);
+    const { date, ...rest } = data as Omit<TeacherAttendance, 'id'> & { date?: string };
+    const response = await api.post('/attendance/teachers', { ...rest, attendanceDate: date });
+    return normTeacherAttendance(unwrap(response));
   },
 
   getStudentStats: async (studentId: string, classId?: string): Promise<AttendanceStats> => {

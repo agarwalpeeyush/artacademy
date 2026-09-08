@@ -8,13 +8,13 @@
 
 -- ---- Users -------------------------------------------------------------
 INSERT INTO USERS (ID, USERNAME, PASSWORD, EMAIL, STATUS) VALUES
-    ('00000000-0000-0000-0001-000000000001', 'principal',  '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'principal@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0002-000000000001', 'teacher1',   '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'teacher1@artacademy.test',   'ACTIVE'),
-    ('00000000-0000-0000-0002-000000000002', 'teacher2',   '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'teacher2@artacademy.test',   'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000001', 'student1',   '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'student1@artacademy.test',   'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000002', 'student2',   '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'student2@artacademy.test',   'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000003', 'student3',   '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'student3@artacademy.test',   'ACTIVE'),
-    ('00000000-0000-0000-0004-000000000001', 'parent1',    '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO', 'parent1@artacademy.test',    'ACTIVE')
+    ('00000000-0000-0000-0001-000000000001', 'principal',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'principal@artacademy.test',  'ACTIVE'),
+    ('00000000-0000-0000-0002-000000000001', 'teacher1',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'teacher1@artacademy.test',   'ACTIVE'),
+    ('00000000-0000-0000-0002-000000000002', 'teacher2',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'teacher2@artacademy.test',   'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000001', 'student1',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student1@artacademy.test',   'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000002', 'student2',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student2@artacademy.test',   'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000003', 'student3',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student3@artacademy.test',   'ACTIVE'),
+    ('00000000-0000-0000-0004-000000000001', 'parent1',    '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'parent1@artacademy.test',    'ACTIVE')
 ON CONFLICT (ID) DO NOTHING;
 
 -- ---- Role assignments (join ROLES by NAME) -----------------------------

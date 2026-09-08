@@ -18,6 +18,8 @@ public class ClassResponse {
     private UUID teacherId;
     private String className;
     private String roomNumber;
+    private UUID roomId;
+    private String roomName;
     private Integer capacity;
     private String status;
 }

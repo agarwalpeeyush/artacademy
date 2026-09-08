@@ -13,8 +13,9 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchCourses } from '../../store/slices/courseSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
-import { CourseClass } from '../../types';
+import { CourseClass, Room } from '../../types';
 import courseService from '../../services/courseService';
+import roomService from '../../services/roomService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
@@ -24,18 +25,26 @@ const schema = yup.object({
   courseId: yup.string().required('Course is required'),
   teacherId: yup.string().optional(),
   className: yup.string().required('Class name is required'),
-  roomNumber: yup.string().optional(),
+  roomId: yup.string().optional(),
   capacity: yup.number().required('Capacity is required').min(1),
   status: yup.string().required('Status is required'),
 });
 
-type ClassFormData = Omit<CourseClass, 'id' | 'courseName' | 'teacherName'>;
+type ClassFormData = {
+  courseId: string;
+  teacherId?: string;
+  className: string;
+  roomId?: string;
+  capacity: number;
+  status: string;
+};
 
 const ClassesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { list: courses } = useSelector((state: RootState) => state.courses);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [classes, setClasses] = useState<CourseClass[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CourseClass | null>(null);
@@ -49,6 +58,7 @@ const ClassesPage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchCourses());
     dispatch(fetchTeachers());
+    roomService.getAll().then(setRooms).catch(() => setRooms([]));
     loadClasses();
   }, [dispatch]);
 
@@ -62,7 +72,7 @@ const ClassesPage: React.FC = () => {
   };
 
   const emptyForm: ClassFormData = {
-    courseId: '', teacherId: '', className: '', roomNumber: '', capacity: 20, status: 'ACTIVE',
+    courseId: '', teacherId: '', className: '', roomId: '', capacity: 20, status: 'ACTIVE',
   };
 
   const handleAdd = () => {
@@ -77,7 +87,7 @@ const ClassesPage: React.FC = () => {
       courseId: cls.courseId,
       teacherId: cls.teacherId || '',
       className: cls.className,
-      roomNumber: cls.roomNumber || '',
+      roomId: cls.roomId || '',
       capacity: cls.capacity,
       status: cls.status,
     });
@@ -86,11 +96,13 @@ const ClassesPage: React.FC = () => {
 
   const handleSubmitForm = async (data: ClassFormData) => {
     try {
+      const room = rooms.find(r => r.id === data.roomId);
+      const payload = { ...data, roomName: room?.roomName || '' };
       if (editing) {
-        await courseService.updateClass(editing.id, data);
+        await courseService.updateClass(editing.id, payload);
         setSnackbar({ open: true, message: 'Class updated successfully', severity: 'success' });
       } else {
-        await courseService.createClass(data);
+        await courseService.createClass(payload);
         setSnackbar({ open: true, message: 'Class created successfully', severity: 'success' });
       }
       setDialogOpen(false);
@@ -125,7 +137,7 @@ const ClassesPage: React.FC = () => {
         return t ? `${t.firstName} ${t.lastName}` : '—';
       },
     },
-    { id: 'roomNumber', label: 'Room', minWidth: 80 },
+    { id: 'roomName', label: 'Room', minWidth: 120, format: (v, row) => (v as string) || (row as unknown as CourseClass).roomNumber || '—' },
     { id: 'capacity', label: 'Capacity', minWidth: 80, align: 'center' },
     { id: 'status', label: 'Status', minWidth: 80, format: (v) => <Chip label={v as string} color={v === 'ACTIVE' ? 'success' : 'default'} size="small" /> },
     {
@@ -180,8 +192,11 @@ const ClassesPage: React.FC = () => {
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Controller name="roomNumber" control={control} render={({ field }) => (
-                  <TextField {...field} label="Room Number (optional)" fullWidth size="small" />
+                <Controller name="roomId" control={control} render={({ field }) => (
+                  <TextField {...field} select label="Room (optional)" fullWidth size="small">
+                    <MenuItem value="">— None —</MenuItem>
+                    {rooms.map(r => <MenuItem key={r.id} value={r.id}>{r.roomName}</MenuItem>)}
+                  </TextField>
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>

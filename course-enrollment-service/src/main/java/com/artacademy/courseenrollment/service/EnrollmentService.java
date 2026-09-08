@@ -99,6 +99,14 @@ public class EnrollmentService {
     }
 
     @Transactional(readOnly = true)
+    public List<EnrollmentResponse> getAllEnrollments() {
+        return enrollmentRepository.findAll()
+                .stream()
+                .map(enrollmentMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<EnrollmentResponse> getEnrollmentsByStudentId(UUID studentId) {
         return enrollmentRepository.findByStudentId(studentId)
                 .stream()
@@ -109,6 +117,14 @@ public class EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> getEnrollmentsByCourseId(UUID courseId) {
         return enrollmentRepository.findByCourseId(courseId)
+                .stream()
+                .map(enrollmentMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EnrollmentResponse> getEnrollmentsByClassId(UUID classId) {
+        return enrollmentRepository.findByClassId(classId)
                 .stream()
                 .map(enrollmentMapper::toResponse)
                 .toList();

@@ -7,6 +7,7 @@ const toArray = (d: any): any[] => (Array.isArray(d) ? d : d?.content ?? []);
 const norm = (e: any): Enrollment => ({
   id: e.id,
   studentId: e.studentId,
+  studentName: e.studentName ?? '',
   courseId: e.courseId,
   classId: e.classId,
   courseName: e.courseName ?? '',

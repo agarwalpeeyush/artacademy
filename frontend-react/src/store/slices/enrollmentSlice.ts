@@ -64,6 +64,19 @@ export const updateEnrollmentStatus = createAsyncThunk<Enrollment, { id: string;
   }
 );
 
+export const deleteEnrollment = createAsyncThunk<string, string>(
+  'enrollments/delete',
+  async (id, { rejectWithValue }) => {
+    try {
+      await enrollmentService.delete(id);
+      return id;
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(err.response?.data?.message || 'Failed to delete enrollment');
+    }
+  }
+);
+
 const enrollmentSlice = createSlice({
   name: 'enrollments',
   initialState,
@@ -80,6 +93,9 @@ const enrollmentSlice = createSlice({
       .addCase(updateEnrollmentStatus.fulfilled, (state, action) => {
         const idx = state.list.findIndex(e => e.id === action.payload.id);
         if (idx !== -1) state.list[idx] = action.payload;
+      })
+      .addCase(deleteEnrollment.fulfilled, (state, action) => {
+        state.list = state.list.filter(e => e.id !== action.payload);
       });
   },
 });

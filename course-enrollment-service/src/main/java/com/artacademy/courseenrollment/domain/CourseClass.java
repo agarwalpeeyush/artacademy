@@ -59,6 +59,12 @@ public class CourseClass {
     @Column(name = "ROOM_NUMBER")
     private String roomNumber;
 
+    @Column(name = "ROOM_ID")
+    private UUID roomId;
+
+    @Column(name = "ROOM_NAME")
+    private String roomName;
+
     @Column(name = "CAPACITY")
     private Integer capacity;
 

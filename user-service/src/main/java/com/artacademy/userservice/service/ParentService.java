@@ -29,6 +29,9 @@ import java.util.UUID;
 @Transactional
 public class ParentService {
 
+    /** Default initial auth password when the UI does not supply one. LOCAL/TESTING default — rotate before production. */
+    private static final String DEFAULT_TEMPORARY_PASSWORD = "Welcome@123";
+
     private final ParentRepository parentRepository;
     private final StudentRepository studentRepository;
     private final ParentMapper parentMapper;
@@ -75,7 +78,7 @@ public class ParentService {
                             .parentId(saved.getId())
                             .username(saved.getLoginId())
                             .email(saved.getEmail())
-                            .temporaryPassword(request.getTemporaryPassword())
+                            .temporaryPassword(resolveTemporaryPassword(request.getTemporaryPassword()))
                             .firstName(saved.getFirstName())
                             .lastName(saved.getLastName())
                             .roles(roles)
@@ -104,6 +107,10 @@ public class ParentService {
     public void deleteParent(UUID id) {
         parentRepository.delete(findById(id));
         log.info("Deleted parent id={}", id);
+    }
+
+    private String resolveTemporaryPassword(String requested) {
+        return (requested == null || requested.isBlank()) ? DEFAULT_TEMPORARY_PASSWORD : requested;
     }
 
     private Parent findById(UUID id) {

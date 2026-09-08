@@ -1,5 +1,6 @@
 import api from './api';
 import { Student } from '../types';
+import enrollmentService from './enrollmentService';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 
@@ -54,10 +55,13 @@ const studentService = {
   },
 
   getByClass: async (classId: string): Promise<Student[]> => {
-    const response = await api.get(`/students/class/${classId}`);
-    const data = unwrap(response);
-    const arr = Array.isArray(data) ? data : data?.content ?? [];
-    return arr.map(norm);
+    const enrollments = await enrollmentService.getByClass(classId);
+    const enrolledIds = new Set(
+      enrollments.filter(e => e.status === 'ACTIVE').map(e => e.studentId),
+    );
+    if (enrolledIds.size === 0) return [];
+    const students = await studentService.getAll();
+    return students.filter(s => enrolledIds.has(s.id));
   },
 };
 

@@ -20,7 +20,7 @@ public class StudentRequest {
     @NotBlank(message = "Login ID is required")
     private String loginId;
 
-    @NotBlank(message = "Temporary password is required")
+    /** Optional. Blank/absent from the UI; the service defaults it before publishing the auth event. */
     private String temporaryPassword;
 
     @NotBlank(message = "First name is required")

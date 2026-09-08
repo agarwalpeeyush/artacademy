@@ -21,6 +21,7 @@ import TeacherDetailPage from './pages/principal/TeacherDetailPage';
 import CourseDetailPage from './pages/principal/CourseDetailPage';
 import CoursesPage from './pages/principal/CoursesPage';
 import ClassesPage from './pages/principal/ClassesPage';
+import RoomsPage from './pages/principal/RoomsPage';
 import EnrollmentsPage from './pages/principal/EnrollmentsPage';
 import TimetablePage from './pages/principal/TimetablePage';
 import RoomAvailabilityPage from './pages/principal/RoomAvailabilityPage';
@@ -29,6 +30,7 @@ import SchedulePublishPage from './pages/principal/SchedulePublishPage';
 import ScheduleHistoryPage from './pages/principal/ScheduleHistoryPage';
 import AttendanceReportPage from './pages/principal/AttendanceReportPage';
 import AttendanceCorrectionsPage from './pages/principal/AttendanceCorrectionsPage';
+import TeacherAttendancePage from './pages/principal/TeacherAttendancePage';
 import RevenuePage from './pages/principal/RevenuePage';
 import DefaultersPage from './pages/principal/DefaultersPage';
 import AnalyticsPage from './pages/principal/AnalyticsPage';
@@ -104,6 +106,7 @@ const App: React.FC = () => {
         <Route path="courses" element={<CoursesPage />} />
         <Route path="courses/:id" element={<CourseDetailPage />} />
         <Route path="classes" element={<ClassesPage />} />
+        <Route path="rooms" element={<RoomsPage />} />
         <Route path="enrollments" element={<EnrollmentsPage />} />
         <Route path="timetable" element={<TimetablePage />} />
         <Route path="room-availability" element={<RoomAvailabilityPage />} />
@@ -111,6 +114,7 @@ const App: React.FC = () => {
         <Route path="schedule-publish" element={<SchedulePublishPage />} />
         <Route path="schedule-history" element={<ScheduleHistoryPage />} />
         <Route path="attendance" element={<AttendanceReportPage />} />
+        <Route path="teacher-attendance" element={<TeacherAttendancePage />} />
         <Route path="attendance-corrections" element={<AttendanceCorrectionsPage />} />
         <Route path="revenue" element={<RevenuePage />} />
         <Route path="defaulters" element={<DefaultersPage />} />

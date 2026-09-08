@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Button, TextField, Grid, Paper, MenuItem, Chip, Alert, Snackbar,
+  Box, Button, TextField, Grid, Paper, MenuItem, Chip, Alert, Snackbar, Autocomplete,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherAttendance } from '../../store/slices/attendanceSlice';
+import { fetchTeachers } from '../../store/slices/teacherSlice';
 import attendanceService from '../../services/attendanceService';
-import { TeacherAttendance } from '../../types';
+import { Teacher, TeacherAttendance } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import { format } from 'date-fns';
@@ -18,28 +18,47 @@ const statusColors: Record<TeacherStatus, 'success' | 'error' | 'warning' | 'def
   PRESENT: 'success', ABSENT: 'error', HALF_DAY: 'warning', LEAVE: 'default',
 };
 
-const MyAttendancePage: React.FC = () => {
+const TeacherAttendancePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherAttendance } = useSelector((state: RootState) => state.attendance);
+  const { list: teachers } = useSelector((state: RootState) => state.teachers);
+  const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [status, setStatus] = useState<TeacherStatus>('PRESENT');
   const [remarks, setRemarks] = useState('');
+  const [records, setRecords] = useState<TeacherAttendance[]>([]);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
-    if (user?.id) dispatch(fetchTeacherAttendance({ teacherId: user.id }));
-  }, [dispatch, user]);
+    dispatch(fetchTeachers());
+  }, [dispatch]);
+
+  const loadRecords = async (teacherId: string) => {
+    try {
+      const rows = await attendanceService.getTeacherAttendance({ teacherId });
+      setRecords(rows);
+    } catch {
+      setRecords([]);
+    }
+  };
+
+  const handleTeacherChange = (t: Teacher | null) => {
+    setTeacher(t);
+    if (t?.id) loadRecords(t.id);
+    else setRecords([]);
+  };
 
   const handleSave = async () => {
-    if (!user?.id) return;
+    if (!teacher?.id) {
+      setSnackbar({ open: true, message: 'Please select a teacher', severity: 'error' });
+      return;
+    }
     try {
-      await attendanceService.markTeacherAttendance({ teacherId: user.id, date, status, remarks } as Omit<TeacherAttendance, 'id'>);
-      setSnackbar({ open: true, message: 'Attendance marked successfully', severity: 'success' });
-      dispatch(fetchTeacherAttendance({ teacherId: user.id }));
+      await attendanceService.markTeacherAttendance({ teacherId: teacher.id, date, status, remarks } as Omit<TeacherAttendance, 'id'>);
+      setSnackbar({ open: true, message: 'Teacher attendance saved successfully', severity: 'success' });
+      loadRecords(teacher.id);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
-      setSnackbar({ open: true, message: e.response?.data?.message || 'Failed to mark attendance', severity: 'error' });
+      setSnackbar({ open: true, message: e.response?.data?.message || 'Failed to save attendance', severity: 'error' });
     }
   };
 
@@ -55,20 +74,31 @@ const MyAttendancePage: React.FC = () => {
   return (
     <Box>
       <PageHeader
-        title="My Attendance"
-        subtitle="Mark and review your own attendance"
-        breadcrumbs={[{ label: 'Teacher' }, { label: 'My Attendance' }]}
+        title="Teacher Attendance"
+        subtitle="Mark or override attendance for teaching staff"
+        breadcrumbs={[{ label: 'Principal' }, { label: 'Teacher Attendance' }]}
       />
 
       <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2} alignItems="flex-end">
           <Grid item xs={12} sm={3}>
+            <Autocomplete
+              size="small"
+              options={teachers}
+              value={teacher}
+              onChange={(_e, v) => handleTeacherChange(v)}
+              getOptionLabel={(t) => `${t.firstName} ${t.lastName}`.trim() || t.loginId || ''}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              renderInput={(params) => <TextField {...params} label="Teacher" />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={2}>
             <TextField
               label="Date" type="date" size="small" fullWidth value={date}
               onChange={e => setDate(e.target.value)} InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={2}>
             <TextField select label="Status" size="small" fullWidth value={status}
               onChange={e => setStatus(e.target.value as TeacherStatus)}>
               {(['PRESENT', 'ABSENT', 'HALF_DAY', 'LEAVE'] as TeacherStatus[]).map(s => (
@@ -80,9 +110,9 @@ const MyAttendancePage: React.FC = () => {
             <TextField label="Remarks" size="small" fullWidth value={remarks}
               onChange={e => setRemarks(e.target.value)} placeholder="Optional" />
           </Grid>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={2}>
             <Button variant="contained" fullWidth startIcon={<SaveIcon />} onClick={handleSave}>
-              Mark Attendance
+              Save
             </Button>
           </Grid>
         </Grid>
@@ -90,7 +120,7 @@ const MyAttendancePage: React.FC = () => {
 
       <DataTable
         columns={columns}
-        rows={teacherAttendance as unknown as Record<string, unknown>[]}
+        rows={records as unknown as Record<string, unknown>[]}
         searchable={false}
       />
 
@@ -101,4 +131,4 @@ const MyAttendancePage: React.FC = () => {
   );
 };
 
-export default MyAttendancePage;
+export default TeacherAttendancePage;
