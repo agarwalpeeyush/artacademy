@@ -25,18 +25,22 @@ public class ReportController {
 
     /**
      * GET /reports/attendance?subjectType=STUDENT&month=9&year=2026
-     * Returns attendance summaries for the given subjectType, optionally filtered by month/year.
+     * GET /reports/attendance?subjectType=STUDENT&startDate=2026-09-01&endDate=2026-09-30
+     * Returns attendance summaries for the given subjectType. When startDate and endDate are
+     * provided, aggregates over the covered month span; otherwise optionally filters by month/year.
      */
     @GetMapping("/attendance")
     @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Get attendance report by subject type (STUDENT/TEACHER), optionally by month and year")
+    @Operation(summary = "Get attendance report by subject type (STUDENT/TEACHER), by month/year or a date range")
     public ResponseEntity<List<AttendanceSummaryResponse>> getAttendanceReport(
             @RequestParam String subjectType,
             @RequestParam Optional<Integer> month,
-            @RequestParam Optional<Integer> year) {
+            @RequestParam Optional<Integer> year,
+            @RequestParam Optional<String> startDate,
+            @RequestParam Optional<String> endDate) {
 
         List<AttendanceSummaryResponse> result =
-                reportingService.getAttendanceReport(subjectType, month, year);
+                reportingService.getAttendanceReport(subjectType, month, year, startDate, endDate);
         return ResponseEntity.ok(result);
     }
 

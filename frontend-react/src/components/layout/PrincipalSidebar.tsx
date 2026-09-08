@@ -45,7 +45,7 @@ const navItems = [
   { label: 'Conflicts', icon: <ReportProblemIcon />, path: '/principal/conflicts' },
   { label: 'Publish Schedule', icon: <PublishIcon />, path: '/principal/schedule-publish' },
   { label: 'Schedule History', icon: <HistoryIcon />, path: '/principal/schedule-history' },
-  { label: 'Attendance', icon: <EventNoteIcon />, path: '/principal/attendance' },
+  { label: 'Attendance Report', icon: <EventNoteIcon />, path: '/principal/attendance' },
   { label: 'Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/teacher-attendance' },
   { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
   { label: 'Revenue', icon: <AttachMoneyIcon />, path: '/principal/revenue' },

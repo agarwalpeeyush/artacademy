@@ -21,4 +21,5 @@ public class AttendanceSummaryResponse {
     private Integer presentDays;
     private Integer absentDays;
     private Integer leaveDays;
+    private Double attendancePercentage;
 }

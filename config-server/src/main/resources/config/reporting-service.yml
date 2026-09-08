@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: reporting-service
+  kafka:
+    consumer:
+      group-id: reporting-service-group
+      auto-offset-reset: earliest
   datasource:
     url: jdbc:postgresql://localhost:15432/reporting_db
     username: artacademy

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,13 +37,20 @@ public class ReportingService {
 
     /**
      * Returns attendance summaries filtered by subjectType.
-     * If both month and year are provided, filters by month/year as well.
-     * If only subjectType, returns all records for that type.
+     * If startDate and endDate are provided, aggregates per subject across the covered month span.
+     * Else if both month and year are provided, filters by that month/year.
+     * Otherwise returns all records for that type.
      */
     public List<AttendanceSummaryResponse> getAttendanceReport(
             String subjectType,
             Optional<Integer> month,
-            Optional<Integer> year) {
+            Optional<Integer> year,
+            Optional<String> startDate,
+            Optional<String> endDate) {
+
+        if (startDate.isPresent() && endDate.isPresent()) {
+            return getAttendanceReportByRange(subjectType, startDate.get(), endDate.get());
+        }
 
         List<AttendanceSummary> summaries;
 
@@ -62,6 +70,65 @@ public class ReportingService {
 
         return summaries.stream()
                 .map(this::toAttendanceSummaryResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Backward-compatible overload used by the CSV export path (no date range).
+     */
+    public List<AttendanceSummaryResponse> getAttendanceReport(
+            String subjectType, Optional<Integer> month, Optional<Integer> year) {
+        return getAttendanceReport(subjectType, month, year, Optional.empty(), Optional.empty());
+    }
+
+    /**
+     * Aggregates monthly summaries per subject across the inclusive month span implied by
+     * [startDate, endDate]. The projection is month/year granularity, so the range is applied
+     * at month resolution (YYYYMM), not per-day.
+     */
+    private List<AttendanceSummaryResponse> getAttendanceReportByRange(
+            String subjectType, String startDate, String endDate) {
+
+        LocalDate start = LocalDate.parse(startDate);
+        LocalDate end = LocalDate.parse(endDate);
+        int startKey = start.getYear() * 100 + start.getMonthValue();
+        int endKey = end.getYear() * 100 + end.getMonthValue();
+        int lo = Math.min(startKey, endKey);
+        int hi = Math.max(startKey, endKey);
+
+        List<AttendanceSummary> inRange = attendanceSummaryRepository.findAll().stream()
+                .filter(s -> s.getSubjectType().equalsIgnoreCase(subjectType))
+                .filter(s -> {
+                    if (s.getAttendanceYear() == null || s.getAttendanceMonth() == null) return false;
+                    int key = s.getAttendanceYear() * 100 + s.getAttendanceMonth();
+                    return key >= lo && key <= hi;
+                })
+                .collect(Collectors.toList());
+
+        Map<UUID, List<AttendanceSummary>> bySubject = inRange.stream()
+                .collect(Collectors.groupingBy(AttendanceSummary::getSubjectId,
+                        java.util.LinkedHashMap::new, Collectors.toList()));
+
+        return bySubject.values().stream()
+                .map(rows -> {
+                    AttendanceSummary first = rows.get(0);
+                    int total = rows.stream().mapToInt(r -> r.getTotalDays() == null ? 0 : r.getTotalDays()).sum();
+                    int present = rows.stream().mapToInt(r -> r.getPresentDays() == null ? 0 : r.getPresentDays()).sum();
+                    int absent = rows.stream().mapToInt(r -> r.getAbsentDays() == null ? 0 : r.getAbsentDays()).sum();
+                    int leave = rows.stream().mapToInt(r -> r.getLeaveDays() == null ? 0 : r.getLeaveDays()).sum();
+                    return AttendanceSummaryResponse.builder()
+                            .subjectType(first.getSubjectType())
+                            .subjectId(first.getSubjectId())
+                            .subjectName(first.getSubjectName())
+                            .courseId(first.getCourseId())
+                            .courseName(first.getCourseName())
+                            .totalDays(total)
+                            .presentDays(present)
+                            .absentDays(absent)
+                            .leaveDays(leave)
+                            .attendancePercentage(pct(present, total))
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 
@@ -230,6 +297,7 @@ public class ReportingService {
                 .presentDays(s.getPresentDays())
                 .absentDays(s.getAbsentDays())
                 .leaveDays(s.getLeaveDays())
+                .attendancePercentage(pct(s.getPresentDays(), s.getTotalDays()))
                 .build();
     }
 

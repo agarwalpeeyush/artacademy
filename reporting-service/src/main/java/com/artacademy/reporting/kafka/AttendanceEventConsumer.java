@@ -5,6 +5,8 @@ import com.artacademy.common.events.AttendanceUpdatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.reporting.domain.AttendanceSummary;
 import com.artacademy.reporting.repository.AttendanceSummaryRepository;
+import com.artacademy.reporting.repository.StudentReportRepository;
+import com.artacademy.reporting.repository.TeacherReportRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -21,6 +23,8 @@ import java.time.format.DateTimeFormatter;
 public class AttendanceEventConsumer {
 
     private final AttendanceSummaryRepository attendanceSummaryRepository;
+    private final TeacherReportRepository teacherReportRepository;
+    private final StudentReportRepository studentReportRepository;
 
     @KafkaListener(
         topics = KafkaTopics.ATTENDANCE_RECORDED,
@@ -97,7 +101,7 @@ public class AttendanceEventConsumer {
     // -------------------------------------------------------------------------
 
     private AttendanceSummary findOrCreate(String type, java.util.UUID subjectId, int month, int year) {
-        return attendanceSummaryRepository
+        AttendanceSummary summary = attendanceSummaryRepository
                 .findBySubjectTypeAndSubjectIdAndAttendanceMonthAndAttendanceYear(type, subjectId, month, year)
                 .orElseGet(() -> AttendanceSummary.builder()
                         .subjectType(type)
@@ -106,6 +110,26 @@ public class AttendanceEventConsumer {
                         .attendanceMonth(month)
                         .attendanceYear(year)
                         .build());
+
+        // Backfill the name from the report projections once it becomes available.
+        if (summary.getSubjectName() == null || "Unknown".equals(summary.getSubjectName())) {
+            resolveName(type, subjectId).ifPresent(summary::setSubjectName);
+        }
+        return summary;
+    }
+
+    private java.util.Optional<String> resolveName(String type, java.util.UUID subjectId) {
+        if ("TEACHER".equalsIgnoreCase(type)) {
+            return teacherReportRepository.findByTeacherId(subjectId)
+                    .map(t -> fullName(t.getFirstName(), t.getLastName()));
+        }
+        return studentReportRepository.findByStudentId(subjectId)
+                .map(s -> fullName(s.getFirstName(), s.getLastName()));
+    }
+
+    private String fullName(String first, String last) {
+        String name = ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+        return name.isBlank() ? null : name;
     }
 
     private void increment(AttendanceSummary summary, String status) {
