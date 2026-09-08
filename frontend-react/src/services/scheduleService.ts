@@ -1,5 +1,5 @@
 import api from './api';
-import { Schedule } from '../types';
+import { Schedule, RoomAvailability, ScheduleConflict, ScheduleVersion, UpcomingClass } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 const toArray = (d: any): any[] => (Array.isArray(d) ? d : d?.content ?? []);
@@ -17,6 +17,8 @@ const norm = (s: any): Schedule => ({
   dayOfWeek: s.dayOfWeek,
   courseName: s.courseName ?? '',
   active: s.active ?? true,
+  status: s.status,
+  publishedAt: s.publishedAt,
 });
 
 const scheduleService = {
@@ -67,6 +69,55 @@ const scheduleService = {
   generateTimetable: async (data: { classId?: string; teacherId?: string }) => {
     const response = await api.post('/schedules/generate', data);
     return response.data;
+  },
+
+  publishAll: async (): Promise<ScheduleVersion> => {
+    const response = await api.post('/schedules/publish');
+    return unwrap(response) as ScheduleVersion;
+  },
+
+  publish: async (id: string): Promise<Schedule> => {
+    const response = await api.post(`/schedules/${id}/publish`);
+    return norm(unwrap(response));
+  },
+
+  unpublish: async (id: string): Promise<Schedule> => {
+    const response = await api.post(`/schedules/${id}/unpublish`);
+    return norm(unwrap(response));
+  },
+
+  getConflicts: async (): Promise<ScheduleConflict[]> => {
+    const response = await api.get('/schedules/conflicts');
+    return toArray(unwrap(response)) as ScheduleConflict[];
+  },
+
+  getRoomAvailability: async (roomId: string, date: string): Promise<RoomAvailability> => {
+    const response = await api.get(`/rooms/${roomId}/availability?date=${date}`);
+    return unwrap(response) as RoomAvailability;
+  },
+
+  getHistory: async (): Promise<ScheduleVersion[]> => {
+    const response = await api.get('/schedules/history');
+    return toArray(unwrap(response)) as ScheduleVersion[];
+  },
+
+  getHistoryVersion: async (versionId: string): Promise<ScheduleVersion> => {
+    const response = await api.get(`/schedules/history/${versionId}`);
+    return unwrap(response) as ScheduleVersion;
+  },
+
+  getUpcoming: async (classIds: string[], limit = 10): Promise<UpcomingClass[]> => {
+    if (!classIds || classIds.length === 0) return [];
+    const response = await api.get(`/schedules/upcoming?classIds=${classIds.join(',')}&limit=${limit}`);
+    return toArray(unwrap(response)) as UpcomingClass[];
+  },
+
+  getUpcomingForStudent: async (studentId: string, limit = 10): Promise<UpcomingClass[]> => {
+    const enrollRes = await api.get(`/enrollments/student/${studentId}`);
+    const enrollments = toArray(enrollRes.data?.data ?? enrollRes.data);
+    const classIds = enrollments.map((e: any) => e.classId).filter(Boolean);
+    if (classIds.length === 0) return [];
+    return scheduleService.getUpcoming(classIds, limit);
   },
 };
 

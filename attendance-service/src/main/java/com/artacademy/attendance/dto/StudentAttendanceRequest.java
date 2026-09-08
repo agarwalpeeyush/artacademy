@@ -22,6 +22,8 @@ public class StudentAttendanceRequest {
     @NotNull(message = "Class ID is required")
     private UUID classId;
 
+    private UUID courseId;
+
     @NotNull(message = "Attendance date is required")
     private LocalDate attendanceDate;
 

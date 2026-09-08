@@ -10,12 +10,10 @@ import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
 import { markStudentAttendance, fetchStudentAttendance } from '../../store/slices/attendanceSlice';
 import studentService from '../../services/studentService';
-import { Student, StudentAttendance, Schedule } from '../../types';
+import { Student, StudentAttendance, Schedule, AttendanceStatus } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { format } from 'date-fns';
-
-type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
 
 interface AttendanceEntry {
   studentId: string;
@@ -75,7 +73,7 @@ const AttendancePage: React.FC = () => {
   };
 
   const statusColors: Record<AttendanceStatus, 'success' | 'error' | 'warning' | 'default'> = {
-    PRESENT: 'success', ABSENT: 'error', LATE: 'warning', EXCUSED: 'default',
+    PRESENT: 'success', ABSENT: 'error', LEAVE: 'warning', HALF_DAY: 'default',
   };
 
   return (
@@ -136,7 +134,7 @@ const AttendancePage: React.FC = () => {
                         onChange={e => updateEntry(entry.studentId, 'status', e.target.value)}
                         sx={{ minWidth: 120 }}
                       >
-                        {(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'] as AttendanceStatus[]).map(s => (
+                        {(['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY'] as AttendanceStatus[]).map(s => (
                           <MenuItem key={s} value={s}>
                             <Chip label={s} color={statusColors[s]} size="small" />
                           </MenuItem>

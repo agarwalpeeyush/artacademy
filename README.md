@@ -2,12 +2,13 @@
 
 Enterprise-grade Art Academy and Tuition Center Management Platform built with Microservices Architecture.
 
-## Design Documentation
+## Documentation
 
-The full architecture and design details for every service live in `DESIGN.md` files co-located with each module.
-
-- **[DESIGN.md](DESIGN.md)** — Platform overview, service inventory, startup order, Kafka event flow, and route summary
-- Each service folder contains its own `DESIGN.md` (e.g. `auth-service/DESIGN.md`, `payment-service/DESIGN.md`)
+- **[DESIGN.md](DESIGN.md)** — Platform overview, service inventory, data model, Kafka event flow, route & role summary
+- **[PRD.md](PRD.md)** — Product requirements: functional features by role and domain
+- **[TESTING.md](TESTING.md)** — UI test scenarios per role and feature (uses the seeded accounts below)
+- **[TODO.md](TODO.md)** — Remaining backlog
+- Each service folder also contains its own `DESIGN.md` (e.g. `auth-service/DESIGN.md`, `payment-service/DESIGN.md`)
 
 ---
 
@@ -229,35 +230,34 @@ The frontend proxies API calls to the gateway at http://localhost:8080 via the `
 
 ---
 
-## First Login
+## Seeded Test Accounts & Sample Data
 
-On first start, the auth database is seeded with three roles: `PRINCIPAL`, `TEACHER`, `STUDENT`.
+On first start, Flyway seeds each database with roles **and** a ready-to-use set of sample
+data so the whole application can be exercised end to end without any manual SQL. Seeding is
+**idempotent** (`ON CONFLICT DO NOTHING`) — restarts never duplicate rows, and any account you
+create later is preserved.
 
-You need to create the first principal user. Connect to the `auth_db` and insert a user manually, or call the database directly:
+**All seeded accounts share the password `Admin@1234`.** Log in at http://localhost:3000.
 
-```bash
-docker exec -it artacademy-postgres psql -U artacademy -d auth_db
-```
+| Username | Role | Notes |
+|----------|------|-------|
+| `principal` | PRINCIPAL | Full administrative access |
+| `teacher1` | TEACHER | Teaches *Painting A* (Mon/Wed 09:00–11:00, Studio 1) |
+| `teacher2` | TEACHER | Teaches *Sculpture A* (Tue/Thu 15:00–17:00, Studio 2) |
+| `student1` | STUDENT | Enrolled in Painting **and** Sculpture; fees fully PAID |
+| `student2` | STUDENT | Enrolled in Painting; fees UNPAID (appears in defaulters) |
+| `student3` | STUDENT | Enrolled in Sculpture |
+| `parent1` | PARENT | Linked to `student1` |
 
-```sql
--- Insert a principal user (password: Admin@1234)
-INSERT INTO users (username, password, email, status)
-VALUES (
-  'principal',
-  '$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO',
-  'principal@artacademy.com',
-  'ACTIVE'
-);
+The seed also creates: 2 courses, 2 classes, 4 enrollments, 2 rooms, 4 published weekly
+schedules, recent student/teacher attendance rows, and an August 2026 fee cycle (one PAID, one
+UNPAID) with a matching payment and receipt.
 
-INSERT INTO user_roles (user_id, role_id)
-SELECT u.id, r.id
-FROM users u, roles r
-WHERE u.username = 'principal' AND r.name = 'PRINCIPAL';
-```
+> **Security note:** these are demo credentials for local/testing use only. Change or remove the
+> seed migrations before any non-development deployment.
 
-Then log in at http://localhost:3000 with:
-- **Username:** `principal`
-- **Password:** `Admin@1234`
+The known BCrypt hash used for the seeded password `Admin@1234` is
+`$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO`.
 
 ---
 
@@ -490,3 +490,31 @@ Ensure the api-gateway is running on port 8080. Check the browser console for CO
 
 **Port already in use**
 Stop any conflicting processes or change service ports in `config-server/src/main/resources/config/<service-name>.yml`.
+
+---
+
+## Infrastructure Services
+
+The following services are infrastructure — they support the application but contain no business logic:
+
+| Service | Purpose |
+|---|---|
+| `postgres` | Database |
+| `redis` | Cache |
+| `zookeeper` | Kafka coordinator |
+| `kafka` | Message broker |
+| `elasticsearch` | Log storage |
+| `logstash` | Log pipeline |
+| `kibana` | Log viewer |
+| `service-registry` | Eureka — service discovery |
+| `config-server` | Centralised configuration |
+
+### Start infrastructure services only
+
+Run from the `docker/` directory:
+
+```bash
+docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana service-registry config-server
+```
+
+Useful when starting business services selectively, or running them locally from an IDE during development without starting the full stack.

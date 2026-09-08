@@ -1,6 +1,7 @@
 package com.artacademy.scheduling.repository;
 
 import com.artacademy.scheduling.domain.Schedule;
+import com.artacademy.scheduling.domain.ScheduleStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +26,14 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
     List<Schedule> findByTeacherIdAndDayOfWeek(UUID teacherId, DayOfWeek dayOfWeek);
 
     List<Schedule> findByClassIdIn(List<UUID> classIds);
+
+    List<Schedule> findByStatus(ScheduleStatus status);
+
+    List<Schedule> findByTeacherIdAndStatus(UUID teacherId, ScheduleStatus status);
+
+    List<Schedule> findByClassIdInAndStatus(List<UUID> classIds, ScheduleStatus status);
+
+    List<Schedule> findByRoomIdAndDayOfWeekAndStatus(UUID roomId, DayOfWeek dayOfWeek, ScheduleStatus status);
 
     @Query("SELECT s FROM Schedule s WHERE s.teacherId = :teacherId AND s.dayOfWeek = :day " +
            "AND s.startTime < :end AND s.endTime > :start")

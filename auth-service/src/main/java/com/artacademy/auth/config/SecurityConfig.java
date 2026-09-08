@@ -24,8 +24,10 @@ public class SecurityConfig {
             .csrf(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
-                .requestMatchers("/auth/login", "/auth/refresh", "/auth/reset-password").permitAll()
+                .requestMatchers("/auth/login", "/auth/refresh", "/auth/forgot-password", "/auth/reset-password").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**").permitAll()
+                .requestMatchers("/auth/audit-logs").hasRole("PRINCIPAL")
+                .requestMatchers("/auth/users/**").hasRole("PRINCIPAL")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(new JwtAuthenticationFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);

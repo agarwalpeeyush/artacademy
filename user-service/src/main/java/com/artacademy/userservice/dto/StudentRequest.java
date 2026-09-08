@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -16,7 +17,11 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class StudentRequest {
 
+    @NotBlank(message = "Login ID is required")
     private String loginId;
+
+    @NotBlank(message = "Temporary password is required")
+    private String temporaryPassword;
 
     @NotBlank(message = "First name is required")
     private String firstName;
@@ -47,4 +52,7 @@ public class StudentRequest {
 
     @NotBlank(message = "Status is required")
     private String status;
+
+    /** Additional auth roles beyond STUDENT, e.g. ["TEACHER"]. */
+    private List<String> additionalRoles;
 }

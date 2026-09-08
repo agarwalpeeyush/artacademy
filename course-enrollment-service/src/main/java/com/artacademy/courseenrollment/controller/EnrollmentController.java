@@ -39,6 +39,14 @@ public class EnrollmentController {
                 enrollmentService.getEnrollmentsByStudentId(studentId)));
     }
 
+    @GetMapping("/course/{courseId}")
+    @Operation(summary = "Get all enrollments for a course")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByCourse(
+            @PathVariable("courseId") UUID courseId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                enrollmentService.getEnrollmentsByCourseId(courseId)));
+    }
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Cancel (delete) an enrollment (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<Void>> cancelEnrollment(@PathVariable("id") UUID id) {

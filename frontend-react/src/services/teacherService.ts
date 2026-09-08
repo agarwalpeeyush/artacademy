@@ -1,5 +1,5 @@
 import api from './api';
-import { Teacher } from '../types';
+import { Teacher, TeacherAvailabilityException } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 
@@ -51,6 +51,29 @@ const teacherService = {
   getAttendanceStats: async (teacherId: string) => {
     const response = await api.get(`/attendance/teachers/${teacherId}/stats`);
     return response.data;
+  },
+
+  getAvailability: async (teacherId: string) => {
+    const response = await api.get(`/teachers/${teacherId}/availability`);
+    return unwrap(response);
+  },
+
+  getAvailabilityExceptions: async (teacherId: string): Promise<TeacherAvailabilityException[]> => {
+    const response = await api.get(`/teachers/${teacherId}/availability-exceptions`);
+    const data = unwrap(response);
+    return Array.isArray(data) ? data : [];
+  },
+
+  addAvailabilityException: async (
+    teacherId: string,
+    data: { date: string; reason?: string; unavailableAllDay: boolean; startTime?: string; endTime?: string }
+  ): Promise<TeacherAvailabilityException> => {
+    const response = await api.post(`/teachers/${teacherId}/availability-exceptions`, data);
+    return unwrap(response) as TeacherAvailabilityException;
+  },
+
+  deleteAvailabilityException: async (teacherId: string, exceptionId: string): Promise<void> => {
+    await api.delete(`/teachers/${teacherId}/availability-exceptions/${exceptionId}`);
   },
 };
 

@@ -36,7 +36,6 @@ public class EnrollmentService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public EnrollmentResponse enrollStudent(EnrollmentRequest request) {
-        // Check for duplicate active enrollment on same course
         if (enrollmentRepository.existsByStudentIdAndCourseIdAndStatus(
                 request.getStudentId(), request.getCourseId(), STATUS_ACTIVE)) {
             throw ApiException.conflict(
@@ -44,7 +43,6 @@ public class EnrollmentService {
                     + " is already actively enrolled in course id=" + request.getCourseId());
         }
 
-        // Verify class exists and has capacity
         CourseClass courseClass = courseClassRepository.findById(request.getClassId())
                 .orElseThrow(() -> ApiException.notFound("Class not found with id: " + request.getClassId()));
 
@@ -103,6 +101,14 @@ public class EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> getEnrollmentsByStudentId(UUID studentId) {
         return enrollmentRepository.findByStudentId(studentId)
+                .stream()
+                .map(enrollmentMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EnrollmentResponse> getEnrollmentsByCourseId(UUID courseId) {
+        return enrollmentRepository.findByCourseId(courseId)
                 .stream()
                 .map(enrollmentMapper::toResponse)
                 .toList();

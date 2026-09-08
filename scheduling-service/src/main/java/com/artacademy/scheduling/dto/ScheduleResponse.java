@@ -1,11 +1,13 @@
 package com.artacademy.scheduling.dto;
 
+import com.artacademy.scheduling.domain.ScheduleStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.UUID;
 
@@ -23,4 +25,6 @@ public class ScheduleResponse {
     private LocalTime startTime;
     private LocalTime endTime;
     private DayOfWeek dayOfWeek;
+    private ScheduleStatus status;
+    private Instant publishedAt;
 }

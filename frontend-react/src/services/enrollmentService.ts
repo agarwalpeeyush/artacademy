@@ -37,6 +37,11 @@ const enrollmentService = {
     return toArray(unwrap(response)).map(norm);
   },
 
+  getByCourse: async (courseId: string): Promise<Enrollment[]> => {
+    const response = await api.get(`/enrollments/course/${courseId}`);
+    return toArray(unwrap(response)).map(norm);
+  },
+
   create: async (data: Omit<Enrollment, 'id'>): Promise<Enrollment> => {
     const response = await api.post('/enrollments', data);
     return norm(unwrap(response));

@@ -13,6 +13,8 @@ public class AttendanceSummaryResponse {
     private String subjectType;
     private UUID subjectId;
     private String subjectName;
+    private UUID courseId;
+    private String courseName;
     private Integer attendanceMonth;
     private Integer attendanceYear;
     private Integer totalDays;

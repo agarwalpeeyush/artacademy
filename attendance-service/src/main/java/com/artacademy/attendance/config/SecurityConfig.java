@@ -40,9 +40,21 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/attendance/teachers/**")
                             .hasAnyRole("TEACHER", "PRINCIPAL")
 
-                    // Mark student attendance – PRINCIPAL only
-                    .requestMatchers(HttpMethod.POST, "/attendance/students/**")
+                    // Correction workflow – submit (TEACHER/PRINCIPAL), review (PRINCIPAL)
+                    .requestMatchers(HttpMethod.PATCH, "/attendance/corrections/*/approve")
                             .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.PATCH, "/attendance/corrections/*/reject")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/attendance/corrections/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/attendance/corrections/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+
+                    // Mark/update student attendance – TEACHER or PRINCIPAL
+                    .requestMatchers(HttpMethod.POST, "/attendance/students/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT, "/attendance/students/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
 
                     // Read teacher attendance – TEACHER (own students) or PRINCIPAL (all)
                     .requestMatchers(HttpMethod.GET, "/attendance/teachers/**")

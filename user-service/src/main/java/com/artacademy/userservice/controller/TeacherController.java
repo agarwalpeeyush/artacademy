@@ -1,6 +1,8 @@
 package com.artacademy.userservice.controller;
 
 import com.artacademy.common.dto.ApiResponse;
+import com.artacademy.userservice.dto.TeacherAvailabilityExceptionRequest;
+import com.artacademy.userservice.dto.TeacherAvailabilityExceptionResponse;
 import com.artacademy.userservice.dto.TeacherAvailabilityRequest;
 import com.artacademy.userservice.dto.TeacherAvailabilityResponse;
 import com.artacademy.userservice.dto.TeacherRequest;
@@ -77,5 +79,30 @@ public class TeacherController {
             @PathVariable UUID id,
             @Valid @RequestBody List<@Valid TeacherAvailabilityRequest> requests) {
         return ResponseEntity.ok(ApiResponse.success(teacherService.updateAvailability(id, requests)));
+    }
+
+    @GetMapping("/{id}/availability-exceptions")
+    @Operation(summary = "Get teacher one-off availability exceptions")
+    public ResponseEntity<ApiResponse<List<TeacherAvailabilityExceptionResponse>>> getAvailabilityExceptions(
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(teacherService.getExceptions(id)));
+    }
+
+    @PostMapping("/{id}/availability-exceptions")
+    @Operation(summary = "Add a one-off availability exception (leave/sick day)")
+    public ResponseEntity<ApiResponse<TeacherAvailabilityExceptionResponse>> addAvailabilityException(
+            @PathVariable UUID id,
+            @Valid @RequestBody TeacherAvailabilityExceptionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(teacherService.addException(id, request)));
+    }
+
+    @DeleteMapping("/{id}/availability-exceptions/{exceptionId}")
+    @Operation(summary = "Delete a teacher availability exception")
+    public ResponseEntity<ApiResponse<Void>> deleteAvailabilityException(
+            @PathVariable UUID id,
+            @PathVariable UUID exceptionId) {
+        teacherService.deleteException(id, exceptionId);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

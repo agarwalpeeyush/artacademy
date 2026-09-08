@@ -17,5 +17,7 @@ public class AttendanceRecordedEvent {
     private UUID subjectId;        // studentId or teacherId
     private String status;
     private String attendanceDate;
+    private UUID courseId;
+    private String courseName;
     private Instant occurredAt;
 }

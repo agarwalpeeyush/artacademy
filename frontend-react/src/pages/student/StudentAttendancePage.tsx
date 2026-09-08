@@ -26,12 +26,12 @@ const StudentAttendancePage: React.FC = () => {
 
   const presentCount = studentAttendance.filter(a => a.status === 'PRESENT').length;
   const absentCount = studentAttendance.filter(a => a.status === 'ABSENT').length;
-  const lateCount = studentAttendance.filter(a => a.status === 'LATE').length;
+  const leaveCount = studentAttendance.filter(a => a.status === 'LEAVE').length;
   const total = studentAttendance.length;
   const attendancePct = total > 0 ? (presentCount / total) * 100 : 0;
 
   const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-    PRESENT: 'success', ABSENT: 'error', LATE: 'warning', EXCUSED: 'default',
+    PRESENT: 'success', ABSENT: 'error', LEAVE: 'warning', HALF_DAY: 'default',
   };
 
   const columns: Column<Record<string, unknown>>[] = [
@@ -68,7 +68,7 @@ const StudentAttendancePage: React.FC = () => {
           { label: 'Total Sessions', value: total, color: 'primary.main' },
           { label: 'Present', value: presentCount, color: 'success.main' },
           { label: 'Absent', value: absentCount, color: 'error.main' },
-          { label: 'Late', value: lateCount, color: 'warning.main' },
+          { label: 'Leave', value: leaveCount, color: 'warning.main' },
         ].map(stat => (
           <Grid item xs={6} sm={3} key={stat.label}>
             <Card>

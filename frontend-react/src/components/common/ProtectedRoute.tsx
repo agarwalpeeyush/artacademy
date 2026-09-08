@@ -21,6 +21,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
       ? '/principal/dashboard'
       : roles.includes('ROLE_TEACHER')
       ? '/teacher/dashboard'
+      : roles.includes('ROLE_PARENT')
+      ? '/parent/dashboard'
       : '/student/dashboard';
     return <Navigate to={defaultPath} replace />;
   }

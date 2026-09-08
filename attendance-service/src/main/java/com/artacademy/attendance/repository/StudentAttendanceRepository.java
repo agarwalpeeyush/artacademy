@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -17,6 +18,11 @@ public interface StudentAttendanceRepository extends JpaRepository<StudentAttend
 
     List<StudentAttendance> findByStudentIdAndAttendanceDateBetween(
             UUID studentId, LocalDate from, LocalDate to);
+
+    List<StudentAttendance> findByClassIdAndAttendanceDate(UUID classId, LocalDate attendanceDate);
+
+    Optional<StudentAttendance> findByStudentIdAndClassIdAndAttendanceDate(
+            UUID studentId, UUID classId, LocalDate attendanceDate);
 
     boolean existsByStudentIdAndClassIdAndAttendanceDate(
             UUID studentId, UUID classId, LocalDate attendanceDate);

@@ -46,11 +46,18 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT,    "/students/**").hasRole("PRINCIPAL")
                     .requestMatchers(HttpMethod.DELETE, "/students/**").hasRole("PRINCIPAL")
 
-                    // Read endpoints – PRINCIPAL, TEACHER, or STUDENT
+                    // Mutating parent endpoints – PRINCIPAL only
+                    .requestMatchers(HttpMethod.POST,   "/parents/**").hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT,    "/parents/**").hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/parents/**").hasRole("PRINCIPAL")
+
+                    // Read endpoints – PRINCIPAL, TEACHER, STUDENT, or PARENT
                     .requestMatchers(HttpMethod.GET, "/teachers/**")
                             .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT")
                     .requestMatchers(HttpMethod.GET, "/students/**")
-                            .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT")
+                            .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
+                    .requestMatchers(HttpMethod.GET, "/parents/**")
+                            .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
 
                     .anyRequest().authenticated()
             )

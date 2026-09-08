@@ -41,6 +41,56 @@ public class ReportController {
     }
 
     /**
+     * GET /reports/attendance/exceptions?threshold=75&type=STUDENT&month=9&year=2026
+     * Returns subjects with attendance below the threshold percentage.
+     */
+    @GetMapping("/attendance/exceptions")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "List subjects with attendance below a threshold percentage")
+    public ResponseEntity<List<AttendanceExceptionResponse>> getAttendanceExceptions(
+            @RequestParam(defaultValue = "75") double threshold,
+            @RequestParam(name = "type", required = false) String subjectType,
+            @RequestParam Optional<Integer> month,
+            @RequestParam Optional<Integer> year) {
+
+        return ResponseEntity.ok(
+                reportingService.getAttendanceExceptions(threshold, subjectType, month, year));
+    }
+
+    /**
+     * GET /reports/attendance/monthly?month=9&year=2026
+     * Returns student attendance summaries grouped by course.
+     */
+    @GetMapping("/attendance/monthly")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "Monthly attendance summary grouped by course")
+    public ResponseEntity<List<CourseAttendanceSummaryResponse>> getMonthlyCourseSummary(
+            @RequestParam Integer month,
+            @RequestParam Integer year) {
+
+        return ResponseEntity.ok(reportingService.getMonthlyCourseSummary(month, year));
+    }
+
+    /**
+     * GET /reports/attendance/export?subjectType=STUDENT&month=9&year=2026
+     * Returns the attendance report as a downloadable CSV file.
+     */
+    @GetMapping(value = "/attendance/export", produces = "text/csv")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "Export attendance report as CSV")
+    public ResponseEntity<String> exportAttendanceCsv(
+            @RequestParam String subjectType,
+            @RequestParam Optional<Integer> month,
+            @RequestParam Optional<Integer> year) {
+
+        String csv = reportingService.exportAttendanceCsv(subjectType, month, year);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=attendance-report.csv")
+                .header("Content-Type", "text/csv")
+                .body(csv);
+    }
+
+    /**
      * GET /reports/revenue
      * Returns all revenue summaries ordered by year DESC, month DESC.
      */

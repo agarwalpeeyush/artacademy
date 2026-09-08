@@ -22,6 +22,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchStudents, createStudent, updateStudent, deleteStudent } from '../../store/slices/studentSlice';
 import { Student } from '../../types';
@@ -51,6 +52,7 @@ type StudentFormData = Omit<Student, 'id'>;
 
 const StudentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const { list: students, loading } = useSelector((state: RootState) => state.students);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
@@ -132,18 +134,18 @@ const StudentsPage: React.FC = () => {
       format: (v) => <Chip label={v as string} color={v === 'ACTIVE' ? 'success' : 'default'} size="small" />,
     },
     {
-      id: 'actions', label: 'Actions', minWidth: 100, align: 'center',
+      id: 'actions', label: 'Actions', minWidth: 100, align: 'center', sortable: false,
       format: (_v, row) => {
         const student = row as unknown as Student;
         return (
           <Box>
             <Tooltip title="Edit">
-              <IconButton size="small" color="primary" onClick={() => handleEdit(student)}>
+              <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); handleEdit(student); }}>
                 <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <Tooltip title="Delete">
-              <IconButton size="small" color="error" onClick={() => setDeleteTarget(student)}>
+              <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); setDeleteTarget(student); }}>
                 <DeleteIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -168,7 +170,7 @@ const StudentsPage: React.FC = () => {
         }
       />
 
-      <DataTable columns={columns} rows={students as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search students..." />
+      <DataTable columns={columns} rows={students as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search students..." onRowClick={(row) => navigate(`/principal/students/${(row as { id: string }).id}`)} />
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editing ? 'Edit Student' : 'Add New Student'}</DialogTitle>

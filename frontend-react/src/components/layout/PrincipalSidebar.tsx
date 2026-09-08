@@ -16,10 +16,17 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ClassIcon from '@mui/icons-material/Class';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import PublishIcon from '@mui/icons-material/Publish';
+import HistoryIcon from '@mui/icons-material/History';
 import EventNoteIcon from '@mui/icons-material/EventNote';
+import RuleIcon from '@mui/icons-material/Rule';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import WarningIcon from '@mui/icons-material/Warning';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import SecurityIcon from '@mui/icons-material/Security';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PaletteIcon from '@mui/icons-material/Palette';
 
@@ -31,10 +38,17 @@ const navItems = [
   { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/principal/enrollments' },
   { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },
+  { label: 'Room Availability', icon: <MeetingRoomIcon />, path: '/principal/room-availability' },
+  { label: 'Conflicts', icon: <ReportProblemIcon />, path: '/principal/conflicts' },
+  { label: 'Publish Schedule', icon: <PublishIcon />, path: '/principal/schedule-publish' },
+  { label: 'Schedule History', icon: <HistoryIcon />, path: '/principal/schedule-history' },
   { label: 'Attendance', icon: <EventNoteIcon />, path: '/principal/attendance' },
+  { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
   { label: 'Revenue', icon: <AttachMoneyIcon />, path: '/principal/revenue' },
   { label: 'Defaulters', icon: <WarningIcon />, path: '/principal/defaulters' },
   { label: 'Analytics', icon: <BarChartIcon />, path: '/principal/analytics' },
+  { label: 'Audit Logs', icon: <SecurityIcon />, path: '/principal/audit-logs' },
+  { label: 'User Management', icon: <ManageAccountsIcon />, path: '/principal/users' },
 ];
 
 const PrincipalSidebar: React.FC = () => {

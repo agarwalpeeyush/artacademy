@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -47,19 +49,26 @@ public class StudentService {
     }
 
     public StudentResponse createStudent(StudentRequest request) {
-        if (request.getLoginId() != null && studentRepository.existsByLoginId(request.getLoginId())) {
+        if (studentRepository.existsByLoginId(request.getLoginId())) {
             throw ApiException.conflict("Student with login ID '" + request.getLoginId() + "' already exists");
         }
         Student saved = studentRepository.save(studentMapper.toEntity(request));
+        List<String> roles = new ArrayList<>(List.of("STUDENT"));
+        if (request.getAdditionalRoles() != null) {
+            request.getAdditionalRoles().forEach(r -> { if (!roles.contains(r)) roles.add(r); });
+        }
         kafkaTemplate.send(KafkaTopics.STUDENT_CREATED, saved.getId().toString(),
                 StudentCreatedEvent.builder()
                         .studentId(saved.getId())
+                        .username(saved.getLoginId())
+                        .email(saved.getEmail())
+                        .temporaryPassword(request.getTemporaryPassword())
                         .firstName(saved.getFirstName())
                         .lastName(saved.getLastName())
-                        .email(saved.getEmail())
+                        .roles(roles)
                         .occurredAt(Instant.now())
                         .build());
-        log.info("Published StudentCreatedEvent for student id={}", saved.getId());
+        log.info("Published StudentCreatedEvent for student id={} roles={}", saved.getId(), roles);
         return studentMapper.toResponse(saved);
     }
 

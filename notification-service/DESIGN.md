@@ -47,17 +47,17 @@ com.artacademy.notification
 ### `Notification`
 
 ```
-UUID     id
-UUID     userId           (recipient user UUID; null for system notifications)
-String   recipientEmail
-String   recipientPhone
-String   subject
-String   body
-String   channel          (EMAIL | SMS | BOTH)
-String   status           (PENDING | SENT | FAILED)
-Instant  sentAt           (set when SENT)
-Instant  createdAt        (@PrePersist)
-String   errorMessage     (populated on failure)
+UUID           id
+UUID           userId           (recipient user UUID; null for system notifications)
+String         recipientEmail   (max 200)
+String         recipientPhone
+String         subject
+String         body
+String         channel          (EMAIL | SMS | BOTH)
+String         status           (PENDING | SENT | FAILED)
+LocalDateTime  sentAt           (set when SENT)
+LocalDateTime  createdAt        (@PrePersist)
+String         errorMessage     (populated on failure)
 ```
 
 ---
@@ -67,20 +67,24 @@ String   errorMessage     (populated on failure)
 Final state after V2 migration:
 
 ```sql
-CREATE TABLE notifications (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id          UUID,
-    recipient_email  VARCHAR(255),
-    recipient_phone  VARCHAR(20),
-    subject          VARCHAR(500),
-    body             TEXT,
-    channel          VARCHAR(20) NOT NULL,
-    status           VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    sent_at          TIMESTAMPTZ,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    error_message    TEXT
+CREATE TABLE NOTIFICATIONS (
+    ID               UUID PRIMARY KEY,
+    USER_ID          UUID,
+    RECIPIENT_EMAIL  VARCHAR(200),
+    RECIPIENT_PHONE  VARCHAR(20),
+    SUBJECT          VARCHAR(500),
+    BODY             TEXT,
+    CHANNEL          VARCHAR(20) NOT NULL DEFAULT 'EMAIL',
+    STATUS           VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    SENT_AT          TIMESTAMP,
+    CREATED_AT       TIMESTAMP NOT NULL DEFAULT NOW(),
+    ERROR_MESSAGE    TEXT,
+    CONSTRAINT chk_notifications_channel CHECK (CHANNEL IN ('EMAIL', 'SMS', 'BOTH')),
+    CONSTRAINT chk_notifications_status  CHECK (STATUS IN ('PENDING', 'SENT', 'FAILED'))
 );
-CREATE INDEX idx_notif_user ON notifications(user_id);
+CREATE INDEX idx_notifications_user_id            ON NOTIFICATIONS(USER_ID);
+CREATE INDEX idx_notifications_status             ON NOTIFICATIONS(STATUS);
+CREATE INDEX idx_notifications_user_id_created_at ON NOTIFICATIONS(USER_ID, CREATED_AT DESC);
 ```
 
 ---
@@ -92,7 +96,7 @@ Base path: `/notifications`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `POST` | `/notifications/send` | PRINCIPAL | Manually send a notification |
-| `GET` | `/notifications/{userId}` | PRINCIPAL | Get paginated notification history for a user |
+| `GET` | `/notifications/{userId}` | Any authenticated | Get paginated notification history for a user |
 
 **Pagination defaults:** `page=0, size=20, sort=createdAt,DESC`
 
@@ -139,16 +143,15 @@ Base path: `/notifications`
 ### `NotificationService.sendNotification(request)`
 
 1. Create `Notification` entity with `status = PENDING`.
-2. Persist (ensures record even if delivery fails).
-3. If `channel` includes `EMAIL` and `recipientEmail` is not blank:
-   - Build `SimpleMailMessage`.
-   - Call `JavaMailSender.send(message)`.
-   - On success: set `status = SENT`, `sentAt = Instant.now()`.
-   - On exception: set `status = FAILED`, `errorMessage = e.getMessage()`.
-4. Save updated entity.
-5. Return `NotificationResponse`.
+2. Persist (ensures a record exists even if delivery fails).
+3. If `channel` is `EMAIL` or `BOTH` (case-insensitive): attempt email delivery —
+   - If `recipientEmail` is null/blank: set `status = FAILED`, `errorMessage = "Recipient email is missing"` (no send attempted).
+   - Otherwise build `SimpleMailMessage`, call `JavaMailSender.send(message)`; on success set `status = SENT`, `sentAt = now()`; on exception set `status = FAILED`, `errorMessage = e.getMessage()`.
+4. Otherwise (any other channel, i.e. `SMS`): set `status = SENT`, `sentAt = now()` immediately (see note below).
+5. Save updated entity.
+6. Return `NotificationResponse`.
 
-SMS delivery is not yet implemented — `channel=SMS` records are persisted as PENDING but no delivery attempt is made.
+> **Note (documented as-implemented):** there is **no** SMS provider integrated. An `SMS`-channel notification is **not left PENDING and is not actually delivered** — it is optimistically marked `SENT` with a `sentAt` timestamp even though nothing was sent.
 
 ---
 
@@ -160,10 +163,10 @@ Consumer group: `notification-service`.
 
 | Topic | Trigger condition | Notification sent |
 |-------|-------------------|-------------------|
-| `notification.request` | Always | Uses event's `recipientEmail`, `subject`, `body`, `channel` directly |
-| `fee.generated` | Always | Subject: "Fee Generated for Month X/Y"; Body: total amount owed |
-| `payment.received` | Always | Subject: "Payment Received"; Body: payment amount confirmed |
-| `attendance.recorded` | `attendanceType == STUDENT` AND `status == ABSENT` | Subject: "Absence Alert"; Body: student was absent on `attendanceDate` |
+| `notification-request` | Always | Uses event's `recipientEmail`, `subject`, `body`, `channel` directly |
+| `fee-generated` | Always | Subject: "Fee Generated for Month X/Y"; Body: total amount owed |
+| `payment-received` | Always | Subject: "Payment Received"; Body: payment amount confirmed |
+| `attendance-recorded` | `attendanceType == STUDENT` AND `status == ABSENT` | Subject: "Absence Alert"; Body: student was absent on `attendanceDate` |
 
 All four paths call the same `sendNotification()` method after constructing the appropriate `NotificationRequest`.
 

@@ -1,5 +1,5 @@
 import api from './api';
-import { StudentAttendance, TeacherAttendance } from '../types';
+import { StudentAttendance, TeacherAttendance, AttendanceCorrection, AttendanceStats } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 
@@ -54,15 +54,45 @@ const attendanceService = {
     return unwrap(response);
   },
 
-  getStudentStats: async (studentId: string, classId?: string) => {
+  getStudentStats: async (studentId: string, classId?: string): Promise<AttendanceStats> => {
     const params = classId ? { classId } : {};
     const response = await api.get(`/attendance/students/${studentId}/stats`, { params });
     return unwrap(response);
   },
 
   getClassAttendanceForDate: async (classId: string, date: string): Promise<StudentAttendance[]> => {
-    const response = await api.get(`/attendance/class/${classId}/date`, { params: { date } });
+    const response = await api.get(`/attendance/students/class/${classId}/date`, { params: { date } });
     return toArray(unwrap(response)).map(normStudentAttendance);
+  },
+
+  submitCorrection: async (data: {
+    studentAttendanceId: string;
+    requestedStatus: string;
+    reason?: string;
+    requestedByTeacherId: string;
+  }): Promise<AttendanceCorrection> => {
+    const response = await api.post('/attendance/corrections', data);
+    return unwrap(response);
+  },
+
+  getCorrections: async (params: { status?: string }): Promise<AttendanceCorrection[]> => {
+    const response = await api.get('/attendance/corrections', { params });
+    return toArray(unwrap(response));
+  },
+
+  getTeacherCorrections: async (teacherId: string): Promise<AttendanceCorrection[]> => {
+    const response = await api.get(`/attendance/corrections/teacher/${teacherId}`);
+    return toArray(unwrap(response));
+  },
+
+  approveCorrection: async (id: string, reviewedByPrincipalId: string, reviewNote?: string): Promise<AttendanceCorrection> => {
+    const response = await api.patch(`/attendance/corrections/${id}/approve`, { reviewedByPrincipalId, reviewNote });
+    return unwrap(response);
+  },
+
+  rejectCorrection: async (id: string, reviewedByPrincipalId: string, reviewNote?: string): Promise<AttendanceCorrection> => {
+    const response = await api.patch(`/attendance/corrections/${id}/reject`, { reviewedByPrincipalId, reviewNote });
+    return unwrap(response);
   },
 };
 

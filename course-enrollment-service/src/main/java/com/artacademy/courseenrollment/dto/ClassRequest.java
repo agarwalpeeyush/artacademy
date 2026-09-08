@@ -21,12 +21,11 @@ public class ClassRequest {
 
     private UUID teacherId;
 
-    @NotBlank(message = "Class name is required")
+    @NotBlank(message = "Course Class name is required")
     private String className;
 
     private String roomNumber;
 
-    @NotNull(message = "Capacity is required")
     @Positive(message = "Capacity must be greater than zero")
     private Integer capacity;
 

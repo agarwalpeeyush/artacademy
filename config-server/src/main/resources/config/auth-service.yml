@@ -14,3 +14,8 @@ spring:
     show-sql: false
   flyway:
     locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: auth-service-group
+      auto-offset-reset: earliest

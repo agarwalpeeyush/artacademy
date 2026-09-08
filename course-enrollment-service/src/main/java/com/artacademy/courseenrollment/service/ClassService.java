@@ -56,7 +56,6 @@ public class ClassService {
 
         CourseClass courseClass = findClassById(id);
 
-        // Verify new capacity is not less than current enrollment count
         long currentEnrollments = enrollmentRepository.countByClassId(id);
         if (request.getCapacity() < currentEnrollments) {
             throw ApiException.badRequest(

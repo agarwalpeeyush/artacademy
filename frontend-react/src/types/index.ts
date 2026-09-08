@@ -58,6 +58,21 @@ export interface Student {
   status: string;
 }
 
+export interface Parent {
+  id: string;
+  loginId?: string;
+  firstName: string;
+  lastName: string;
+  relationship?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  occupation?: string;
+  studentId: string;
+  studentName?: string;
+  status: string;
+}
+
 export interface Course {
   id: string;
   courseCode: string;
@@ -106,16 +121,70 @@ export interface TeacherAttendance {
   remarks?: string;
 }
 
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LEAVE' | 'HALF_DAY';
+
 export interface StudentAttendance {
   id: string;
   studentId: string;
   studentName?: string;
   classId: string;
   className?: string;
+  courseId?: string;
+  sessionId?: string;
   date: string;
   attendanceDate?: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+  status: AttendanceStatus;
   remarks?: string;
+}
+
+export interface AttendanceStats {
+  studentId: string;
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  leaveDays: number;
+  halfDays: number;
+  attendancePercentage: number;
+}
+
+export type CorrectionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface AttendanceCorrection {
+  id: string;
+  studentAttendanceId: string;
+  studentId: string;
+  classId: string;
+  attendanceDate: string;
+  requestedStatus: AttendanceStatus;
+  reason?: string;
+  requestedByTeacherId: string;
+  status: CorrectionStatus;
+  reviewedByPrincipalId?: string;
+  reviewNote?: string;
+  createdAt?: string;
+  reviewedAt?: string;
+}
+
+export interface CourseAttendanceSummary {
+  courseId?: string;
+  courseName: string;
+  attendanceMonth: number;
+  attendanceYear: number;
+  studentCount: number;
+  totalDays: number;
+  presentDays: number;
+  attendancePercentage: number;
+}
+
+export interface AttendanceException {
+  subjectId: string;
+  subjectName: string;
+  subjectType: string;
+  attendanceMonth?: number;
+  attendanceYear?: number;
+  totalDays: number;
+  presentDays: number;
+  attendancePercentage: number;
 }
 
 export interface Room {
@@ -138,6 +207,83 @@ export interface Schedule {
   roomId?: string;
   roomName?: string;
   active: boolean;
+  status?: 'DRAFT' | 'PUBLISHED';
+  publishedAt?: string;
+}
+
+export interface RoomAvailabilitySlot {
+  startTime: string;
+  endTime: string;
+  scheduleId?: string;
+  classId?: string;
+}
+
+export interface RoomAvailability {
+  roomId: string;
+  roomName: string;
+  dayOfWeek: string;
+  occupied: RoomAvailabilitySlot[];
+  free: RoomAvailabilitySlot[];
+}
+
+export type ScheduleConflictType = 'TEACHER_DOUBLE_BOOKED' | 'ROOM_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
+
+export interface ScheduleConflict {
+  type: ScheduleConflictType;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  scheduleId: string;
+  otherScheduleId: string;
+  teacherId: string;
+  roomId: string;
+  classId: string;
+  description: string;
+}
+
+export interface ScheduleVersionEntry {
+  scheduleId: string;
+  classId: string;
+  teacherId: string;
+  roomId: string;
+  roomName?: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface ScheduleVersion {
+  id: string;
+  versionNumber: number;
+  publishedAt: string;
+  publishedBy?: string;
+  entryCount: number;
+  entries?: ScheduleVersionEntry[];
+}
+
+export interface UpcomingClass {
+  scheduleId: string;
+  date: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  classId: string;
+  teacherId: string;
+  roomId?: string;
+  roomName?: string;
+  className?: string;
+  courseName?: string;
+  teacherName?: string;
+}
+
+export interface TeacherAvailabilityException {
+  id: string;
+  teacherId: string;
+  date: string;
+  reason?: string;
+  unavailableAllDay: boolean;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface FeeCycle {

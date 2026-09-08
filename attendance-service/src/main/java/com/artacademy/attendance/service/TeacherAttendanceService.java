@@ -54,6 +54,7 @@ public class TeacherAttendanceService {
 
         AttendanceRecordedEvent event = AttendanceRecordedEvent.builder()
                 .attendanceType("TEACHER")
+                .subjectId(saved.getTeacherId())
                 .status(saved.getStatus().name())
                 .attendanceDate(saved.getAttendanceDate().toString())
                 .occurredAt(Instant.now())

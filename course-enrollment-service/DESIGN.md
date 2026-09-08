@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The `course-enrollment-service` manages the academy's course catalogue, the scheduled class offerings (CourseClass), and student enrollment in those classes. It is the source of truth for what is being taught, by whom, and who is enrolled. It publishes enrollment events that drive fee generation and reporting.
+The `course-enrollment-service` manages the academy's course catalogue, the class offerings (`CourseClass` — one running batch of a course), and student enrollment in those classes. It is the source of truth for what is taught, by whom, and who is enrolled. It publishes enrollment events that drive fee-generation caching and reporting.
 
 ---
 
@@ -34,12 +34,9 @@ com.artacademy.courseenrollment
 │   ├── CourseClass.java
 │   └── Enrollment.java
 ├── dto
-│   ├── CourseRequest.java
-│   ├── CourseResponse.java
-│   ├── ClassRequest.java
-│   ├── ClassResponse.java
-│   ├── EnrollmentRequest.java
-│   └── EnrollmentResponse.java
+│   ├── CourseRequest.java / CourseResponse.java
+│   ├── ClassRequest.java / ClassResponse.java
+│   └── EnrollmentRequest.java / EnrollmentResponse.java
 ├── mapper
 │   ├── CourseMapper.java      (MapStruct)
 │   ├── ClassMapper.java       (MapStruct)
@@ -58,131 +55,134 @@ com.artacademy.courseenrollment
 
 ## 4. Domain Model
 
-### 4.1 `Course`
+### 4.1 `Course` (table `COURSES`)
 
 ```
 UUID        id
-String      courseCode     (unique, not null)
-String      courseName     (not null)
-String      courseType     (e.g. "DRAWING", "PAINTING", "DANCE")
-String      description
-BigDecimal  monthlyFee
-BigDecimal  admissionFee
+String      courseCode      (unique, not null, max 50)
+String      courseName      (not null)
+String      courseType      (max 50 — e.g. "PAINTING", "SCULPTURE")
+String      description     (TEXT)
+BigDecimal  monthlyFee      (NUMERIC(12,2))
+BigDecimal  admissionFee    (NUMERIC(12,2))
 Integer     durationMonths
-String      status         (ACTIVE | INACTIVE)
+String      status          (not null — ACTIVE | INACTIVE)
 ```
 
-### 4.2 `CourseClass`
+### 4.2 `CourseClass` (table `CLASSES`)
 
-Represents a specific scheduled offering of a course:
+A specific running section (batch) of a course, with its own teacher, room, and seat limit.
 
 ```
 UUID    id
-UUID    courseId         (FK → courses)
-UUID    teacherId        (FK → user-service, not enforced at DB level)
-String  className        (e.g. "Drawing Batch A - Morning")
-String  roomNumber
-Integer maxCapacity
-String  status           (ACTIVE | INACTIVE)
+UUID    courseId         (not null; FK → COURSES)
+UUID    teacherId        (nullable; logical FK → user-service, not DB-enforced)
+String  className        (not null — e.g. "Painting A - Morning")
+String  roomNumber       (max 50)
+Integer capacity         (seat limit; NOT NULL CHECK > 0 at DB level)
+String  status           (not null — ACTIVE | INACTIVE)
 ```
 
-### 4.3 `Enrollment`
+### 4.3 `Enrollment` (table `ENROLLMENTS`)
 
 ```
 UUID        id
-UUID        studentId      (FK → user-service, not enforced at DB level)
-UUID        courseId
-UUID        classId
-LocalDate   enrollmentDate
-String      status         (ACTIVE | CANCELLED)
+UUID        studentId      (not null; logical FK → user-service)
+UUID        courseId       (not null; FK → COURSES)
+UUID        classId        (not null; FK → CLASSES)
+LocalDate   enrollmentDate (not null; defaults to today when omitted)
+String      status         (not null, max 20 — ACTIVE | CANCELLED)
 
-UNIQUE (studentId, courseId)   -- prevents double-enrollment in same course
+UNIQUE (studentId, courseId)   -- prevents double-enrollment in the same course
 ```
 
 ---
 
 ## 5. Database Schema
 
-Final state after V2 migration:
+Managed by Flyway. Final state after V2 (V3 seeds data only):
 
 ```sql
-CREATE TABLE courses (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    course_code      VARCHAR(50)  UNIQUE NOT NULL,
-    course_name      VARCHAR(200) NOT NULL,
-    course_type      VARCHAR(100),
-    description      TEXT,
-    monthly_fee      NUMERIC(10,2),
-    admission_fee    NUMERIC(10,2),
-    duration_months  INTEGER,
-    status           VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+CREATE TABLE COURSES (
+    ID              UUID           PRIMARY KEY,
+    COURSE_CODE     VARCHAR(50)    NOT NULL UNIQUE,
+    COURSE_NAME     VARCHAR(255)   NOT NULL,
+    COURSE_TYPE     VARCHAR(50),
+    DESCRIPTION     TEXT,
+    MONTHLY_FEE     NUMERIC(12,2)  CHECK (MONTHLY_FEE >= 0),
+    ADMISSION_FEE   NUMERIC(12,2)  CHECK (ADMISSION_FEE >= 0),
+    DURATION_MONTHS INT,
+    STATUS          VARCHAR(50)    NOT NULL
 );
 
-CREATE TABLE course_classes (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    course_id     UUID NOT NULL REFERENCES courses(id),
-    teacher_id    UUID,
-    class_name    VARCHAR(200) NOT NULL,
-    room_number   VARCHAR(50),
-    max_capacity  INTEGER,
-    status        VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+CREATE TABLE CLASSES (
+    ID          UUID         PRIMARY KEY,
+    COURSE_ID   UUID         NOT NULL REFERENCES COURSES(ID),
+    TEACHER_ID  UUID,
+    CLASS_NAME  VARCHAR(255) NOT NULL,
+    ROOM_NUMBER VARCHAR(50),
+    CAPACITY    INT          NOT NULL CHECK (CAPACITY > 0),
+    STATUS      VARCHAR(50)  NOT NULL
 );
+CREATE INDEX idx_classes_course_id  ON CLASSES(COURSE_ID);
+CREATE INDEX idx_classes_teacher_id ON CLASSES(TEACHER_ID);
 
-CREATE TABLE enrollments (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    student_id       UUID NOT NULL,
-    course_id        UUID NOT NULL,
-    class_id         UUID NOT NULL,
-    enrollment_date  DATE NOT NULL DEFAULT CURRENT_DATE,
-    status           VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    UNIQUE (student_id, course_id)
+CREATE TABLE ENROLLMENTS (
+    ID              UUID        PRIMARY KEY,
+    STUDENT_ID      UUID        NOT NULL,
+    COURSE_ID       UUID        NOT NULL REFERENCES COURSES(ID),
+    CLASS_ID        UUID        NOT NULL REFERENCES CLASSES(ID),
+    ENROLLMENT_DATE DATE        NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    CONSTRAINT uq_enrollment_student_course UNIQUE (STUDENT_ID, COURSE_ID)
 );
+CREATE INDEX idx_enrollments_student_id ON ENROLLMENTS(STUDENT_ID);
+CREATE INDEX idx_enrollments_course_id  ON ENROLLMENTS(COURSE_ID);
+CREATE INDEX idx_enrollments_class_id   ON ENROLLMENTS(CLASS_ID);
 ```
+
+`ddl-auto: validate` — the schema must match the JPA entities exactly.
 
 ---
 
 ## 6. REST API
 
-### 6.1 Course Endpoints
+All responses use the shared `ApiResponse<T>` envelope.
 
-Base path: `/courses`
+### 6.1 Courses — base `/courses`
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/courses` | Any | List all courses (optional `?type=PAINTING` filter) |
-| `GET` | `/courses/{id}` | Any | Get course by UUID |
-| `POST` | `/courses` | PRINCIPAL | Create course |
+| `GET` | `/courses` | Any authenticated | List courses; optional `?type=PAINTING` filter |
+| `GET` | `/courses/{id}` | Any authenticated | Get course by UUID (`404` if missing) |
+| `POST` | `/courses` | PRINCIPAL | Create course (`201`) |
 | `PUT` | `/courses/{id}` | PRINCIPAL | Update course |
-| `DELETE` | `/courses/{id}` | PRINCIPAL | Delete course |
+| `DELETE` | `/courses/{id}` | PRINCIPAL | Delete course (hard delete) |
 
 #### `POST /courses` — Request Body
 
 ```json
 {
-  "courseCode": "DRAW-101",
-  "courseName": "Basic Drawing",
-  "courseType": "DRAWING",
-  "description": "Fundamentals of pencil and charcoal drawing.",
-  "monthlyFee": 1500.00,
-  "admissionFee": 500.00,
+  "courseCode": "PAINT-101",
+  "courseName": "Foundations of Painting",
+  "courseType": "PAINTING",
+  "description": "Colour theory, brushwork and composition.",
+  "monthlyFee": 2500.00,
+  "admissionFee": 1000.00,
   "durationMonths": 12,
   "status": "ACTIVE"
 }
 ```
 
----
-
-### 6.2 Class Endpoints
-
-Base path: `/classes`
+### 6.2 Classes — base `/classes`
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/classes` | Any | List all classes |
-| `GET` | `/classes/{id}` | Any | Get class by UUID |
-| `POST` | `/classes` | PRINCIPAL | Create class |
+| `GET` | `/classes` | Any authenticated | List all classes |
+| `GET` | `/classes/{id}` | Any authenticated | Get class by UUID (`404` if missing) |
+| `POST` | `/classes` | PRINCIPAL | Create class (`201`) |
 | `PUT` | `/classes/{id}` | PRINCIPAL | Update class |
-| `DELETE` | `/classes/{id}` | PRINCIPAL | Delete class |
+| `DELETE` | `/classes/{id}` | PRINCIPAL | Delete class (hard delete) |
 
 #### `POST /classes` — Request Body
 
@@ -190,26 +190,21 @@ Base path: `/classes`
 {
   "courseId": "<UUID>",
   "teacherId": "<UUID>",
-  "className": "Drawing Batch A - Morning",
-  "roomNumber": "R01",
-  "maxCapacity": 20,
+  "className": "Painting A - Morning",
+  "roomNumber": "R1",
+  "capacity": 20,
   "status": "ACTIVE"
 }
 ```
 
-**Business rule:** `DELETE /classes/{id}` is rejected if active enrollments exist in that class.
-
----
-
-### 6.3 Enrollment Endpoints
-
-Base path: `/enrollments`
+### 6.3 Enrollments — base `/enrollments`
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/enrollments` | PRINCIPAL | Enroll student in a class |
-| `GET` | `/enrollments/student/{studentId}` | PRINCIPAL, TEACHER, STUDENT | Get enrollments for a student |
-| `DELETE` | `/enrollments/{id}` | PRINCIPAL | Cancel enrollment |
+| `POST` | `/enrollments` | PRINCIPAL | Enroll a student (`201`) |
+| `GET` | `/enrollments/student/{studentId}` | Any authenticated | Enrollments for a student |
+| `GET` | `/enrollments/course/{courseId}` | Any authenticated | Enrollments for a course |
+| `DELETE` | `/enrollments/{id}` | PRINCIPAL | Cancel an enrollment |
 
 #### `POST /enrollments` — Request Body
 
@@ -218,18 +213,14 @@ Base path: `/enrollments`
   "studentId": "<UUID>",
   "courseId": "<UUID>",
   "classId": "<UUID>",
-  "enrollmentDate": "2024-09-01",
+  "enrollmentDate": "2025-06-01",
   "status": "ACTIVE"
 }
 ```
 
 **Business rules:**
-- Reject if an active enrollment already exists for `(studentId, courseId)` → `409 Conflict`.
-- Check class capacity: count active enrollments for `classId` < `maxCapacity`.
-
-#### `DELETE /enrollments/{id}` — Cancel
-
-Sets `status = CANCELLED`. Does not delete the row (preserves history).
+- `409 Conflict` if an active enrollment already exists for `(studentId, courseId)`.
+- `404` if `classId` does not exist; `400` if the class is at capacity (`countByClassId >= capacity`).
 
 ---
 
@@ -239,45 +230,61 @@ Sets `status = CANCELLED`. Does not delete the row (preserves history).
 
 | Method | Logic |
 |--------|-------|
-| `getAllCourses(type)` | If `type` provided: filter by `courseType`; else return all |
-| `getCourseById(id)` | Find or throw `404` |
-| `createCourse(request)` | Check `existsByCourseCode` → throw `409`; save |
-| `updateCourse(id, request)` | Load; check courseCode conflict (exclude self); save |
-| `deleteCourse(id)` | Load; delete |
+| `getAllCourses()` / `getCoursesByType(type)` | All courses, or filtered by `courseType` |
+| `getCourseById(id)` | Load or `404` |
+| `createCourse(request)` | `409` if `courseCode` exists; save |
+| `updateCourse(id, request)` | Load; `409` if the new `courseCode` collides with another course; save |
+| `deleteCourse(id)` | Load; hard delete |
 
 ### `ClassService`
 
 | Method | Logic |
 |--------|-------|
-| `createClass(request)` | Verify `courseId` exists; save |
-| `deleteClass(id)` | Count active enrollments; throw `400` if > 0 |
+| `getAllClasses()` / `getClassById(id)` | Read; `404` on missing id |
+| `createClass(request)` | `400` if `capacity` is null or ≤ 0; save |
+| `updateClass(id, request)` | `400` if `capacity` null/≤0; `400` if new `capacity` < current active enrollment count; save |
+| `deleteClass(id)` | Load; hard delete |
+
+> **Note (documented as-implemented):** `deleteClass` performs an unconditional hard delete — there is **no** active-enrollment guard, despite what a class-with-enrollments scenario might suggest. Since `ENROLLMENTS.CLASS_ID` has an FK to `CLASSES`, deleting a class that still has enrollment rows will fail at the database level rather than with a friendly `400`.
 
 ### `EnrollmentService`
 
 | Method | Logic |
 |--------|-------|
-| `enroll(request)` | Check duplicate `(studentId, courseId)` active → `409`; check capacity; save; publish `EnrollmentCreatedEvent` |
-| `cancelEnrollment(id)` | Load; set `status = CANCELLED`; save; publish `EnrollmentCancelledEvent` |
-| `getByStudentId(studentId)` | Return all enrollments for student |
+| `enrollStudent(request)` | `409` on duplicate active `(studentId, courseId)`; `404` if class missing; `400` if at capacity; save `ACTIVE` (default `enrollmentDate` = today); publish `EnrollmentCreatedEvent` |
+| `cancelEnrollment(id)` | Load (`404` if missing); **hard delete** the row; publish `EnrollmentCancelledEvent` |
+| `getEnrollmentsByStudentId(studentId)` | All enrollments for a student |
+| `getEnrollmentsByCourseId(courseId)` | All enrollments for a course |
+
+> **Note (documented as-implemented):** cancellation is a **hard delete**, not a soft `status = CANCELLED` update — the row is removed and history is not preserved. `CANCELLED` exists as a valid status value but is not written by this flow.
 
 ---
 
 ## 8. Kafka Events Published
 
+Topic names use **hyphens** (see `common-library/events/KafkaTopics.java`).
+
 | Topic | Event | When |
 |-------|-------|------|
-| `enrollment.created` | `EnrollmentCreatedEvent` | After enrollment persist |
-| `enrollment.cancelled` | `EnrollmentCancelledEvent` | After status set to CANCELLED |
+| `enrollment-created` | `EnrollmentCreatedEvent` (`enrollmentId`, `studentId`, `courseId`, `classId`, `occurredAt`) | After enrollment persist |
+| `enrollment-cancelled` | `EnrollmentCancelledEvent` (`enrollmentId`, `studentId`, `courseId`, `occurredAt`) | After the enrollment row is deleted |
 
 **Consumers:**
-- `payment-service` — maintains `EnrollmentCache` for fee generation
-- `reporting-service` — increments/decrements `StudentReport.totalEnrollments`
+- `payment-service` — maintains its `ENROLLMENT_CACHE` for fee generation.
+- `reporting-service` — increments / decrements `StudentReport.totalEnrollments`.
 
 ---
 
-## 9. Migration History
+## 9. Security Configuration
+
+CSRF disabled; sessions `STATELESS`; method security enabled; `JwtAuthenticationFilter` (common-library) before `UsernamePasswordAuthenticationFilter`. Public: `/actuator/**`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`. All `POST`/`PUT`/`DELETE` on `/courses`, `/classes`, `/enrollments` require `PRINCIPAL`; all `GET`s require any authenticated user.
+
+---
+
+## 10. Migration History
 
 | Version | Description |
 |---------|-------------|
-| V1 | Initial schema with BIGSERIAL IDs |
-| V2 | Migrated to UUID primary keys; maintained unique and FK constraints |
+| V1 | Initial schema (BIGSERIAL IDs) |
+| V2 | Drop/recreate with UUID primary keys; FK + unique constraints + indexes |
+| V3 | Seed sample courses, classes, and enrollments with fixed UUIDs shared across services (idempotent `ON CONFLICT DO NOTHING`); local/testing only |

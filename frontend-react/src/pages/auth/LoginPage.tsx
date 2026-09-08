@@ -10,6 +10,7 @@ import {
   CircularProgress,
   InputAdornment,
   IconButton,
+  Link,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import LockIcon from '@mui/icons-material/Lock';
@@ -20,8 +21,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
-import { AppDispatch, RootState } from '../../store/store';
+import { useNavigate } from 'react-router-dom';import { AppDispatch, RootState } from '../../store/store';
 import { loginThunk, clearError } from '../../store/slices/authSlice';
 import { LoginRequest } from '../../types';
 
@@ -51,6 +51,8 @@ const LoginPage: React.FC = () => {
         navigate('/principal/dashboard', { replace: true });
       } else if (roles.includes('ROLE_TEACHER')) {
         navigate('/teacher/dashboard', { replace: true });
+      } else if (roles.includes('ROLE_PARENT')) {
+        navigate('/parent/dashboard', { replace: true });
       } else {
         navigate('/student/dashboard', { replace: true });
       }
@@ -174,6 +176,17 @@ const LoginPage: React.FC = () => {
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
             </Button>
+          </Box>
+
+          <Box textAlign="center" mb={1}>
+            <Link
+              component="button"
+              variant="body2"
+              onClick={() => navigate('/forgot-password')}
+              underline="hover"
+            >
+              Forgot your password?
+            </Link>
           </Box>
 
           <Typography variant="caption" color="text.secondary" align="center" display="block">

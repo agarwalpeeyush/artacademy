@@ -33,9 +33,11 @@ com.artacademy.common
 │   ├── KafkaTopics.java
 │   ├── StudentCreatedEvent.java
 │   ├── TeacherCreatedEvent.java
+│   ├── ParentCreatedEvent.java
 │   ├── EnrollmentCreatedEvent.java
 │   ├── EnrollmentCancelledEvent.java
 │   ├── AttendanceRecordedEvent.java
+│   ├── AttendanceUpdatedEvent.java
 │   ├── ScheduleGeneratedEvent.java
 │   ├── FeeGeneratedEvent.java
 │   ├── FeeStatusUpdatedEvent.java
@@ -88,11 +90,13 @@ A checked runtime exception that carries an `HttpStatus` so the global handler c
 
 `@RestControllerAdvice` registered in all services via Spring Boot auto-configuration.
 
-| Exception caught | HTTP status | Response body |
-|------------------|-------------|---------------|
-| `ApiException` | status from exception | `ApiResponse.error(e.getMessage())` |
-| `MethodArgumentNotValidException` | 400 | `ApiResponse.error(field errors joined)` |
-| `Exception` (catch-all) | 500 | `ApiResponse.error("Internal server error")` |
+> **Note (documented as-implemented):** the error body is a **plain JSON `Map`**, **not** the `ApiResponse<T>` envelope. Each error response is `{ "timestamp": <ISO instant>, "status": <int>, "message": <string> }`. So a failed request and a successful `ApiResponse`-wrapped request do **not** share the same shape.
+
+| Exception caught | HTTP status | Response body (`message` field) |
+|------------------|-------------|---------------------------------|
+| `ApiException` | status from exception | `e.getMessage()` |
+| `MethodArgumentNotValidException` | 400 | first field error, `"field: message"` (or `"Validation failed"`) |
+| `Exception` (catch-all) | 500 | `"Internal server error"` (full exception logged) |
 
 ---
 
@@ -110,7 +114,7 @@ Encapsulates all JWT operations using the JJWT library (v0.12.6) with HS256 sign
 | `extractRoles(token)` | Reads `roles` claim as `List<String>` |
 | `extractClaim(token, resolver)` | Generic claim extractor |
 
-JWT secret is injected via `${jwt.secret}` from the Config Server. Token expiry is configured per-service.
+JWT secret is injected via `${app.jwt.secret}` from the Config Server. Token expiry is configured per-service.
 
 ### 6.2 `JwtAuthenticationFilter`
 
@@ -134,19 +138,22 @@ Spring Boot auto-configuration class (`META-INF/spring/...factories`) that regis
 
 ### 7.1 Topic Constants — `KafkaTopics`
 
+Topic names use **hyphen** separators (they are Kafka topic strings, not Java package names):
+
 ```
-STUDENT_CREATED        = "student.created"
-TEACHER_CREATED        = "teacher.created"
-ENROLLMENT_CREATED     = "enrollment.created"
-ENROLLMENT_CANCELLED   = "enrollment.cancelled"
-ATTENDANCE_RECORDED    = "attendance.recorded"
-ATTENDANCE_UPDATED     = "attendance.updated"
-FEE_GENERATED          = "fee.generated"
-FEE_STATUS_UPDATED     = "fee.status.updated"
-PAYMENT_RECEIVED       = "payment.received"
-SCHEDULE_GENERATED     = "schedule.generated"
-SCHEDULE_UPDATED       = "schedule.updated"
-NOTIFICATION_REQUEST   = "notification.request"
+STUDENT_CREATED        = "student-created"
+TEACHER_CREATED        = "teacher-created"
+PARENT_CREATED         = "parent-created"
+ENROLLMENT_CREATED     = "enrollment-created"
+ENROLLMENT_CANCELLED   = "enrollment-cancelled"
+ATTENDANCE_RECORDED    = "attendance-recorded"
+ATTENDANCE_UPDATED     = "attendance-updated"
+FEE_GENERATED          = "fee-generated"
+PAYMENT_RECEIVED       = "payment-received"
+FEE_STATUS_UPDATED     = "fee-status-updated"
+SCHEDULE_GENERATED     = "schedule-generated"
+SCHEDULE_UPDATED       = "schedule-updated"
+NOTIFICATION_REQUEST   = "notification-request"
 ```
 
 ### 7.2 Event Schemas
@@ -154,23 +161,41 @@ NOTIFICATION_REQUEST   = "notification.request"
 All events use Lombok `@Builder` and carry an `occurredAt` (`Instant`) timestamp.
 
 #### `StudentCreatedEvent`
-| Field | Type |
-|-------|------|
-| studentId | UUID |
-| firstName | String |
-| lastName | String |
-| email | String |
-| occurredAt | Instant |
+| Field | Type | Notes |
+|-------|------|-------|
+| studentId | UUID | reused as the auth user's PK |
+| username | String | becomes the auth login id |
+| email | String | |
+| temporaryPassword | String | initial auth password |
+| firstName | String | |
+| lastName | String | |
+| roles | List&lt;String&gt; | auth roles; defaults to `["STUDENT"]` |
+| occurredAt | Instant | |
 
 #### `TeacherCreatedEvent`
-| Field | Type |
-|-------|------|
-| teacherId | UUID |
-| employeeCode | String |
-| firstName | String |
-| lastName | String |
-| email | String |
-| occurredAt | Instant |
+| Field | Type | Notes |
+|-------|------|-------|
+| teacherId | UUID | reused as the auth user's PK |
+| username | String | becomes the auth login id |
+| email | String | |
+| temporaryPassword | String | initial auth password |
+| employeeCode | String | |
+| firstName | String | |
+| lastName | String | |
+| roles | List&lt;String&gt; | auth roles; defaults to `["TEACHER"]` |
+| occurredAt | Instant | |
+
+#### `ParentCreatedEvent`
+| Field | Type | Notes |
+|-------|------|-------|
+| parentId | UUID | reused as the auth user's PK |
+| username | String | becomes the auth login id |
+| email | String | |
+| temporaryPassword | String | initial auth password |
+| firstName | String | |
+| lastName | String | |
+| roles | List&lt;String&gt; | auth roles; defaults to `["PARENT"]` |
+| occurredAt | Instant | |
 
 #### `EnrollmentCreatedEvent`
 | Field | Type |
@@ -195,7 +220,21 @@ All events use Lombok `@Builder` and carry an `occurredAt` (`Instant`) timestamp
 | attendanceType | String | `"STUDENT"` or `"TEACHER"` |
 | subjectId | UUID | studentId or teacherId |
 | status | String | `AttendanceStatus` value |
-| attendanceDate | LocalDate | |
+| attendanceDate | String | ISO date |
+| courseId | UUID | nullable |
+| courseName | String | nullable |
+| occurredAt | Instant | |
+
+#### `AttendanceUpdatedEvent`
+| Field | Type | Notes |
+|-------|------|-------|
+| attendanceType | String | `"STUDENT"` or `"TEACHER"` |
+| subjectId | UUID | studentId or teacherId |
+| oldStatus | String | previous status |
+| newStatus | String | new status |
+| attendanceDate | String | ISO date |
+| courseId | UUID | nullable |
+| courseName | String | nullable |
 | occurredAt | Instant | |
 
 #### `ScheduleGeneratedEvent`
@@ -252,27 +291,32 @@ All events use Lombok `@Builder` and carry an `occurredAt` (`Instant`) timestamp
 ## 8. Event Flow Diagram
 
 ```
-user-service          ──► student.created       ──► reporting-service
-                      ──► teacher.created        ──► reporting-service
-
-course-enrollment     ──► enrollment.created     ──► payment-service (cache)
+user-service          ──► student-created       ──► auth-service (creates matching user + role)
                       │                          ──► reporting-service
-                      ──► enrollment.cancelled   ──► payment-service (cache)
+                      ──► teacher-created        ──► auth-service
+                      │                          ──► reporting-service
+                      ──► parent-created         ──► auth-service
                                                  ──► reporting-service
 
-attendance-service    ──► attendance.recorded    ──► reporting-service
-                                                 ──► notification-service
+course-enrollment     ──► enrollment-created     ──► payment-service (cache)
+                      │                          ──► reporting-service
+                      ──► enrollment-cancelled   ──► payment-service (cache)
+                                                 ──► reporting-service
 
-scheduling-service    ──► schedule.generated     ──► (future consumers)
-                      ──► schedule.updated       ──► (future consumers)
+attendance-service    ──► attendance-recorded    ──► reporting-service
+                      │                          ──► notification-service (absent alert)
+                      ──► attendance-updated     ──► reporting-service
 
-payment-service       ──► fee.generated          ──► reporting-service
-                      │                          ──► notification-service
-                      ──► payment.received       ──► reporting-service
-                      │                          ──► notification-service
-                      ──► fee.status.updated     ──► reporting-service
+scheduling-service    ──► schedule-generated     ──► (future consumers)
+                      ──► schedule-updated       ──► (future consumers)
 
-Any service           ──► notification.request   ──► notification-service
+payment-service       ──► fee-generated          ──► reporting-service
+                      │                          ──► notification-service (fee reminder)
+                      ──► payment-received        ──► reporting-service
+                      │                          ──► notification-service (receipt)
+                      ──► fee-status-updated      ──► (no consumer wired up)
+
+Any service           ──► notification-request   ──► notification-service
 ```
 
 ---

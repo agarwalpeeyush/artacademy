@@ -2,7 +2,9 @@
 
 ## 1. Overview
 
-The `auth-service` is responsible for user authentication, JWT access token generation, refresh token lifecycle management, and password management. It owns the `users`, `roles`, and `refresh_tokens` tables and is the only service that touches these credentials.
+The `auth-service` owns authentication, JWT access-token issuance, refresh-token lifecycle, password management (change + forgot/reset), account lockout, an audit log, and user/role administration. It owns the `USERS`, `ROLES`, `USER_ROLES`, `REFRESH_TOKENS`, `PASSWORD_RESET_TOKENS`, and `AUDIT_LOGS` tables and is the only service that touches these credentials.
+
+Auth users are **not** created via HTTP. When user-service publishes a `*-created` Kafka event, this service consumes it and creates a matching auth user with the **same UUID** and the roles carried by the event (see §9).
 
 ---
 
@@ -23,122 +25,182 @@ The `auth-service` is responsible for user authentication, JWT access token gene
 com.artacademy.auth
 ├── AuthServiceApplication.java
 ├── config
-│   └── SecurityConfig.java
+│   ├── SecurityConfig.java
+│   ├── KafkaConsumerConfig.java
+│   └── KafkaProducerConfig.java
+├── consumer
+│   └── UserCreatedEventConsumer.java
 ├── controller
 │   └── AuthController.java
 ├── domain
 │   ├── User.java
 │   ├── Role.java
-│   └── RefreshToken.java
+│   ├── RefreshToken.java
+│   ├── PasswordResetToken.java
+│   └── AuditLog.java
 ├── dto
-│   ├── LoginRequest.java
-│   ├── LoginResponse.java
+│   ├── LoginRequest.java / LoginResponse.java
 │   ├── RefreshTokenRequest.java
-│   └── ChangePasswordRequest.java
+│   ├── ChangePasswordRequest.java
+│   ├── ForgotPasswordRequest.java / ResetPasswordRequest.java
+│   ├── UpdateUserStatusRequest.java / UpdateUserRolesRequest.java
+│   ├── UserSummaryResponse.java
+│   └── AuditLogResponse.java
 ├── repository
 │   ├── UserRepository.java
 │   ├── RoleRepository.java
-│   └── RefreshTokenRepository.java
+│   ├── RefreshTokenRepository.java
+│   ├── PasswordResetTokenRepository.java
+│   └── AuditLogRepository.java
 └── service
     ├── AuthService.java
-    └── RefreshTokenService.java
+    ├── RefreshTokenService.java
+    ├── PasswordResetService.java
+    ├── LoginAttemptService.java
+    ├── AuditLogService.java
+    └── UserManagementService.java
 ```
 
 ---
 
 ## 4. Domain Model
 
-### 4.1 `User`
+### 4.1 `User` (table `USERS`)
 
 ```
-@Entity("users")
-UUID         id
-String       username        (unique, not null)
-String       password        (BCrypt hash)
-String       email           (unique)
-String       status          (ACTIVE | INACTIVE)
-Set<Role>    roles           (ManyToMany EAGER, join table: user_roles)
-Instant      createdAt
-Instant      updatedAt
+UUID       id            (PK — NOT auto-generated; set from the *-created event's UUID)
+String     username      (unique, not null, max 100)
+String     password      (BCrypt hash, not null)
+String     email         (unique, not null, max 200)
+String     status        (max 20, default 'ACTIVE')
+Instant    createdAt
+Instant    updatedAt
+Set<Role>  roles         (ManyToMany EAGER, join table USER_ROLES)
 ```
 
-### 4.2 `Role`
+### 4.2 `Role` (table `ROLES`)
 
 ```
-@Entity("roles")
 UUID    id
-String  name   (unique, e.g. PRINCIPAL, TEACHER, STUDENT)
+String  name   (unique — ADMIN, PRINCIPAL, TEACHER, STUDENT, PARENT)
 ```
 
-**Seed data (V4 migration):**
+**Seed data (V4 migration):** `ADMIN`, `PRINCIPAL`, `TEACHER`, `STUDENT`, `PARENT`.
 
-| Name |
-|------|
-| `PRINCIPAL` |
-| `TEACHER` |
-| `STUDENT` |
-
-### 4.3 `RefreshToken`
+### 4.3 `RefreshToken` (table `REFRESH_TOKENS`)
 
 ```
-@Entity("refresh_tokens")
-UUID        id
-User        user       (ManyToOne LAZY)
-String      token      (unique UUID string)
-Instant     expiryDate
+UUID     id
+User     user        (ManyToOne LAZY)
+String   token       (unique UUID string)
+Instant  expiryDate
+```
+
+One token per user — creating a new one deletes existing tokens for that user.
+
+### 4.4 `PasswordResetToken` (table `PASSWORD_RESET_TOKENS`)
+
+```
+UUID     id
+User     user        (ManyToOne LAZY, not null)
+String   token       (unique, max 200)
+Instant  expiryDate  (1 hour after issue)
+boolean  used        (default false)
+```
+
+### 4.5 `AuditLog` (table `AUDIT_LOGS`)
+
+```
+UUID     id
+String   username    (not null, max 100)
+String   action      (not null, max 100 — LOGIN, LOGIN_FAILED, LOGOUT, CHANGE_PASSWORD, RESET_PASSWORD, UPDATE_USER_STATUS, UPDATE_USER_ROLES, …)
+String   detail      (TEXT, nullable)
+String   ipAddress   (max 50; resolved from X-Forwarded-For or remote addr)
+boolean  success
+Instant  occurredAt  (default now())
 ```
 
 ---
 
 ## 5. Database Schema
 
-Managed by Flyway. Final state after V4 migration:
+Managed by Flyway. Final state after V6 migration:
 
 ```sql
-CREATE TABLE roles (
+CREATE TABLE ROLES (
     id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(50) UNIQUE NOT NULL
 );
 
-CREATE TABLE users (
+CREATE TABLE USERS (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username   VARCHAR(100) UNIQUE NOT NULL,
     password   VARCHAR(255) NOT NULL,
-    email      VARCHAR(255) UNIQUE,
+    email      VARCHAR(200) UNIQUE NOT NULL,
     status     VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-CREATE TABLE user_roles (
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
+CREATE TABLE USER_ROLES (
+    user_id UUID REFERENCES USERS(id) ON DELETE CASCADE,
+    role_id UUID REFERENCES ROLES(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, role_id)
 );
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE REFRESH_TOKENS (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id     UUID NOT NULL REFERENCES USERS(id) ON DELETE CASCADE,
     token       VARCHAR(255) UNIQUE NOT NULL,
     expiry_date TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE PASSWORD_RESET_TOKENS (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES USERS(id) ON DELETE CASCADE,
+    token       VARCHAR(200) UNIQUE NOT NULL,
+    expiry_date TIMESTAMPTZ NOT NULL,
+    used        BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX idx_prt_token ON PASSWORD_RESET_TOKENS(TOKEN);
+
+CREATE TABLE AUDIT_LOGS (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username    VARCHAR(100) NOT NULL,
+    action      VARCHAR(100) NOT NULL,
+    detail      TEXT,
+    ip_address  VARCHAR(50),
+    success     BOOLEAN NOT NULL DEFAULT TRUE,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_audit_username    ON AUDIT_LOGS(USERNAME);
+CREATE INDEX idx_audit_occurred_at ON AUDIT_LOGS(OCCURRED_AT DESC);
 ```
 
 ---
 
 ## 6. REST API
 
-Base path: `/auth` (public — no JWT filter at gateway)
+Base path: `/auth`. All responses use the shared `ApiResponse<T>` envelope.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/auth/login` | Public | Authenticate; returns tokens + profile |
+| `POST` | `/auth/refresh` | Public | Exchange a refresh token for a new access + refresh token |
+| `POST` | `/auth/logout` | PRINCIPAL (any authenticated) | Delete the caller's refresh tokens |
+| `POST` | `/auth/change-password` | Any authenticated | Change own password |
+| `POST` | `/auth/forgot-password` | Public | Request a reset token (emailed via Kafka → notification-service) |
+| `POST` | `/auth/reset-password` | Public | Reset password using a token |
+| `GET` | `/auth/me` | Any authenticated | Own profile (id, username, email, roles, status) |
+| `GET` | `/auth/audit-logs` | PRINCIPAL | Paginated audit logs; optional `username` filter |
+| `GET` | `/auth/users` | PRINCIPAL | Paginated user list |
+| `PATCH` | `/auth/users/{id}/status` | PRINCIPAL | Activate / deactivate an account |
+| `GET` | `/auth/users/{id}/roles` | PRINCIPAL | List a user's roles |
+| `PUT` | `/auth/users/{id}/roles` | PRINCIPAL | Replace a user's roles |
 
 ### `POST /auth/login`
 
-**Request:**
-```json
-{
-  "username": "principal01",
-  "password": "secret123"
-}
-```
+**Request:** `{ "username": "principal", "password": "Admin@1234" }`
 
 **Response `200 OK`:**
 ```json
@@ -149,66 +211,26 @@ Base path: `/auth` (public — no JWT filter at gateway)
     "refreshToken": "<UUID>",
     "tokenType": "Bearer",
     "id": "<UUID>",
-    "username": "principal01",
-    "email": "p@example.com",
+    "username": "principal",
+    "email": "principal@artacademy.test",
     "roles": ["PRINCIPAL"]
   }
 }
 ```
 
-**Errors:**
-- `400` — validation failure
-- `401` — bad credentials
-- `403` — account inactive
-
----
+**Errors:** `400` invalid credentials · `403` account not active · `403` account temporarily locked (with seconds remaining).
 
 ### `POST /auth/refresh`
 
-**Request:**
-```json
-{ "refreshToken": "<UUID>" }
-```
-
-**Response `200 OK`:** Same shape as login response with new `accessToken` and new `refreshToken`.
-
-**Errors:**
-- `401` — token not found or expired (old token is deleted on expiry)
-
----
-
-### `POST /auth/logout`
-
-Requires valid `Authorization: Bearer <token>`.
-
-Deletes all refresh tokens for the authenticated user.
-
-**Response `200 OK`:** `{ "success": true, "message": "Logged out successfully" }`
-
----
+Request `{ "refreshToken": "<UUID>" }` → same shape as login with a new access + refresh token. `400` if the token is unknown/expired.
 
 ### `POST /auth/change-password`
 
-Requires valid `Authorization: Bearer <token>`.
+Request `{ "currentPassword": "...", "newPassword": "..." }`. `400` if the current password is wrong.
 
-**Request:**
-```json
-{
-  "currentPassword": "old",
-  "newPassword": "newPass123"
-}
-```
+### `POST /auth/forgot-password` / `POST /auth/reset-password`
 
-**Validation:** `newPassword` min length 8.
-
-**Errors:**
-- `400` — current password incorrect
-
----
-
-### `GET /auth/me`
-
-Returns the authenticated user's profile (id, username, email, roles).
+`forgot-password` `{ "email": "..." }` always returns success (no email enumeration); if the email is known, a reset token is generated (1-hour expiry) and a `notification-request` Kafka event is published. `reset-password` `{ "token": "...", "newPassword": "..." }` validates the token (must exist, be unused, and not expired), sets the new password, and marks the token used.
 
 ---
 
@@ -216,50 +238,45 @@ Returns the authenticated user's profile (id, username, email, roles).
 
 ### `AuthService`
 
-#### `login(LoginRequest)`
-1. Load `User` by username; throw `401` if not found.
-2. Check `user.status == ACTIVE`; throw `403` if inactive.
-3. `BCryptPasswordEncoder.matches(rawPassword, user.password)` — throw `401` on mismatch.
-4. Call `JwtUtil.generateToken(username, roles)`.
-5. Call `RefreshTokenService.createRefreshToken(user)`.
-6. Return `LoginResponse`.
-
-#### `refresh(RefreshTokenRequest)`
-1. Call `RefreshTokenService.findByToken(token)`.
-2. Call `RefreshTokenService.verifyExpiry(token)` — deletes expired token and throws `401`.
-3. Generate new access token and new refresh token.
-4. Return `LoginResponse`.
-
-#### `logout(username)`
-1. Load user; call `RefreshTokenService.deleteByUser(user)`.
-
-#### `changePassword(username, ChangePasswordRequest)`
-1. Load user.
-2. Verify `currentPassword` matches stored hash; throw `400` on mismatch.
-3. Encode `newPassword` and persist.
-
-#### `getMe(username)`
-Returns `LoginResponse` with user profile only (no new tokens).
+| Method | Logic |
+|--------|-------|
+| `login(request, ip)` | Reject if `LoginAttemptService.isBlocked`; load user by username; on missing user or password mismatch record failure + audit `LOGIN_FAILED` and throw `400`; if status ≠ `ACTIVE` audit + throw `403`; else record success, issue JWT + refresh token, audit `LOGIN` |
+| `logout(username, ip)` | Delete the user's refresh tokens; audit `LOGOUT` |
+| `refresh(request)` | Look up token; `verifyExpiry`; issue new access + refresh token |
+| `changePassword(username, request, ip)` | Verify current password (`400` on mismatch); encode + save new; audit |
+| `forgotPassword(request)` | Delegate to `PasswordResetService.initiateReset(email)` |
+| `resetPassword(request, ip)` | Resolve username (best-effort, for audit), then `PasswordResetService.resetPassword`; audit `RESET_PASSWORD` |
+| `getMe(username)` | Load user or `404` |
 
 ### `RefreshTokenService`
 
-#### `createRefreshToken(User)`
-1. Delete all existing tokens for the user (one-token-per-user policy).
-2. Create new `RefreshToken` with `UUID.randomUUID().toString()`.
-3. Set expiry to `now() + refreshTokenDurationMs` (from config).
-4. Save and return.
+`createRefreshToken(user)` deletes existing tokens for the user, creates a new random-UUID token with expiry `now + refreshTokenDurationMs` (from config). `verifyExpiry` deletes an expired token and throws `400`. `findByToken` throws `400` if not found.
 
-#### `verifyExpiry(RefreshToken)`
-- If `token.expiryDate.isBefore(Instant.now())`: delete token, throw `ApiException.badRequest("Refresh token expired")`.
+### `PasswordResetService`
+
+Generates a random-UUID token (1-hour expiry), deletes any prior token for the user, persists, and publishes a `NotificationRequestEvent` on `notification-request` (`EMAIL` channel) containing the raw token. Reset validates unused + unexpired, encodes the new password, and marks the token used.
+
+### `LoginAttemptService`
+
+In-memory, per-username failure counter. After **5** consecutive failures the account is locked for **15 minutes**. A successful login clears the counter. Not persisted — resets on service restart.
+
+### `UserManagementService`
+
+`findAll(Pageable)` → `UserSummaryResponse` page; `updateStatus(id, status, actor, ip)`, `getUserRoles(id)`, `updateRoles(id, roleNames, actor, ip)` — role changes replace the full set (roles resolved by name, `400` if unknown). All mutations write an audit log.
+
+### `AuditLogService`
+
+`log(username, action, detail, ip, success)` persists an `AuditLog`; `findAll(Pageable)` / `findByUsername(username, Pageable)` back the audit-log endpoint (default sort `occurredAt DESC`).
 
 ---
 
 ## 8. Security Configuration
 
-```java
-// Permits without JWT
+```
+// Permitted without JWT
 /auth/login
 /auth/refresh
+/auth/forgot-password
 /auth/reset-password
 /swagger-ui/**
 /v3/api-docs/**
@@ -268,16 +285,37 @@ Returns `LoginResponse` with user profile only (no new tokens).
 // All other paths require authentication
 ```
 
-CSRF is disabled. Session management is `STATELESS`. `JwtAuthenticationFilter` is added before `UsernamePasswordAuthenticationFilter`.
+CSRF disabled; session management `STATELESS`; method security enabled (`@PreAuthorize` on admin endpoints). `JwtAuthenticationFilter` (from common-library) runs before `UsernamePasswordAuthenticationFilter`.
 
 ---
 
-## 9. Dependencies
+## 9. Kafka
+
+### 9.1 Consumed — `UserCreatedEventConsumer` (group `auth-service-group`)
+
+| Topic | Action |
+|-------|--------|
+| `student-created` | Create auth `User` with `id = studentId`, username/email/encoded temporaryPassword, roles from event (default `["STUDENT"]`); skip if username exists |
+| `teacher-created` | Same, `id = teacherId`, default roles `["TEACHER"]` |
+| `parent-created` | Same, `id = parentId`, default roles `["PARENT"]` |
+
+Roles are resolved by name against `ROLES`. This is what keeps the platform-wide UUID identical across databases.
+
+### 9.2 Produced
+
+| Topic | Event | When |
+|-------|-------|------|
+| `notification-request` | `NotificationRequestEvent` | Password-reset token issued (`forgot-password`) |
+
+---
+
+## 10. Dependencies
 
 In addition to common-library:
 
 ```xml
 spring-boot-starter-data-jpa
+spring-kafka
 spring-cloud-starter-netflix-eureka-client
 spring-cloud-starter-config
 postgresql (runtime)
@@ -288,11 +326,15 @@ springdoc-openapi-starter-webmvc-ui (v2.6.0)
 
 ---
 
-## 10. Migration History
+## 11. Migration History
 
 | Version | Description |
 |---------|-------------|
 | V1 | Initial schema (BIGSERIAL IDs) |
 | V2 | Seed PRINCIPAL, TEACHER, STUDENT roles |
 | V3 | Drop and recreate all tables with UUID primary keys |
-| V4 | Re-seed roles using `gen_random_uuid()` |
+| V4 | Re-seed roles (`ADMIN`, `PRINCIPAL`, `TEACHER`, `STUDENT`, `PARENT`) using `gen_random_uuid()` |
+| V5 | Add `PASSWORD_RESET_TOKENS` and `AUDIT_LOGS` (+ indexes) |
+| V6 | Seed sample users (principal, 2 teachers, 3 students, 1 parent) with fixed UUIDs matching user-service; shared password `Admin@1234` |
+
+> **Security note:** the V6 seed accounts and their shared password are for **local/testing only** and must be removed or rotated before any production deployment.

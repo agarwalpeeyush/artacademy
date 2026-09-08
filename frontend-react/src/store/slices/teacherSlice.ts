@@ -28,6 +28,18 @@ export const fetchTeachers = createAsyncThunk<Teacher[]>(
   }
 );
 
+export const fetchTeacherById = createAsyncThunk<Teacher, string>(
+  'teachers/fetchById',
+  async (id, { rejectWithValue }) => {
+    try {
+      return await teacherService.getById(id);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(err.response?.data?.message || 'Failed to fetch teacher');
+    }
+  }
+);
+
 export const createTeacher = createAsyncThunk<Teacher, Omit<Teacher, 'id'>>(
   'teachers/create',
   async (data, { rejectWithValue }) => {
@@ -81,6 +93,9 @@ const teacherSlice = createSlice({
       .addCase(fetchTeachers.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchTeachers.fulfilled, (state, action) => { state.loading = false; state.list = action.payload; })
       .addCase(fetchTeachers.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
+      .addCase(fetchTeacherById.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchTeacherById.fulfilled, (state, action) => { state.loading = false; state.selected = action.payload; })
+      .addCase(fetchTeacherById.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
       .addCase(createTeacher.fulfilled, (state, action) => { state.list.push(action.payload); })
       .addCase(updateTeacher.fulfilled, (state, action) => {
         const idx = state.list.findIndex(t => t.id === action.payload.id);

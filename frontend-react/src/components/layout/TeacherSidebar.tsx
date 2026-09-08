@@ -11,18 +11,24 @@ import {
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import EventNoteIcon from '@mui/icons-material/EventNote';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import EditNoteIcon from '@mui/icons-material/EditNote';
 import PeopleIcon from '@mui/icons-material/People';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PaletteIcon from '@mui/icons-material/Palette';
 
 const navItems = [
   { label: 'Dashboard', icon: <DashboardIcon />, path: '/teacher/dashboard' },
   { label: 'Mark Attendance', icon: <EventNoteIcon />, path: '/teacher/attendance' },
+  { label: 'My Attendance', icon: <EventAvailableIcon />, path: '/teacher/my-attendance' },
+  { label: 'Corrections', icon: <EditNoteIcon />, path: '/teacher/corrections' },
   { label: 'My Students', icon: <PeopleIcon />, path: '/teacher/students' },
   { label: 'Fee Status', icon: <AttachMoneyIcon />, path: '/teacher/fee-status' },
   { label: 'Schedule', icon: <ScheduleIcon />, path: '/teacher/schedule' },
+  { label: 'Availability Exceptions', icon: <EventBusyIcon />, path: '/teacher/availability-exceptions' },
 ];
 
 const TeacherSidebar: React.FC = () => {

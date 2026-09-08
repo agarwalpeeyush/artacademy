@@ -7,6 +7,7 @@ import {
   TableHead,
   TableRow,
   TablePagination,
+  TableSortLabel,
   Paper,
   Box,
   Typography,
@@ -21,7 +22,10 @@ export interface Column<T> {
   minWidth?: number;
   align?: 'left' | 'right' | 'center';
   format?: (value: unknown, row: T) => React.ReactNode;
+  sortable?: boolean;
 }
+
+type Order = 'asc' | 'desc';
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -47,6 +51,8 @@ function DataTable<T extends Record<string, unknown>>({
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(rowsPerPageOptions[0]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orderBy, setOrderBy] = useState<string | null>(null);
+  const [order, setOrder] = useState<Order>('asc');
 
   const filteredRows = searchable && searchQuery
     ? rows.filter(row =>
@@ -56,7 +62,31 @@ function DataTable<T extends Record<string, unknown>>({
       )
     : rows;
 
-  const paginatedRows = filteredRows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const compare = (a: unknown, b: unknown): number => {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  };
+
+  const sortedRows = orderBy
+    ? [...filteredRows].sort((a, b) => {
+        const result = compare(a[orderBy as keyof T], b[orderBy as keyof T]);
+        return order === 'asc' ? result : -result;
+      })
+    : filteredRows;
+
+  const handleSort = (columnId: string) => {
+    if (orderBy === columnId) {
+      setOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setOrderBy(columnId);
+      setOrder('asc');
+    }
+  };
+
+  const paginatedRows = sortedRows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   const getCellValue = (row: T, column: Column<T>): React.ReactNode => {
     const value = row[column.id as keyof T];
@@ -90,15 +120,30 @@ function DataTable<T extends Record<string, unknown>>({
         <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
-              {columns.map(col => (
-                <TableCell
-                  key={String(col.id)}
-                  align={col.align || 'left'}
-                  style={{ minWidth: col.minWidth }}
-                >
-                  {col.label}
-                </TableCell>
-              ))}
+              {columns.map(col => {
+                const colId = String(col.id);
+                const isSortable = col.sortable !== false;
+                return (
+                  <TableCell
+                    key={colId}
+                    align={col.align || 'left'}
+                    style={{ minWidth: col.minWidth }}
+                    sortDirection={orderBy === colId ? order : false}
+                  >
+                    {isSortable ? (
+                      <TableSortLabel
+                        active={orderBy === colId}
+                        direction={orderBy === colId ? order : 'asc'}
+                        onClick={() => handleSort(colId)}
+                      >
+                        {col.label}
+                      </TableSortLabel>
+                    ) : (
+                      col.label
+                    )}
+                  </TableCell>
+                );
+              })}
             </TableRow>
           </TableHead>
           <TableBody>

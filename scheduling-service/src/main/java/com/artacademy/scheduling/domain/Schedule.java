@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.UUID;
 
@@ -41,4 +42,11 @@ public class Schedule {
     @Enumerated(EnumType.STRING)
     @Column(name = "DAY_OF_WEEK", nullable = false, length = 20)
     private DayOfWeek dayOfWeek;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "STATUS", nullable = false, length = 20)
+    private ScheduleStatus status;
+
+    @Column(name = "PUBLISHED_AT")
+    private Instant publishedAt;
 }

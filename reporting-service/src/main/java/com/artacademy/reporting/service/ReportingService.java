@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -61,6 +63,93 @@ public class ReportingService {
         return summaries.stream()
                 .map(this::toAttendanceSummaryResponse)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns subjects whose attendance percentage falls below the given threshold.
+     * Percentage = presentDays / totalDays * 100 (rows with totalDays=0 are excluded).
+     */
+    public List<AttendanceExceptionResponse> getAttendanceExceptions(
+            double threshold, String subjectType, Optional<Integer> month, Optional<Integer> year) {
+
+        List<AttendanceSummary> summaries;
+        if (month.isPresent() && year.isPresent()) {
+            summaries = attendanceSummaryRepository
+                    .findByAttendanceMonthAndAttendanceYear(month.get(), year.get());
+        } else {
+            summaries = attendanceSummaryRepository.findAll();
+        }
+
+        return summaries.stream()
+                .filter(s -> subjectType == null || s.getSubjectType().equalsIgnoreCase(subjectType))
+                .filter(s -> s.getTotalDays() != null && s.getTotalDays() > 0)
+                .map(s -> {
+                    double pct = pct(s.getPresentDays(), s.getTotalDays());
+                    return AttendanceExceptionResponse.builder()
+                            .subjectId(s.getSubjectId())
+                            .subjectName(s.getSubjectName())
+                            .subjectType(s.getSubjectType())
+                            .attendanceMonth(s.getAttendanceMonth())
+                            .attendanceYear(s.getAttendanceYear())
+                            .totalDays(s.getTotalDays())
+                            .presentDays(s.getPresentDays())
+                            .attendancePercentage(pct)
+                            .build();
+                })
+                .filter(r -> r.getAttendancePercentage() < threshold)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Groups STUDENT attendance summaries by course for a given month/year.
+     * Rows without a course fall into an "Unassigned" bucket.
+     */
+    public List<CourseAttendanceSummaryResponse> getMonthlyCourseSummary(Integer month, Integer year) {
+        List<AttendanceSummary> summaries = attendanceSummaryRepository
+                .findByAttendanceMonthAndAttendanceYear(month, year)
+                .stream()
+                .filter(s -> "STUDENT".equalsIgnoreCase(s.getSubjectType()))
+                .collect(Collectors.toList());
+
+        Map<UUID, List<AttendanceSummary>> byCourse = summaries.stream()
+                .collect(Collectors.groupingBy(
+                        s -> s.getCourseId(),
+                        java.util.LinkedHashMap::new,
+                        Collectors.toList()));
+
+        // groupingBy cannot key on null, so handle unassigned separately
+        List<AttendanceSummary> unassigned = summaries.stream()
+                .filter(s -> s.getCourseId() == null)
+                .collect(Collectors.toList());
+        byCourse.remove(null);
+
+        List<CourseAttendanceSummaryResponse> result = byCourse.entrySet().stream()
+                .map(e -> buildCourseSummary(e.getKey(), courseName(e.getValue()), e.getValue(), month, year))
+                .collect(Collectors.toList());
+
+        if (!unassigned.isEmpty()) {
+            result.add(buildCourseSummary(null, "Unassigned", unassigned, month, year));
+        }
+        return result;
+    }
+
+    /**
+     * Builds a CSV representation of the attendance report for the given subject type.
+     */
+    public String exportAttendanceCsv(String subjectType, Optional<Integer> month, Optional<Integer> year) {
+        List<AttendanceSummaryResponse> rows = getAttendanceReport(subjectType, month, year);
+        StringBuilder sb = new StringBuilder();
+        sb.append("Name,Total,Present,Absent,Leave,Attendance%\n");
+        for (AttendanceSummaryResponse r : rows) {
+            double pct = pct(r.getPresentDays(), r.getTotalDays());
+            sb.append(csv(r.getSubjectName())).append(',')
+              .append(r.getTotalDays()).append(',')
+              .append(r.getPresentDays()).append(',')
+              .append(r.getAbsentDays()).append(',')
+              .append(r.getLeaveDays()).append(',')
+              .append(pct).append('\n');
+        }
+        return sb.toString();
     }
 
     /**
@@ -133,6 +222,8 @@ public class ReportingService {
                 .subjectType(s.getSubjectType())
                 .subjectId(s.getSubjectId())
                 .subjectName(s.getSubjectName())
+                .courseId(s.getCourseId())
+                .courseName(s.getCourseName())
                 .attendanceMonth(s.getAttendanceMonth())
                 .attendanceYear(s.getAttendanceYear())
                 .totalDays(s.getTotalDays())
@@ -140,6 +231,47 @@ public class ReportingService {
                 .absentDays(s.getAbsentDays())
                 .leaveDays(s.getLeaveDays())
                 .build();
+    }
+
+    private CourseAttendanceSummaryResponse buildCourseSummary(
+            UUID courseId, String courseName, List<AttendanceSummary> rows, Integer month, Integer year) {
+        long present = rows.stream().mapToLong(r -> r.getPresentDays() == null ? 0 : r.getPresentDays()).sum();
+        long total = rows.stream().mapToLong(r -> r.getTotalDays() == null ? 0 : r.getTotalDays()).sum();
+        return CourseAttendanceSummaryResponse.builder()
+                .courseId(courseId)
+                .courseName(courseName)
+                .attendanceMonth(month)
+                .attendanceYear(year)
+                .studentCount(rows.size())
+                .totalDays(total)
+                .presentDays(present)
+                .attendancePercentage(pct(present, total))
+                .build();
+    }
+
+    private String courseName(List<AttendanceSummary> rows) {
+        return rows.stream()
+                .map(AttendanceSummary::getCourseName)
+                .filter(n -> n != null && !n.isBlank())
+                .findFirst()
+                .orElse("Unassigned");
+    }
+
+    private double pct(long present, long total) {
+        if (total <= 0) return 0.0;
+        return Math.round((present * 100.0 / total) * 10.0) / 10.0;
+    }
+
+    private double pct(Integer present, Integer total) {
+        return pct(present == null ? 0 : present, total == null ? 0 : total);
+    }
+
+    private String csv(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 
     private RevenueSummaryResponse toRevenueSummaryResponse(RevenueSummary r) {

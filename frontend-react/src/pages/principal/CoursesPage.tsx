@@ -22,6 +22,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchCourses, createCourse, updateCourse, deleteCourse } from '../../store/slices/courseSlice';
 import { Course } from '../../types';
@@ -46,6 +47,7 @@ type CourseFormData = Omit<Course, 'id'>;
 
 const CoursesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const { list: courses, loading } = useSelector((state: RootState) => state.courses);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Course | null>(null);
@@ -119,13 +121,13 @@ const CoursesPage: React.FC = () => {
     { id: 'admissionFee', label: 'Admission Fee', minWidth: 120, align: 'right', format: (v) => formatCurrency(v as number) },
     { id: 'status', label: 'Status', minWidth: 80, format: (v) => <Chip label={v as string} color={v === 'ACTIVE' ? 'success' : 'default'} size="small" /> },
     {
-      id: 'actions', label: 'Actions', minWidth: 100, align: 'center',
+      id: 'actions', label: 'Actions', minWidth: 100, align: 'center', sortable: false,
       format: (_v, row) => {
         const course = row as unknown as Course;
         return (
           <Box>
-            <Tooltip title="Edit"><IconButton size="small" color="primary" onClick={() => handleEdit(course)}><EditIcon fontSize="small" /></IconButton></Tooltip>
-            <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => setDeleteTarget(course)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+            <Tooltip title="Edit"><IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); handleEdit(course); }}><EditIcon fontSize="small" /></IconButton></Tooltip>
+            <Tooltip title="Delete"><IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); setDeleteTarget(course); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
           </Box>
         );
       },
@@ -143,7 +145,7 @@ const CoursesPage: React.FC = () => {
         action={<Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>Add Course</Button>}
       />
 
-      <DataTable columns={columns} rows={courses as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search courses..." />
+      <DataTable columns={columns} rows={courses as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search courses..." onRowClick={(row) => navigate(`/principal/courses/${(row as { id: string }).id}`)} />
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editing ? 'Edit Course' : 'Add New Course'}</DialogTitle>

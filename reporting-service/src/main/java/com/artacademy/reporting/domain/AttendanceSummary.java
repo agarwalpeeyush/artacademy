@@ -33,6 +33,12 @@ public class AttendanceSummary {
     @Column(name = "SUBJECT_NAME", nullable = false, length = 200)
     private String subjectName;
 
+    @Column(name = "COURSE_ID")
+    private UUID courseId;
+
+    @Column(name = "COURSE_NAME", length = 200)
+    private String courseName;
+
     @Column(name = "ATTENDANCE_MONTH", nullable = false)
     private Integer attendanceMonth;
 
