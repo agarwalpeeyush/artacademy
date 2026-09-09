@@ -33,7 +33,8 @@ public class UserCreatedEventConsumer {
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
 
-    @KafkaListener(topics = KafkaTopics.STUDENT_CREATED, groupId = "auth-service-group")
+    @KafkaListener(topics = KafkaTopics.STUDENT_CREATED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
     @Transactional
     public void onStudentCreated(Map<String, Object> payload) {
         try {
@@ -61,7 +62,8 @@ public class UserCreatedEventConsumer {
         }
     }
 
-    @KafkaListener(topics = KafkaTopics.TEACHER_CREATED, groupId = "auth-service-group")
+    @KafkaListener(topics = KafkaTopics.TEACHER_CREATED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
     @Transactional
     public void onTeacherCreated(Map<String, Object> payload) {
         try {
@@ -89,7 +91,8 @@ public class UserCreatedEventConsumer {
         }
     }
 
-    @KafkaListener(topics = KafkaTopics.PARENT_CREATED, groupId = "auth-service-group")
+    @KafkaListener(topics = KafkaTopics.PARENT_CREATED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
     @Transactional
     public void onParentCreated(Map<String, Object> payload) {
         try {

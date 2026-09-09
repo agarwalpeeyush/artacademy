@@ -15,7 +15,7 @@ import { fetchStudents } from '../../store/slices/studentSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchEnrollments, createEnrollment, updateEnrollmentStatus, deleteEnrollment } from '../../store/slices/enrollmentSlice';
-import { Enrollment, Course, Teacher } from '../../types';
+import { Enrollment, Course } from '../../types';
 import courseService from '../../services/courseService';
 import scheduleService from '../../services/scheduleService';
 import { CourseClass, Schedule } from '../../types';
@@ -24,7 +24,7 @@ import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDate } from '../../utils/formatters';
-import { buildClassMap, resolveTeacherName, filterEnrollments, formatClassSchedule } from '../../utils/enrollmentHelpers';
+import { buildClassMap, teacherCoursesFromClasses, filterEnrollments, formatClassSchedule } from '../../utils/enrollmentHelpers';
 
 const schema = yup.object({
   studentId: yup.string().required('Student is required'),
@@ -46,17 +46,18 @@ const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'
   ACTIVE: 'success', COMPLETED: 'default', DROPPED: 'error', SUSPENDED: 'warning',
 };
 
-const EnrollmentsPage: React.FC = () => {
+const TeacherEnrollmentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
   const { list: enrollments, loading } = useSelector((state: RootState) => state.enrollments);
   const { list: students } = useSelector((state: RootState) => state.students);
   const { list: courses } = useSelector((state: RootState) => state.courses);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
-  const [allClasses, setAllClasses] = useState<CourseClass[]>([]);
-  const [classes, setClasses] = useState<CourseClass[]>([]);
+
+  const teacherId = user?.id || '';
+  const [myClasses, setMyClasses] = useState<CourseClass[]>([]);
   const [schedulesByClass, setSchedulesByClass] = useState<Map<string, Schedule[]>>(new Map());
   const [searchCourse, setSearchCourse] = useState<Course | null>(null);
-  const [searchTeacher, setSearchTeacher] = useState<Teacher | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Enrollment | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
@@ -67,39 +68,55 @@ const EnrollmentsPage: React.FC = () => {
   });
 
   const selectedCourseId = watch('courseId');
-  const classMap = useMemo(() => buildClassMap(allClasses), [allClasses]);
+  const classMap = useMemo(() => buildClassMap(myClasses), [myClasses]);
+
+  const teacherName = useMemo(() => {
+    const t = teachers.find(tt => tt.id === teacherId);
+    return t ? `${t.firstName} ${t.lastName}`.trim() : (user?.username || '');
+  }, [teachers, teacherId, user]);
+
+  const myCourses = useMemo(
+    () => teacherCoursesFromClasses(myClasses, teacherId, courses),
+    [myClasses, teacherId, courses],
+  );
+
+  const dialogClasses = useMemo(
+    () => myClasses.filter(c => c.courseId === selectedCourseId),
+    [myClasses, selectedCourseId],
+  );
 
   useEffect(() => {
     dispatch(fetchStudents());
     dispatch(fetchCourses());
     dispatch(fetchTeachers());
     dispatch(fetchEnrollments());
-    courseService.getAllClasses().then(setAllClasses).catch(() => setAllClasses([]));
-    scheduleService.getAll()
-      .then((all) => {
-        const map = new Map<string, Schedule[]>();
-        all.filter((s) => s.status === 'PUBLISHED').forEach((s) => {
-          const arr = map.get(s.classId) ?? [];
-          arr.push(s);
-          map.set(s.classId, arr);
-        });
-        setSchedulesByClass(map);
-      })
-      .catch(() => setSchedulesByClass(new Map()));
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (selectedCourseId) {
-      courseService.getClassesByCourse(selectedCourseId).then(setClasses).catch(() => setClasses([]));
-    } else {
-      setClasses([]);
+    if (teacherId) {
+      courseService.getClassesByTeacherRemote(teacherId).then(setMyClasses).catch(() => setMyClasses([]));
     }
-  }, [selectedCourseId]);
+  }, [dispatch, teacherId]);
+
+  // Auto-select the only course when the teacher teaches exactly one
+  useEffect(() => {
+    if (!searchCourse && myCourses.length === 1) {
+      setSearchCourse(myCourses[0]);
+    }
+  }, [myCourses, searchCourse]);
+
+  // Load read-only timetable for the teacher's classes
+  useEffect(() => {
+    if (myClasses.length === 0) {
+      setSchedulesByClass(new Map());
+      return;
+    }
+    Promise.all(myClasses.map(c => scheduleService.getByClass(c.id).then(s => [c.id, s] as [string, Schedule[]]).catch(() => [c.id, [] as Schedule[]] as [string, Schedule[]])))
+      .then((entries) => setSchedulesByClass(new Map(entries)))
+      .catch(() => setSchedulesByClass(new Map()));
+  }, [myClasses]);
 
   const openCreate = () => {
     reset({
       studentId: '',
-      courseId: searchCourse?.id || '',
+      courseId: searchCourse?.id || (myCourses.length === 1 ? myCourses[0].id : ''),
       classId: '',
       enrollmentDate: new Date().toISOString().split('T')[0],
       admissionFeePaid: false,
@@ -117,7 +134,7 @@ const EnrollmentsPage: React.FC = () => {
       setSnackbar({ open: true, message: 'Student enrolled successfully', severity: 'success' });
       setDialogOpen(false);
       reset();
-      courseService.getAllClasses().then(setAllClasses).catch(() => { /* keep existing */ });
+      courseService.getClassesByTeacherRemote(teacherId).then(setMyClasses).catch(() => { /* keep existing */ });
     } catch (err: unknown) {
       setSnackbar({ open: true, message: String(err) || 'Enrollment failed', severity: 'error' });
     }
@@ -146,7 +163,6 @@ const EnrollmentsPage: React.FC = () => {
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'studentName', label: 'Student', minWidth: 150 },
     { id: 'courseName', label: 'Course', minWidth: 150 },
-    { id: 'teacherName', label: 'Teacher', minWidth: 150 },
     { id: 'className', label: 'Class', minWidth: 130 },
     {
       id: 'timetable', label: 'Timetable', minWidth: 200, sortable: false,
@@ -197,11 +213,9 @@ const EnrollmentsPage: React.FC = () => {
 
   if (loading && enrollments.length === 0) return <LoadingSpinner />;
 
-  const filtered = filterEnrollments(
-    enrollments,
-    { courseId: searchCourse?.id, teacherId: searchTeacher?.id },
-    classMap,
-  );
+  // Scope table to this teacher's enrollments (via classId -> teacherId), then optional course filter
+  const mine = filterEnrollments(enrollments, { teacherId }, classMap);
+  const filtered = filterEnrollments(mine, { courseId: searchCourse?.id }, classMap);
 
   const rows = filtered.map((e) => {
     const student = students.find(s => s.id === e.studentId);
@@ -209,7 +223,6 @@ const EnrollmentsPage: React.FC = () => {
       ...e,
       studentName: e.studentName || (student ? `${student.firstName} ${student.lastName}`.trim() : ''),
       courseName: e.courseName || courses.find(c => c.id === e.courseId)?.courseName || '',
-      teacherName: resolveTeacherName(e, classMap, teachers),
     };
   });
 
@@ -217,28 +230,22 @@ const EnrollmentsPage: React.FC = () => {
     <Box>
       <PageHeader
         title="Enrollments"
-        subtitle={`${filtered.length} of ${enrollments.length} enrollment(s)`}
-        breadcrumbs={[{ label: 'Principal' }, { label: 'Enrollments' }]}
-        action={<Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>Enroll Student</Button>}
+        subtitle={`${filtered.length} of ${mine.length} enrollment(s)`}
+        breadcrumbs={[{ label: 'Teacher' }, { label: 'Enrollments' }]}
+        action={<Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} disabled={myCourses.length === 0}>Enroll Student</Button>}
       />
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} sm={6} md={4}>
+          <TextField label="Teacher" value={teacherName} size="small" fullWidth disabled />
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
           <Autocomplete
-            options={courses}
+            options={myCourses}
             getOptionLabel={(o) => o.courseName}
             value={searchCourse}
             onChange={(_e, val) => setSearchCourse(val)}
             renderInput={(params) => <TextField {...params} label="Filter by Course" size="small" />}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <Autocomplete
-            options={teachers}
-            getOptionLabel={(o) => `${o.firstName} ${o.lastName}`.trim()}
-            value={searchTeacher}
-            onChange={(_e, val) => setSearchTeacher(val)}
-            renderInput={(params) => <TextField {...params} label="Filter by Teacher" size="small" />}
           />
         </Grid>
       </Grid>
@@ -251,6 +258,9 @@ const EnrollmentsPage: React.FC = () => {
           <DialogContent>
             <Grid container spacing={2}>
               <Grid item xs={12}>
+                <TextField label="Teacher" value={teacherName} size="small" fullWidth disabled helperText="Your enrollments" />
+              </Grid>
+              <Grid item xs={12}>
                 <Controller name="studentId" control={control} render={({ field }) => (
                   <TextField {...field} select label="Student" fullWidth size="small" error={!!errors.studentId} helperText={errors.studentId?.message}>
                     {students.map(s => <MenuItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</MenuItem>)}
@@ -259,19 +269,15 @@ const EnrollmentsPage: React.FC = () => {
               </Grid>
               <Grid item xs={12}>
                 <Controller name="courseId" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Course" fullWidth size="small" disabled={!!searchCourse} error={!!errors.courseId} helperText={searchCourse ? 'Prefilled from filter' : errors.courseId?.message}>
-                    {courses.map(c => <MenuItem key={c.id} value={c.id}>{c.courseName}</MenuItem>)}
+                  <TextField {...field} select label="Course" fullWidth size="small" disabled={myCourses.length <= 1 || !!searchCourse} error={!!errors.courseId} helperText={errors.courseId?.message}>
+                    {myCourses.map(c => <MenuItem key={c.id} value={c.id}>{c.courseName}</MenuItem>)}
                   </TextField>
                 )} />
               </Grid>
               <Grid item xs={12}>
                 <Controller name="classId" control={control} render={({ field }) => (
                   <TextField {...field} select label="Class" fullWidth size="small" error={!!errors.classId} helperText={errors.classId?.message || (selectedCourseId ? '' : 'Select a course first')}>
-                    {classes.map(cl => {
-                      const t = teachers.find(tt => tt.id === cl.teacherId);
-                      const tName = t ? ` — ${t.firstName} ${t.lastName}`.trimEnd() : '';
-                      return <MenuItem key={cl.id} value={cl.id}>{cl.className}{tName}</MenuItem>;
-                    })}
+                    {dialogClasses.map(cl => <MenuItem key={cl.id} value={cl.id}>{cl.className}</MenuItem>)}
                   </TextField>
                 )} />
               </Grid>
@@ -314,4 +320,4 @@ const EnrollmentsPage: React.FC = () => {
   );
 };
 
-export default EnrollmentsPage;
+export default TeacherEnrollmentsPage;

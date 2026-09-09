@@ -6,24 +6,18 @@ import com.artacademy.common.exception.ApiException;
 import com.artacademy.scheduling.domain.Room;
 import com.artacademy.scheduling.domain.Schedule;
 import com.artacademy.scheduling.domain.ScheduleStatus;
-import com.artacademy.scheduling.domain.ScheduleVersion;
-import com.artacademy.scheduling.domain.ScheduleVersionEntry;
 import com.artacademy.scheduling.dto.GenerateScheduleRequest;
 import com.artacademy.scheduling.dto.RoomAvailabilityResponse;
 import com.artacademy.scheduling.dto.ScheduleConflictResponse;
 import com.artacademy.scheduling.dto.ScheduleRequest;
 import com.artacademy.scheduling.dto.ScheduleResponse;
-import com.artacademy.scheduling.dto.ScheduleVersionResponse;
 import com.artacademy.scheduling.dto.UpcomingClassResponse;
 import com.artacademy.scheduling.mapper.ScheduleMapper;
 import com.artacademy.scheduling.repository.RoomRepository;
 import com.artacademy.scheduling.repository.ScheduleRepository;
-import com.artacademy.scheduling.repository.ScheduleVersionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +36,6 @@ import java.util.UUID;
 public class ScheduleService {
 
     private final ScheduleRepository scheduleRepository;
-    private final ScheduleVersionRepository scheduleVersionRepository;
     private final RoomRepository roomRepository;
     private final RoomService roomService;
     private final ScheduleMapper scheduleMapper;
@@ -66,6 +59,13 @@ public class ScheduleService {
     @Transactional(readOnly = true)
     public List<ScheduleResponse> getByTeacher(UUID teacherId) {
         return scheduleRepository.findByTeacherIdAndStatus(teacherId, ScheduleStatus.PUBLISHED).stream()
+                .map(scheduleMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ScheduleResponse> getByClass(UUID classId) {
+        return scheduleRepository.findByClassIdAndStatus(classId, ScheduleStatus.PUBLISHED).stream()
                 .map(scheduleMapper::toResponse)
                 .toList();
     }
@@ -203,19 +203,6 @@ public class ScheduleService {
     // -------------------------------------------------------------------------
 
     @Transactional
-    public ScheduleVersionResponse publishAll() {
-        List<Schedule> drafts = scheduleRepository.findByStatus(ScheduleStatus.DRAFT);
-        Instant now = Instant.now();
-        for (Schedule s : drafts) {
-            s.setStatus(ScheduleStatus.PUBLISHED);
-            s.setPublishedAt(now);
-        }
-        scheduleRepository.saveAll(drafts);
-
-        return snapshotCurrentTimetable(now);
-    }
-
-    @Transactional
     public ScheduleResponse publish(UUID id) {
         Schedule schedule = findScheduleById(id);
         schedule.setStatus(ScheduleStatus.PUBLISHED);
@@ -229,87 +216,6 @@ public class ScheduleService {
         schedule.setStatus(ScheduleStatus.DRAFT);
         schedule.setPublishedAt(null);
         return scheduleMapper.toResponse(scheduleRepository.save(schedule));
-    }
-
-    /**
-     * Captures the full current PUBLISHED timetable into a new immutable version.
-     */
-    private ScheduleVersionResponse snapshotCurrentTimetable(Instant publishedAt) {
-        List<Schedule> published = scheduleRepository.findByStatus(ScheduleStatus.PUBLISHED);
-
-        int nextVersion = scheduleVersionRepository.findTopByOrderByVersionNumberDesc()
-                .map(v -> v.getVersionNumber() + 1)
-                .orElse(1);
-
-        ScheduleVersion version = ScheduleVersion.builder()
-                .versionNumber(nextVersion)
-                .publishedAt(publishedAt)
-                .publishedBy(currentUsername())
-                .entryCount(published.size())
-                .build();
-
-        for (Schedule s : published) {
-            ScheduleVersionEntry entry = ScheduleVersionEntry.builder()
-                    .version(version)
-                    .scheduleId(s.getId())
-                    .classId(s.getClassId())
-                    .teacherId(s.getTeacherId())
-                    .roomId(s.getRoom().getId())
-                    .roomName(s.getRoom().getRoomName())
-                    .dayOfWeek(s.getDayOfWeek())
-                    .startTime(s.getStartTime())
-                    .endTime(s.getEndTime())
-                    .build();
-            version.getEntries().add(entry);
-        }
-
-        version = scheduleVersionRepository.save(version);
-        log.info("Published schedule version {} with {} entries", nextVersion, published.size());
-        return toVersionResponse(version, true);
-    }
-
-    // -------------------------------------------------------------------------
-    // Schedule history
-    // -------------------------------------------------------------------------
-
-    @Transactional(readOnly = true)
-    public List<ScheduleVersionResponse> getHistory() {
-        return scheduleVersionRepository.findAllByOrderByVersionNumberDesc().stream()
-                .map(v -> toVersionResponse(v, false))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public ScheduleVersionResponse getHistoryVersion(UUID versionId) {
-        ScheduleVersion version = scheduleVersionRepository.findById(versionId)
-                .orElseThrow(() -> ApiException.notFound("Schedule version not found with id: " + versionId));
-        return toVersionResponse(version, true);
-    }
-
-    private ScheduleVersionResponse toVersionResponse(ScheduleVersion version, boolean includeEntries) {
-        List<ScheduleVersionResponse.Entry> entries = includeEntries
-                ? version.getEntries().stream()
-                    .map(e -> ScheduleVersionResponse.Entry.builder()
-                            .scheduleId(e.getScheduleId())
-                            .classId(e.getClassId())
-                            .teacherId(e.getTeacherId())
-                            .roomId(e.getRoomId())
-                            .roomName(e.getRoomName())
-                            .dayOfWeek(e.getDayOfWeek())
-                            .startTime(e.getStartTime())
-                            .endTime(e.getEndTime())
-                            .build())
-                    .toList()
-                : null;
-
-        return ScheduleVersionResponse.builder()
-                .id(version.getId())
-                .versionNumber(version.getVersionNumber())
-                .publishedAt(version.getPublishedAt())
-                .publishedBy(version.getPublishedBy())
-                .entryCount(version.getEntryCount())
-                .entries(entries)
-                .build();
     }
 
     // -------------------------------------------------------------------------
@@ -479,11 +385,6 @@ public class ScheduleService {
 
     private LocalTime min(LocalTime a, LocalTime b) {
         return a.isBefore(b) ? a : b;
-    }
-
-    private String currentUsername() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null ? auth.getName() : "system";
     }
 
     private Schedule findScheduleById(UUID id) {

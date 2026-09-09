@@ -2,14 +2,9 @@
 
 Items required by the project skills spec (`art_academy_skills/*.md`) that are not yet implemented.
 
-> **Completed and removed from this backlog:** Phase 2 (Authentication & Role Management),
-> Phase 3 (Academy Management), Phase 4 (Attendance), and Phase 5 (Scheduling & Timetable) are
-> fully implemented. See `PRD.md` for the delivered feature catalogue and `TESTING.md` for the
-> corresponding UI test scenarios.
-
 ---
 
-## Known Bugs / Discrepancies (discovered during DESIGN.md audit)
+## Known Bugs / Discrepancies
 
 These are actual code behaviors that diverge from the intended design. They are currently
 documented "as-implemented" in the relevant `DESIGN.md` files; fix the code later.
@@ -35,22 +30,32 @@ documented "as-implemented" in the relevant `DESIGN.md` files; fix the code late
     `status = SENT` with a `sentAt` timestamp even though nothing is actually sent
   - Either integrate an SMS provider or leave SMS notifications `PENDING`/`FAILED` honestly
 
-- [ ] **common-library: `GlobalExceptionHandler` returns a raw `Map`, not `ApiResponse`**
-  - Error responses are a plain JSON `Map` `{ timestamp, status, message }`, so a failed request
-    and a successful `ApiResponse`-wrapped request do not share the same shape
-  - Consider returning `ApiResponse.error(...)` for a consistent error contract
+- [ ] **`notificationSlice` wired to backend**
+  - Redux slice exists but no Notifications page is rendered for any role in the current routing
 
-- [ ] **course-enrollment-service: cancellation is a hard delete**
-  - `cancelEnrollment(id)` hard-deletes the row instead of a soft `status = CANCELLED` update, so
-    enrollment history is not preserved. `CANCELLED` exists as a status value but is never written
+- [ ] **`ReceiptsPage` verified**
+  - File exists; confirm it is reachable via routing and renders real data from `GET /payments?studentId=...`
 
-- [ ] **course-enrollment-service: `deleteClass` has no active-enrollment guard**
-  - `deleteClass` performs an unconditional hard delete; because `ENROLLMENTS.CLASS_ID` has an FK
-    to `CLASSES`, deleting a class that still has enrollments fails at the DB level rather than
-    returning a friendly `400`. Add an active-enrollment check before delete
+- [ ] The notification feature still won't function: the backend only implements POST /notifications/send and GET /notifications/{userId}. The 3 endpoints the frontend needs — GET
+  /notifications (current user), PUT /notifications/{id}/read, PUT /notifications/read-all — don't exist yet.
 
 ---
 
+## Cross-cutting
+
+- [ ] **Redis usage** — DEFERRED (needs its own design)
+  - Redis container is running in docker-compose but no service currently uses it
+  - Candidates: JWT refresh token blacklist in auth-service, rate-limiting cache, session cache
+
+- [ ] **Class Notes / Remarks (Teacher)** — DEFERRED (needs its own design)
+  - Spec lists "Class Notes/Remarks" under Teacher > Teaching; no backend entity or UI exists
+
+- [ ] **Student Profile edit (Student role)** — DEFERRED (needs UI work)
+  - Backend `PUT /students/{id}` exists, but `StudentProfilePage` is display-only — it fetches via
+    `getMyProfile()` and renders; there is no edit form and no profile-photo field
+  - Building the edit UI (and adding a photo field if wanted) is a frontend feature, not a bug fix
+
+---
 ## Phase 6 — Fees & Payments
 
 - [ ] **Make Payment screen (Student/Parent)**
@@ -165,24 +170,3 @@ documented "as-implemented" in the relevant `DESIGN.md` files; fix the code late
   - Backend: key-value settings store
 
 ---
-
-## Cross-cutting / Smaller Items
-
-- [ ] **`notificationSlice` wired to backend**
-  - Redux slice exists but no Notifications page is rendered for any role in the current routing
-
-- [ ] **`ReceiptsPage` verified**
-  - File exists; confirm it is reachable via routing and renders real data from `GET /payments?studentId=...`
-
-- [ ] **Attendance service: `ATTENDANCE_UPDATED` topic consumer**
-  - `KafkaTopics.ATTENDANCE_UPDATED` is defined but no producer in attendance-service publishes to it, and reporting-service has a consumer wired to it — implement the update/correction flow to fire this event
-
-- [ ] **Redis usage**
-  - Redis container is running in docker-compose but no service currently uses it
-  - Candidates: JWT refresh token blacklist in auth-service, rate-limiting cache, session cache
-
-- [ ] **Class Notes / Remarks (Teacher)**
-  - Spec lists "Class Notes/Remarks" under Teacher > Teaching; no backend entity or UI exists
-
-- [ ] **Student Profile edit (Student role)**
-  - `StudentProfilePage` exists; verify the student can update their own contact details and profile photo via `PUT /students/{id}`

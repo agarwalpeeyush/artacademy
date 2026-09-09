@@ -33,6 +33,8 @@ public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
 
     List<Schedule> findByClassIdInAndStatus(List<UUID> classIds, ScheduleStatus status);
 
+    List<Schedule> findByClassIdAndStatus(UUID classId, ScheduleStatus status);
+
     List<Schedule> findByRoomIdAndDayOfWeekAndStatus(UUID roomId, DayOfWeek dayOfWeek, ScheduleStatus status);
 
     @Query("SELECT s FROM Schedule s WHERE s.teacherId = :teacherId AND s.dayOfWeek = :day " +

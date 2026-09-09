@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Grid, Alert, Snackbar, MenuItem, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Paper, Typography,
+  TableCell, TableContainer, TableHead, TableRow, Paper, Typography, Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -26,7 +26,7 @@ const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'
 const schema = yup.object({
   classId: yup.string().required('Class is required'),
   teacherId: yup.string().required('Teacher is required'),
-  dayOfWeek: yup.string().required('Day is required'),
+  daysOfWeek: yup.array(yup.string().required()).min(1, 'Select at least one day').required(),
   startTime: yup.string().required('Start time is required'),
   endTime: yup.string().required('End time is required'),
   roomId: yup.string().required('Room is required'),
@@ -35,7 +35,7 @@ const schema = yup.object({
 type ScheduleFormData = {
   classId: string;
   teacherId: string;
-  dayOfWeek: string;
+  daysOfWeek: string[];
   startTime: string;
   endTime: string;
   roomId: string;
@@ -52,7 +52,7 @@ const TimetablePage: React.FC = () => {
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<ScheduleFormData>({
     resolver: yupResolver(schema) as never,
-    defaultValues: { classId: '', teacherId: '', dayOfWeek: 'MONDAY', startTime: '09:00', endTime: '10:00', roomId: '' },
+    defaultValues: { classId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00', roomId: '' },
   });
 
   useEffect(() => {
@@ -64,13 +64,27 @@ const TimetablePage: React.FC = () => {
   }, [dispatch]);
 
   const handleSubmitForm = async (data: ScheduleFormData) => {
-    try {
-      await dispatch(createSchedule(data)).unwrap();
-      setSnackbar({ open: true, message: 'Schedule added successfully', severity: 'success' });
+    const { daysOfWeek, ...rest } = data;
+    const failures: string[] = [];
+    let successCount = 0;
+    for (const day of daysOfWeek) {
+      try {
+        await dispatch(createSchedule({ ...rest, dayOfWeek: day })).unwrap();
+        successCount += 1;
+      } catch (err: unknown) {
+        failures.push(`${getDayName(day)}: ${String(err)}`);
+      }
+    }
+    if (failures.length === 0) {
+      setSnackbar({ open: true, message: `Added ${successCount} schedule(s)`, severity: 'success' });
       setDialogOpen(false);
       reset();
-    } catch (err: unknown) {
-      setSnackbar({ open: true, message: String(err) || 'Failed to add schedule', severity: 'error' });
+    } else {
+      setSnackbar({
+        open: true,
+        message: `Added ${successCount}, failed: ${failures.join('; ')}`,
+        severity: 'error',
+      });
     }
   };
 
@@ -82,6 +96,15 @@ const TimetablePage: React.FC = () => {
       setSnackbar({ open: true, message: String(err) || 'Delete failed', severity: 'error' });
     }
   };
+
+  const classNameById = useMemo(
+    () => new Map(classes.map(c => [c.id, c.className])),
+    [classes],
+  );
+  const teacherNameById = useMemo(
+    () => new Map(teachers.map(t => [t.id, `${t.firstName} ${t.lastName}`.trim()])),
+    [teachers],
+  );
 
   const groupedByDay = DAYS.reduce<Record<string, Schedule[]>>((acc, day) => {
     acc[day] = schedules.filter(s => s.dayOfWeek.toUpperCase() === day);
@@ -112,6 +135,7 @@ const TimetablePage: React.FC = () => {
               <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Room</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
               <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -126,10 +150,13 @@ const TimetablePage: React.FC = () => {
                       {getDayName(day)}
                     </TableCell>
                   )}
-                  <TableCell>{s.className}</TableCell>
-                  <TableCell>{s.teacherName}</TableCell>
+                  <TableCell>{s.className || classNameById.get(s.classId) || '-'}</TableCell>
+                  <TableCell>{s.teacherName || teacherNameById.get(s.teacherId) || '-'}</TableCell>
                   <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
                   <TableCell>{s.roomName || '-'}</TableCell>
+                  <TableCell>
+                    <Chip label={s.status || 'DRAFT'} size="small" color={s.status === 'PUBLISHED' ? 'success' : 'warning'} />
+                  </TableCell>
                   <TableCell align="center">
                     <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(s.id)}>
                       Remove
@@ -140,7 +167,7 @@ const TimetablePage: React.FC = () => {
             })}
             {schedules.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">No schedules found. Add a schedule to get started.</Typography>
                 </TableCell>
               </TableRow>
@@ -169,8 +196,17 @@ const TimetablePage: React.FC = () => {
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Controller name="dayOfWeek" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Day of Week" fullWidth size="small" error={!!errors.dayOfWeek} helperText={errors.dayOfWeek?.message}>
+                <Controller name="daysOfWeek" control={control} render={({ field }) => (
+                  <TextField
+                    {...field}
+                    select
+                    SelectProps={{ multiple: true, renderValue: (sel) => (sel as string[]).map(getDayName).join(', ') }}
+                    label="Days of Week"
+                    fullWidth
+                    size="small"
+                    error={!!errors.daysOfWeek}
+                    helperText={errors.daysOfWeek?.message as string | undefined}
+                  >
                     {DAYS.map(d => <MenuItem key={d} value={d}>{getDayName(d)}</MenuItem>)}
                   </TextField>
                 )} />

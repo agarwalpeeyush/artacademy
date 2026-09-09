@@ -20,7 +20,7 @@ export const fetchNotifications = createAsyncThunk<Notification[]>(
   'notifications/fetchAll',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/api/notifications');
+      const response = await api.get('/notifications');
       return response.data;
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };
@@ -33,7 +33,7 @@ export const markAsRead = createAsyncThunk<string, string>(
   'notifications/markRead',
   async (id, { rejectWithValue }) => {
     try {
-      await api.put(`/api/notifications/${id}/read`);
+      await api.put(`/notifications/${id}/read`);
       return id;
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };
@@ -44,7 +44,7 @@ export const markAsRead = createAsyncThunk<string, string>(
 
 export const markAllAsRead = createAsyncThunk('notifications/markAllRead', async (_, { rejectWithValue }) => {
   try {
-    await api.put('/api/notifications/read-all');
+    await api.put('/notifications/read-all');
   } catch (error: unknown) {
     const err = error as { response?: { data?: { message?: string } }; message?: string };
     return rejectWithValue(err.response?.data?.message || 'Failed to mark all as read');

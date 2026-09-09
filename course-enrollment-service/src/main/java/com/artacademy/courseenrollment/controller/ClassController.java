@@ -35,6 +35,13 @@ public class ClassController {
         return ResponseEntity.ok(ApiResponse.success(classService.getClassById(id)));
     }
 
+    @GetMapping("/teacher/{teacherId}")
+    @Operation(summary = "Get all classes for a teacher")
+    public ResponseEntity<ApiResponse<List<ClassResponse>>> getClassesByTeacher(
+            @PathVariable("teacherId") UUID teacherId) {
+        return ResponseEntity.ok(ApiResponse.success(classService.getClassesByTeacher(teacherId)));
+    }
+
     @PostMapping
     @Operation(summary = "Create a new class (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<ClassResponse>> createClass(

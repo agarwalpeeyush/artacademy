@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Paper, Typography, Chip, Alert, Snackbar, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -7,7 +7,10 @@ import PublishIcon from '@mui/icons-material/Publish';
 import UndoIcon from '@mui/icons-material/Undo';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchSchedules, publishAllSchedules, publishSchedule, unpublishSchedule } from '../../store/slices/scheduleSlice';
+import { fetchSchedules, publishSchedule, unpublishSchedule } from '../../store/slices/scheduleSlice';
+import { fetchTeachers } from '../../store/slices/teacherSlice';
+import courseService from '../../services/courseService';
+import { CourseClass } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatTime, getDayName } from '../../utils/formatters';
@@ -15,23 +18,27 @@ import { formatTime, getDayName } from '../../utils/formatters';
 const SchedulePublishPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { list: schedules, loading } = useSelector((state: RootState) => state.schedules);
+  const { list: teachers } = useSelector((state: RootState) => state.teachers);
+  const [classes, setClasses] = useState<CourseClass[]>([]);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     dispatch(fetchSchedules());
+    dispatch(fetchTeachers());
+    courseService.getAllClasses().then(setClasses).catch(() => setClasses([]));
   }, [dispatch]);
+
+  const classNameById = useMemo(
+    () => new Map(classes.map(c => [c.id, c.className])),
+    [classes],
+  );
+  const teacherNameById = useMemo(
+    () => new Map(teachers.map(t => [t.id, `${t.firstName} ${t.lastName}`.trim()])),
+    [teachers],
+  );
 
   const draftCount = schedules.filter(s => s.status === 'DRAFT').length;
   const publishedCount = schedules.filter(s => s.status === 'PUBLISHED').length;
-
-  const handlePublishAll = async () => {
-    try {
-      const version = await dispatch(publishAllSchedules()).unwrap();
-      setSnackbar({ open: true, message: `Published timetable v${version.versionNumber} (${version.entryCount} entries)`, severity: 'success' });
-    } catch (err: unknown) {
-      setSnackbar({ open: true, message: String(err) || 'Publish failed', severity: 'error' });
-    }
-  };
 
   const handleToggle = async (id: string, currentStatus?: string) => {
     try {
@@ -52,14 +59,9 @@ const SchedulePublishPage: React.FC = () => {
   return (
     <Box>
       <PageHeader
-        title="Publish Schedule"
+        title="Publish Timetable"
         subtitle="Publish draft timetable entries to make them visible to teachers and students"
-        breadcrumbs={[{ label: 'Principal' }, { label: 'Publish Schedule' }]}
-        action={
-          <Button variant="contained" startIcon={<PublishIcon />} disabled={draftCount === 0} onClick={handlePublishAll}>
-            Publish All Drafts
-          </Button>
-        }
+        breadcrumbs={[{ label: 'Principal' }, { label: 'Publish Timetable' }]}
       />
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -98,8 +100,8 @@ const SchedulePublishPage: React.FC = () => {
             ) : schedules.map(s => (
               <TableRow key={s.id}>
                 <TableCell>{getDayName(s.dayOfWeek)}</TableCell>
-                <TableCell>{s.className}</TableCell>
-                <TableCell>{s.teacherName}</TableCell>
+                <TableCell>{s.className || classNameById.get(s.classId) || '-'}</TableCell>
+                <TableCell>{s.teacherName || teacherNameById.get(s.teacherId) || '-'}</TableCell>
                 <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
                 <TableCell>{s.roomName || '-'}</TableCell>
                 <TableCell>

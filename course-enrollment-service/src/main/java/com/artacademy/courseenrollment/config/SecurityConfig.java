@@ -52,9 +52,10 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT,    "/classes/**").hasRole("PRINCIPAL")
                     .requestMatchers(HttpMethod.DELETE, "/classes/**").hasRole("PRINCIPAL")
 
-                    // Mutating enrollment endpoints – PRINCIPAL only
-                    .requestMatchers(HttpMethod.POST,   "/enrollments/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.DELETE, "/enrollments/**").hasRole("PRINCIPAL")
+                    // Mutating enrollment endpoints – PRINCIPAL or TEACHER
+                    .requestMatchers(HttpMethod.POST,   "/enrollments/**").hasAnyRole("PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.PUT,    "/enrollments/**").hasAnyRole("PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.DELETE, "/enrollments/**").hasAnyRole("PRINCIPAL", "TEACHER")
 
                     // Read endpoints – any authenticated user
                     .requestMatchers(HttpMethod.GET, "/courses/**").authenticated()

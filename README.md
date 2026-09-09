@@ -257,7 +257,7 @@ UNPAID) with a matching payment and receipt.
 > seed migrations before any non-development deployment.
 
 The known BCrypt hash used for the seeded password `Admin@1234` is
-`$2a$10$N.wWIFnMHSbLxuOUJZBnkuoUqLpAHgJhHpNVU2jMqzO1X1Vu1QBWO`.
+`$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy`.
 
 ---
 
@@ -513,16 +513,42 @@ The following services are infrastructure — they support the application but c
 
 Run from the `docker/` directory:
 
+Clean start (wipes all Postgres data, re-runs init + seed scripts):
+
 ```bash
-docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana service-registry config-server
+cd docker
+docker compose down postgres
+docker volume rm docker_postgres-data
+docker compose up -d postgres
+```
+
+```bash
+docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana
 ```
 Useful when starting business services selectively, or running them locally from an IDE during development without starting the full stack.
 
 ```bash
+mvn clean package -DskipTests
+
 docker compose up -d service-registry config-server api-gateway auth-service
 ```
 
 ```bash
 docker compose up -d --no-deps user-service course-enrollment-service attendance-service scheduling-service payment-service notification-service reporting-service
+```
+
+```bash
+Clean-start command (run from the docker/ directory):
+
+docker compose down -v --remove-orphans && docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana
+
+- down -v stops/removes containers, the network, and all named volumes (postgres-data, kafka-data, redis-data, elasticsearch-data) — this is what guarantees Kafka and Zookeeper
+  reset together, so no cluster-ID mismatch.
+- --remove-orphans clears any leftover containers not in the current compose scope.
+- Then brings up only the 7 infra services fresh (Postgres re-runs its init + seed scripts on the empty volume).
+
+If you'd rather keep Postgres data but still reset Kafka/ZK cleanly (the mismatch only involves Kafka + Zookeeper):
+
+docker compose down --remove-orphans && docker volume rm docker_kafka-data && docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana
 ```
 

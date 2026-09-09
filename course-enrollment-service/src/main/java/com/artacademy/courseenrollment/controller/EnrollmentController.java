@@ -3,6 +3,7 @@ package com.artacademy.courseenrollment.controller;
 import com.artacademy.common.dto.ApiResponse;
 import com.artacademy.courseenrollment.dto.EnrollmentRequest;
 import com.artacademy.courseenrollment.dto.EnrollmentResponse;
+import com.artacademy.courseenrollment.dto.EnrollmentStatusRequest;
 import com.artacademy.courseenrollment.service.EnrollmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -62,9 +63,18 @@ public class EnrollmentController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Cancel (delete) an enrollment (PRINCIPAL only)")
+    @Operation(summary = "Cancel (delete) an enrollment (PRINCIPAL or TEACHER)")
     public ResponseEntity<ApiResponse<Void>> cancelEnrollment(@PathVariable("id") UUID id) {
         enrollmentService.cancelEnrollment(id);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PutMapping("/{id}/status")
+    @Operation(summary = "Update an enrollment's status (PRINCIPAL or TEACHER)")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> updateStatus(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody EnrollmentStatusRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                enrollmentService.updateStatus(id, request.getStatus())));
     }
 }

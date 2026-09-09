@@ -27,7 +27,6 @@ import TimetablePage from './pages/principal/TimetablePage';
 import RoomAvailabilityPage from './pages/principal/RoomAvailabilityPage';
 import ScheduleConflictsPage from './pages/principal/ScheduleConflictsPage';
 import SchedulePublishPage from './pages/principal/SchedulePublishPage';
-import ScheduleHistoryPage from './pages/principal/ScheduleHistoryPage';
 import AttendanceReportPage from './pages/principal/AttendanceReportPage';
 import AttendanceCorrectionsPage from './pages/principal/AttendanceCorrectionsPage';
 import TeacherAttendancePage from './pages/principal/TeacherAttendancePage';
@@ -46,6 +45,7 @@ import AssignedStudentsPage from './pages/teacher/AssignedStudentsPage';
 import FeeStatusPage from './pages/teacher/FeeStatusPage';
 import TeacherSchedulePage from './pages/teacher/TeacherSchedulePage';
 import AvailabilityExceptionsPage from './pages/teacher/AvailabilityExceptionsPage';
+import TeacherEnrollmentsPage from './pages/teacher/TeacherEnrollmentsPage';
 
 // Student
 import StudentDashboardPage from './pages/student/StudentDashboardPage';
@@ -112,7 +112,6 @@ const App: React.FC = () => {
         <Route path="room-availability" element={<RoomAvailabilityPage />} />
         <Route path="conflicts" element={<ScheduleConflictsPage />} />
         <Route path="schedule-publish" element={<SchedulePublishPage />} />
-        <Route path="schedule-history" element={<ScheduleHistoryPage />} />
         <Route path="attendance" element={<AttendanceReportPage />} />
         <Route path="teacher-attendance" element={<TeacherAttendancePage />} />
         <Route path="attendance-corrections" element={<AttendanceCorrectionsPage />} />
@@ -138,6 +137,7 @@ const App: React.FC = () => {
         <Route path="my-attendance" element={<MyAttendancePage />} />
         <Route path="corrections" element={<CorrectionsPage />} />
         <Route path="students" element={<AssignedStudentsPage />} />
+        <Route path="enrollments" element={<TeacherEnrollmentsPage />} />
         <Route path="fee-status" element={<FeeStatusPage />} />
         <Route path="schedule" element={<TeacherSchedulePage />} />
         <Route path="availability-exceptions" element={<AvailabilityExceptionsPage />} />

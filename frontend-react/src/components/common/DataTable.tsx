@@ -33,6 +33,7 @@ interface DataTableProps<T> {
   keyField?: keyof T;
   searchable?: boolean;
   searchPlaceholder?: string;
+  searchKeys?: (keyof T | string)[];
   emptyMessage?: string;
   rowsPerPageOptions?: number[];
   onRowClick?: (row: T) => void;
@@ -44,6 +45,7 @@ function DataTable<T extends Record<string, unknown>>({
   keyField = 'id' as keyof T,
   searchable = false,
   searchPlaceholder = 'Search...',
+  searchKeys,
   emptyMessage = 'No records found.',
   rowsPerPageOptions = [10, 25, 50],
   onRowClick,
@@ -55,11 +57,14 @@ function DataTable<T extends Record<string, unknown>>({
   const [order, setOrder] = useState<Order>('asc');
 
   const filteredRows = searchable && searchQuery
-    ? rows.filter(row =>
-        Object.values(row).some(val =>
+    ? rows.filter(row => {
+        const values = searchKeys && searchKeys.length > 0
+          ? searchKeys.map(key => row[key as keyof T])
+          : Object.values(row);
+        return values.some(val =>
           String(val ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      )
+        );
+      })
     : rows;
 
   const compare = (a: unknown, b: unknown): number => {

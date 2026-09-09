@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { Schedule, ScheduleConflict, ScheduleVersion, RoomAvailability, UpcomingClass } from '../../types';
+import { Schedule, ScheduleConflict, RoomAvailability, UpcomingClass } from '../../types';
 import scheduleService from '../../services/scheduleService';
 
 interface ScheduleState {
@@ -7,8 +7,6 @@ interface ScheduleState {
   teacherSchedules: Schedule[];
   studentSchedules: Schedule[];
   conflicts: ScheduleConflict[];
-  history: ScheduleVersion[];
-  selectedVersion: ScheduleVersion | null;
   roomAvailability: RoomAvailability | null;
   upcoming: UpcomingClass[];
   loading: boolean;
@@ -20,8 +18,6 @@ const initialState: ScheduleState = {
   teacherSchedules: [],
   studentSchedules: [],
   conflicts: [],
-  history: [],
-  selectedVersion: null,
   roomAvailability: null,
   upcoming: [],
   loading: false,
@@ -89,18 +85,6 @@ export const deleteSchedule = createAsyncThunk<string, string>(
   }
 );
 
-export const publishAllSchedules = createAsyncThunk<ScheduleVersion>(
-  'schedules/publishAll',
-  async (_, { rejectWithValue }) => {
-    try {
-      return await scheduleService.publishAll();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to publish schedules');
-    }
-  }
-);
-
 export const publishSchedule = createAsyncThunk<Schedule, string>(
   'schedules/publish',
   async (id, { rejectWithValue }) => {
@@ -133,30 +117,6 @@ export const fetchConflicts = createAsyncThunk<ScheduleConflict[]>(
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };
       return rejectWithValue(err.response?.data?.message || 'Failed to fetch conflicts');
-    }
-  }
-);
-
-export const fetchScheduleHistory = createAsyncThunk<ScheduleVersion[]>(
-  'schedules/fetchHistory',
-  async (_, { rejectWithValue }) => {
-    try {
-      return await scheduleService.getHistory();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch history');
-    }
-  }
-);
-
-export const fetchHistoryVersion = createAsyncThunk<ScheduleVersion, string>(
-  'schedules/fetchHistoryVersion',
-  async (versionId, { rejectWithValue }) => {
-    try {
-      return await scheduleService.getHistoryVersion(versionId);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch version');
     }
   }
 );
@@ -202,13 +162,6 @@ const scheduleSlice = createSlice({
       .addCase(deleteSchedule.fulfilled, (state, action) => {
         state.list = state.list.filter(s => s.id !== action.payload);
       })
-      .addCase(publishAllSchedules.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(publishAllSchedules.fulfilled, (state, action) => {
-        state.loading = false;
-        state.list = state.list.map(s => s.status === 'DRAFT' ? { ...s, status: 'PUBLISHED', publishedAt: action.payload.publishedAt } : s);
-        state.history = [action.payload, ...state.history];
-      })
-      .addCase(publishAllSchedules.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
       .addCase(publishSchedule.fulfilled, (state, action) => {
         state.list = state.list.map(s => s.id === action.payload.id ? action.payload : s);
       })
@@ -218,10 +171,6 @@ const scheduleSlice = createSlice({
       .addCase(fetchConflicts.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchConflicts.fulfilled, (state, action) => { state.loading = false; state.conflicts = action.payload; })
       .addCase(fetchConflicts.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
-      .addCase(fetchScheduleHistory.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchScheduleHistory.fulfilled, (state, action) => { state.loading = false; state.history = action.payload; })
-      .addCase(fetchScheduleHistory.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
-      .addCase(fetchHistoryVersion.fulfilled, (state, action) => { state.selectedVersion = action.payload; })
       .addCase(fetchRoomAvailability.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchRoomAvailability.fulfilled, (state, action) => { state.loading = false; state.roomAvailability = action.payload; })
       .addCase(fetchRoomAvailability.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })

@@ -13,6 +13,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import EditNoteIcon from '@mui/icons-material/EditNote';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import PeopleIcon from '@mui/icons-material/People';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import ScheduleIcon from '@mui/icons-material/Schedule';
@@ -25,6 +26,7 @@ const navItems = [
   { label: 'Mark Attendance', icon: <EventNoteIcon />, path: '/teacher/attendance' },
   { label: 'My Attendance', icon: <EventAvailableIcon />, path: '/teacher/my-attendance' },
   { label: 'Corrections', icon: <EditNoteIcon />, path: '/teacher/corrections' },
+  { label: 'Enrollments', icon: <AssignmentIcon />, path: '/teacher/enrollments' },
   { label: 'My Students', icon: <PeopleIcon />, path: '/teacher/students' },
   { label: 'Fee Status', icon: <AttachMoneyIcon />, path: '/teacher/fee-status' },
   { label: 'Schedule', icon: <ScheduleIcon />, path: '/teacher/schedule' },

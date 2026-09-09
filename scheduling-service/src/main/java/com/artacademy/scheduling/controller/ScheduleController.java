@@ -4,7 +4,6 @@ import com.artacademy.scheduling.dto.GenerateScheduleRequest;
 import com.artacademy.scheduling.dto.ScheduleConflictResponse;
 import com.artacademy.scheduling.dto.ScheduleRequest;
 import com.artacademy.scheduling.dto.ScheduleResponse;
-import com.artacademy.scheduling.dto.ScheduleVersionResponse;
 import com.artacademy.scheduling.dto.UpcomingClassResponse;
 import com.artacademy.scheduling.service.ScheduleService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -71,13 +70,6 @@ public class ScheduleController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/publish")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Publish all draft schedules and snapshot the timetable")
-    public ResponseEntity<ScheduleVersionResponse> publishAll() {
-        return ResponseEntity.ok(scheduleService.publishAll());
-    }
-
     @PostMapping("/{id}/publish")
     @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Publish a single schedule")
@@ -90,20 +82,6 @@ public class ScheduleController {
     @Operation(summary = "Unpublish a single schedule (back to draft)")
     public ResponseEntity<ScheduleResponse> unpublish(@PathVariable("id") UUID id) {
         return ResponseEntity.ok(scheduleService.unpublish(id));
-    }
-
-    @GetMapping("/history")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "List published schedule versions")
-    public ResponseEntity<List<ScheduleVersionResponse>> getHistory() {
-        return ResponseEntity.ok(scheduleService.getHistory());
-    }
-
-    @GetMapping("/history/{versionId}")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Get a published schedule version with its entries")
-    public ResponseEntity<ScheduleVersionResponse> getHistoryVersion(@PathVariable("versionId") UUID versionId) {
-        return ResponseEntity.ok(scheduleService.getHistoryVersion(versionId));
     }
 
     @GetMapping("/conflicts")
@@ -126,6 +104,12 @@ public class ScheduleController {
     @Operation(summary = "Get schedules for a teacher")
     public ResponseEntity<List<ScheduleResponse>> getByTeacher(@PathVariable("teacherId") UUID teacherId) {
         return ResponseEntity.ok(scheduleService.getByTeacher(teacherId));
+    }
+
+    @GetMapping("/class/{classId}")
+    @Operation(summary = "Get schedules for a class")
+    public ResponseEntity<List<ScheduleResponse>> getByClass(@PathVariable("classId") UUID classId) {
+        return ResponseEntity.ok(scheduleService.getByClass(classId));
     }
 
     @GetMapping("/student/{studentId}")

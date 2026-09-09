@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Data
@@ -32,6 +33,10 @@ public class ClassRequest {
 
     @Positive(message = "Capacity must be greater than zero")
     private Integer capacity;
+
+    private LocalDate startDate;
+
+    private LocalDate endDate;
 
     @NotBlank(message = "Status is required")
     private String status;

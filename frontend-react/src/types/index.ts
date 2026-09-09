@@ -96,6 +96,8 @@ export interface CourseClass {
   roomId?: string;
   roomName?: string;
   capacity: number;
+  startDate?: string;
+  endDate?: string;
   status: string;
 }
 
@@ -241,26 +243,6 @@ export interface ScheduleConflict {
   roomId: string;
   classId: string;
   description: string;
-}
-
-export interface ScheduleVersionEntry {
-  scheduleId: string;
-  classId: string;
-  teacherId: string;
-  roomId: string;
-  roomName?: string;
-  dayOfWeek: string;
-  startTime: string;
-  endTime: string;
-}
-
-export interface ScheduleVersion {
-  id: string;
-  versionNumber: number;
-  publishedAt: string;
-  publishedBy?: string;
-  entryCount: number;
-  entries?: ScheduleVersionEntry[];
 }
 
 export interface UpcomingClass {

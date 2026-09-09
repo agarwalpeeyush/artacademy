@@ -62,6 +62,11 @@ const courseService = {
     const response = await api.get('/classes');
     return toArray(unwrap(response)).filter((c: any) => c.teacherId === teacherId);
   },
+
+  getClassesByTeacherRemote: async (teacherId: string): Promise<CourseClass[]> => {
+    const response = await api.get(`/classes/teacher/${teacherId}`);
+    return toArray(unwrap(response));
+  },
 };
 
 export default courseService;

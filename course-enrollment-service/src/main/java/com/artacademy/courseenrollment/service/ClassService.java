@@ -21,6 +21,8 @@ import java.util.UUID;
 @Transactional
 public class ClassService {
 
+    private static final String STATUS_ACTIVE = "ACTIVE";
+
     private final CourseClassRepository courseClassRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final ClassMapper classMapper;
@@ -37,6 +39,14 @@ public class ClassService {
     public ClassResponse getClassById(UUID id) {
         CourseClass courseClass = findClassById(id);
         return classMapper.toResponse(courseClass);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ClassResponse> getClassesByTeacher(UUID teacherId) {
+        return courseClassRepository.findByTeacherId(teacherId)
+                .stream()
+                .map(classMapper::toResponse)
+                .toList();
     }
 
     public ClassResponse createClass(ClassRequest request) {
@@ -56,7 +66,7 @@ public class ClassService {
 
         CourseClass courseClass = findClassById(id);
 
-        long currentEnrollments = enrollmentRepository.countByClassId(id);
+        long currentEnrollments = enrollmentRepository.countByClassIdAndStatus(id, STATUS_ACTIVE);
         if (request.getCapacity() < currentEnrollments) {
             throw ApiException.badRequest(
                     "New capacity (" + request.getCapacity() + ") is less than current enrollment count ("
@@ -71,11 +81,11 @@ public class ClassService {
 
     public void deleteClass(UUID id) {
         CourseClass courseClass = findClassById(id);
-        long currentEnrollments = enrollmentRepository.countByClassId(id);
+        long currentEnrollments = enrollmentRepository.countByClassIdAndStatus(id, STATUS_ACTIVE);
         if (currentEnrollments > 0) {
             throw ApiException.conflict(
                     "Cannot delete class because " + currentEnrollments
-                    + " enrollment(s) still reference it. Cancel those enrollments first.");
+                    + " active enrollment(s) still reference it. Cancel those enrollments first.");
         }
         courseClassRepository.delete(courseClass);
         log.info("Deleted class id={}", id);

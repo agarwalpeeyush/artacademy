@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -29,6 +30,9 @@ import java.util.UUID;
 public class EnrollmentService {
 
     private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String STATUS_CANCELLED = "CANCELLED";
+    private static final Set<String> ALLOWED_STATUSES =
+            Set.of("ACTIVE", "COMPLETED", "DROPPED", "SUSPENDED", "CANCELLED");
 
     private final EnrollmentRepository enrollmentRepository;
     private final CourseClassRepository courseClassRepository;
@@ -46,7 +50,7 @@ public class EnrollmentService {
         CourseClass courseClass = courseClassRepository.findById(request.getClassId())
                 .orElseThrow(() -> ApiException.notFound("Class not found with id: " + request.getClassId()));
 
-        long enrolledCount = enrollmentRepository.countByClassId(request.getClassId());
+        long enrolledCount = enrollmentRepository.countByClassIdAndStatus(request.getClassId(), STATUS_ACTIVE);
         if (enrolledCount >= courseClass.getCapacity()) {
             throw ApiException.badRequest(
                     "Class id=" + request.getClassId() + " has reached its maximum capacity of "
@@ -81,11 +85,16 @@ public class EnrollmentService {
         Enrollment enrollment = enrollmentRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Enrollment not found with id: " + id));
 
+        if (STATUS_CANCELLED.equals(enrollment.getStatus())) {
+            throw ApiException.conflict("Enrollment id=" + id + " is already cancelled");
+        }
+
         UUID studentId = enrollment.getStudentId();
         UUID courseId = enrollment.getCourseId();
 
-        enrollmentRepository.delete(enrollment);
-        log.info("Cancelled (deleted) enrollment id={}", id);
+        enrollment.setStatus(STATUS_CANCELLED);
+        enrollmentRepository.save(enrollment);
+        log.info("Cancelled enrollment id={} (status=CANCELLED)", id);
 
         EnrollmentCancelledEvent event = EnrollmentCancelledEvent.builder()
                 .enrollmentId(id)
@@ -96,6 +105,23 @@ public class EnrollmentService {
 
         kafkaTemplate.send(KafkaTopics.ENROLLMENT_CANCELLED, String.valueOf(id), event);
         log.info("Published EnrollmentCancelledEvent for enrollment id={}", id);
+    }
+
+    public EnrollmentResponse updateStatus(UUID id, String status) {
+        String normalized = status == null ? null : status.trim().toUpperCase();
+        if (normalized == null || !ALLOWED_STATUSES.contains(normalized)) {
+            throw ApiException.badRequest(
+                    "Invalid status '" + status + "'. Allowed values: " + ALLOWED_STATUSES);
+        }
+
+        Enrollment enrollment = enrollmentRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Enrollment not found with id: " + id));
+
+        enrollment.setStatus(normalized);
+        Enrollment updated = enrollmentRepository.save(enrollment);
+        log.info("Updated enrollment id={} status={}", id, normalized);
+
+        return enrollmentMapper.toResponse(updated);
     }
 
     @Transactional(readOnly = true)

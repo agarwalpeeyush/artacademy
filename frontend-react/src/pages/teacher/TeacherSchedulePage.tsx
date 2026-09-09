@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, Chip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
@@ -6,6 +6,8 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
+import courseService from '../../services/courseService';
+import { CourseClass } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { getDayName, formatTime } from '../../utils/formatters';
@@ -16,11 +18,18 @@ const TeacherSchedulePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { teacherSchedules, loading } = useSelector((state: RootState) => state.schedules);
+  const [classes, setClasses] = useState<CourseClass[]>([]);
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
 
   useEffect(() => {
     if (user?.id) dispatch(fetchTeacherSchedules(user.id));
+    courseService.getAllClasses().then(setClasses).catch(() => setClasses([]));
   }, [dispatch, user]);
+
+  const classNameById = useMemo(
+    () => new Map(classes.map(c => [c.id, c.className])),
+    [classes],
+  );
 
   if (loading) return <LoadingSpinner />;
 
@@ -62,7 +71,7 @@ const TeacherSchedulePage: React.FC = () => {
                         {day === today && <Chip label="Today" color="primary" size="small" sx={{ ml: 1 }} />}
                       </TableCell>
                     )}
-                    <TableCell>{s.className}</TableCell>
+                    <TableCell>{s.className || classNameById.get(s.classId) || '-'}</TableCell>
                     <TableCell>{s.courseName || '-'}</TableCell>
                     <TableCell>
                       <strong>{formatTime(s.startTime)}</strong> – {formatTime(s.endTime)}

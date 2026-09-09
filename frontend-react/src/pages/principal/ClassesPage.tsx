@@ -27,6 +27,13 @@ const schema = yup.object({
   className: yup.string().required('Class name is required'),
   roomId: yup.string().optional(),
   capacity: yup.number().required('Capacity is required').min(1),
+  startDate: yup.string().optional(),
+  endDate: yup.string().optional()
+    .test('after-start', 'End date must be on or after start date', function (value) {
+      const { startDate } = this.parent;
+      if (!value || !startDate) return true;
+      return value >= startDate;
+    }),
   status: yup.string().required('Status is required'),
 });
 
@@ -36,6 +43,8 @@ type ClassFormData = {
   className: string;
   roomId?: string;
   capacity: number;
+  startDate?: string;
+  endDate?: string;
   status: string;
 };
 
@@ -72,7 +81,7 @@ const ClassesPage: React.FC = () => {
   };
 
   const emptyForm: ClassFormData = {
-    courseId: '', teacherId: '', className: '', roomId: '', capacity: 20, status: 'ACTIVE',
+    courseId: '', teacherId: '', className: '', roomId: '', capacity: 20, startDate: '', endDate: '', status: 'ACTIVE',
   };
 
   const handleAdd = () => {
@@ -89,6 +98,8 @@ const ClassesPage: React.FC = () => {
       className: cls.className,
       roomId: cls.roomId || '',
       capacity: cls.capacity,
+      startDate: cls.startDate || '',
+      endDate: cls.endDate || '',
       status: cls.status,
     });
     setDialogOpen(true);
@@ -97,7 +108,12 @@ const ClassesPage: React.FC = () => {
   const handleSubmitForm = async (data: ClassFormData) => {
     try {
       const room = rooms.find(r => r.id === data.roomId);
-      const payload = { ...data, roomName: room?.roomName || '' };
+      const payload = {
+        ...data,
+        roomName: room?.roomName || '',
+        startDate: data.startDate || undefined,
+        endDate: data.endDate || undefined,
+      };
       if (editing) {
         await courseService.updateClass(editing.id, payload);
         setSnackbar({ open: true, message: 'Class updated successfully', severity: 'success' });
@@ -139,6 +155,14 @@ const ClassesPage: React.FC = () => {
     },
     { id: 'roomName', label: 'Room', minWidth: 120, format: (v, row) => (v as string) || (row as unknown as CourseClass).roomNumber || '—' },
     { id: 'capacity', label: 'Capacity', minWidth: 80, align: 'center' },
+    {
+      id: 'startDate', label: 'Duration', minWidth: 160, sortable: false,
+      format: (_v, row) => {
+        const cls = row as unknown as CourseClass;
+        if (!cls.startDate && !cls.endDate) return '—';
+        return `${cls.startDate || '…'} → ${cls.endDate || '…'}`;
+      },
+    },
     { id: 'status', label: 'Status', minWidth: 80, format: (v) => <Chip label={v as string} color={v === 'ACTIVE' ? 'success' : 'default'} size="small" /> },
     {
       id: 'actions', label: 'Actions', minWidth: 100, align: 'center',
@@ -210,6 +234,16 @@ const ClassesPage: React.FC = () => {
                     <MenuItem value="ACTIVE">Active</MenuItem>
                     <MenuItem value="INACTIVE">Inactive</MenuItem>
                   </TextField>
+                )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="startDate" control={control} render={({ field }) => (
+                  <TextField {...field} label="Start Date (optional)" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.startDate} helperText={errors.startDate?.message} />
+                )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="endDate" control={control} render={({ field }) => (
+                  <TextField {...field} label="End Date (optional)" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.endDate} helperText={errors.endDate?.message} />
                 )} />
               </Grid>
             </Grid>

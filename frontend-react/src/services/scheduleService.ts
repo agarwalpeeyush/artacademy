@@ -1,5 +1,5 @@
 import api from './api';
-import { Schedule, RoomAvailability, ScheduleConflict, ScheduleVersion, UpcomingClass } from '../types';
+import { Schedule, RoomAvailability, ScheduleConflict, UpcomingClass } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 const toArray = (d: any): any[] => (Array.isArray(d) ? d : d?.content ?? []);
@@ -71,11 +71,6 @@ const scheduleService = {
     return response.data;
   },
 
-  publishAll: async (): Promise<ScheduleVersion> => {
-    const response = await api.post('/schedules/publish');
-    return unwrap(response) as ScheduleVersion;
-  },
-
   publish: async (id: string): Promise<Schedule> => {
     const response = await api.post(`/schedules/${id}/publish`);
     return norm(unwrap(response));
@@ -94,16 +89,6 @@ const scheduleService = {
   getRoomAvailability: async (roomId: string, date: string): Promise<RoomAvailability> => {
     const response = await api.get(`/rooms/${roomId}/availability?date=${date}`);
     return unwrap(response) as RoomAvailability;
-  },
-
-  getHistory: async (): Promise<ScheduleVersion[]> => {
-    const response = await api.get('/schedules/history');
-    return toArray(unwrap(response)) as ScheduleVersion[];
-  },
-
-  getHistoryVersion: async (versionId: string): Promise<ScheduleVersion> => {
-    const response = await api.get(`/schedules/history/${versionId}`);
-    return unwrap(response) as ScheduleVersion;
   },
 
   getUpcoming: async (classIds: string[], limit = 10): Promise<UpcomingClass[]> => {

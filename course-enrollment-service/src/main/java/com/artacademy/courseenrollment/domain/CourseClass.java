@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -67,6 +68,12 @@ public class CourseClass {
 
     @Column(name = "CAPACITY")
     private Integer capacity;
+
+    @Column(name = "START_DATE")
+    private LocalDate startDate;
+
+    @Column(name = "END_DATE")
+    private LocalDate endDate;
 
     @Column(name = "STATUS", nullable = false)
     private String status;
