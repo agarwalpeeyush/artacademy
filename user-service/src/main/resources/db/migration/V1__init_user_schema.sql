@@ -1,54 +1,79 @@
--- V1__init_user_schema.sql
--- Initial schema for user-service: teachers, students, teacher_availability
+-- User service schema (user_db). JOINED inheritance: USERS base + STUDENTS/TEACHERS/PARENTS.
 
-CREATE TABLE IF NOT EXISTS teachers
-(
-    id             BIGSERIAL    PRIMARY KEY,
-    user_id        BIGINT,
-    employee_code  VARCHAR(50)  NOT NULL UNIQUE,
-    name           VARCHAR(255) NOT NULL,
-    email          VARCHAR(255),
-    phone          VARCHAR(50),
-    qualification  VARCHAR(500),
-    joining_date   DATE,
-    status         VARCHAR(50)  NOT NULL
+CREATE TABLE USERS (
+    ID         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    USER_TYPE  VARCHAR(31) NOT NULL,
+    LOGIN_ID   VARCHAR(255) UNIQUE,
+    FIRST_NAME VARCHAR(255) NOT NULL,
+    LAST_NAME  VARCHAR(255)
 );
 
-CREATE INDEX IF NOT EXISTS idx_teachers_user_id       ON teachers (user_id);
-CREATE INDEX IF NOT EXISTS idx_teachers_employee_code ON teachers (employee_code);
+CREATE INDEX idx_users_login_id ON USERS (LOGIN_ID);
 
--- ----------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS students
-(
-    id               BIGSERIAL    PRIMARY KEY,
-    user_id          BIGINT,
-    admission_number VARCHAR(50)  NOT NULL UNIQUE,
-    name             VARCHAR(255) NOT NULL,
-    dob              DATE,
-    father_name      VARCHAR(255),
-    mother_name      VARCHAR(255),
-    guardian_name    VARCHAR(255),
-    email            VARCHAR(255),
-    phone            VARCHAR(50),
-    address          TEXT,
-    status           VARCHAR(50)  NOT NULL
+CREATE TABLE STUDENTS (
+    ID              UUID PRIMARY KEY,
+    DATE_OF_BIRTH   DATE,
+    FATHER_NAME     VARCHAR(255),
+    FATHER_PHONE    VARCHAR(255),
+    MOTHER_NAME     VARCHAR(255),
+    MOTHER_PHONE    VARCHAR(255),
+    GUARDIAN_NAME   VARCHAR(255),
+    GUARDIAN_PHONE  VARCHAR(255),
+    EMAIL           VARCHAR(255),
+    ADDRESS         TEXT,
+    ENROLLMENT_DATE DATE,
+    STATUS          VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_students_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_students_user_id          ON students (user_id);
-CREATE INDEX IF NOT EXISTS idx_students_admission_number ON students (admission_number);
-
--- ----------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS teacher_availability
-(
-    id           BIGSERIAL   PRIMARY KEY,
-    teacher_id   BIGINT      NOT NULL,
-    day_of_week  VARCHAR(20) NOT NULL,
-    start_time   TIME        NOT NULL,
-    end_time     TIME        NOT NULL,
-    CONSTRAINT fk_availability_teacher
-        FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE CASCADE
+CREATE TABLE TEACHERS (
+    ID            UUID PRIMARY KEY,
+    EMPLOYEE_CODE VARCHAR(50) UNIQUE,
+    EMAIL         VARCHAR(255),
+    PHONE         VARCHAR(255),
+    QUALIFICATION VARCHAR(255),
+    JOINING_DATE  DATE,
+    STATUS        VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_teachers_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_availability_teacher_id ON teacher_availability (teacher_id);
+CREATE INDEX idx_teachers_employee_code ON TEACHERS (EMPLOYEE_CODE);
+
+CREATE TABLE PARENTS (
+    ID           UUID PRIMARY KEY,
+    RELATIONSHIP VARCHAR(255),
+    PHONE        VARCHAR(255),
+    EMAIL        VARCHAR(255),
+    ADDRESS      TEXT,
+    OCCUPATION   VARCHAR(255),
+    STUDENT_ID   UUID,
+    STATUS       VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_parents_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE,
+    CONSTRAINT fk_parents_student FOREIGN KEY (STUDENT_ID) REFERENCES STUDENTS (ID)
+);
+
+CREATE INDEX idx_parents_student_id ON PARENTS (STUDENT_ID);
+
+CREATE TABLE TEACHER_AVAILABILITY (
+    ID          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TEACHER_ID  UUID NOT NULL,
+    DAY_OF_WEEK VARCHAR(255),
+    START_TIME  TIME,
+    END_TIME    TIME,
+    CONSTRAINT fk_availability_teacher FOREIGN KEY (TEACHER_ID) REFERENCES TEACHERS (ID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_availability_teacher_id ON TEACHER_AVAILABILITY (TEACHER_ID);
+
+CREATE TABLE TEACHER_AVAILABILITY_EXCEPTIONS (
+    ID                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TEACHER_ID          UUID NOT NULL,
+    EXCEPTION_DATE      DATE NOT NULL,
+    REASON              VARCHAR(255),
+    UNAVAILABLE_ALL_DAY BOOLEAN NOT NULL,
+    START_TIME          TIME,
+    END_TIME            TIME,
+    CONSTRAINT fk_availability_exceptions_teacher FOREIGN KEY (TEACHER_ID) REFERENCES TEACHERS (ID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_availability_exceptions_teacher_id ON TEACHER_AVAILABILITY_EXCEPTIONS (TEACHER_ID);

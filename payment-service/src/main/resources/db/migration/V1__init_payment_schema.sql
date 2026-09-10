@@ -1,151 +1,74 @@
--- V1__init_payment_schema.sql
--- Payment Service schema: fee cycles, fee details, payments, allocations, enrollment cache
+-- Payment service schema (payment_db).
 
--- ============================================================
--- enrollment_cache
--- Local mirror of active enrollments consumed from Kafka
--- ============================================================
-CREATE TABLE IF NOT EXISTS enrollment_cache (
-    enrollment_id   BIGINT          NOT NULL,
-    student_id      BIGINT          NOT NULL,
-    course_id       BIGINT          NOT NULL,
-    course_fee      NUMERIC(12, 2)  NOT NULL DEFAULT 0,
-    status          VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
-    CONSTRAINT pk_enrollment_cache PRIMARY KEY (enrollment_id),
-    CONSTRAINT chk_enrollment_cache_status CHECK (status IN ('ACTIVE', 'CANCELLED'))
+CREATE TABLE ENROLLMENT_CACHE (
+    ENROLLMENT_ID UUID PRIMARY KEY,
+    STUDENT_ID    UUID NOT NULL,
+    COURSE_ID     UUID NOT NULL,
+    COURSE_FEE    NUMERIC(12, 2) NOT NULL,
+    STATUS        VARCHAR(20) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_enrollment_cache_student_id
-    ON enrollment_cache (student_id);
+CREATE INDEX idx_enrollment_cache_student_id ON ENROLLMENT_CACHE (STUDENT_ID);
+CREATE INDEX idx_enrollment_cache_status ON ENROLLMENT_CACHE (STATUS);
 
-CREATE INDEX IF NOT EXISTS idx_enrollment_cache_status
-    ON enrollment_cache (status);
-
--- ============================================================
--- student_fee_cycles
--- One record per student per billing month/year
--- ============================================================
-CREATE TABLE IF NOT EXISTS student_fee_cycles (
-    id                  BIGSERIAL       NOT NULL,
-    student_id          BIGINT          NOT NULL,
-    billing_month       INT             NOT NULL,
-    billing_year        INT             NOT NULL,
-    total_amount        NUMERIC(12, 2)  NOT NULL,
-    paid_amount         NUMERIC(12, 2)  NOT NULL DEFAULT 0,
-    outstanding_amount  NUMERIC(12, 2)  NOT NULL,
-    status              VARCHAR(20)     NOT NULL DEFAULT 'UNPAID',
-    generated_date      TIMESTAMP,
-    due_date            TIMESTAMP,
-    CONSTRAINT pk_student_fee_cycles PRIMARY KEY (id),
-    CONSTRAINT uq_student_fee_cycles_student_month_year
-        UNIQUE (student_id, billing_month, billing_year),
-    CONSTRAINT chk_student_fee_cycles_status
-        CHECK (status IN ('PAID', 'PARTIAL', 'UNPAID')),
-    CONSTRAINT chk_student_fee_cycles_billing_month
-        CHECK (billing_month BETWEEN 1 AND 12),
-    CONSTRAINT chk_student_fee_cycles_billing_year
-        CHECK (billing_year >= 2000),
-    CONSTRAINT chk_student_fee_cycles_total_amount
-        CHECK (total_amount >= 0),
-    CONSTRAINT chk_student_fee_cycles_paid_amount
-        CHECK (paid_amount >= 0),
-    CONSTRAINT chk_student_fee_cycles_outstanding_amount
-        CHECK (outstanding_amount >= 0)
+CREATE TABLE STUDENT_FEE_CYCLES (
+    ID                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ID         UUID NOT NULL,
+    BILLING_MONTH      INTEGER NOT NULL,
+    BILLING_YEAR       INTEGER NOT NULL,
+    TOTAL_AMOUNT       NUMERIC(12, 2) NOT NULL,
+    PAID_AMOUNT        NUMERIC(12, 2) NOT NULL,
+    OUTSTANDING_AMOUNT NUMERIC(12, 2) NOT NULL,
+    STATUS             VARCHAR(20) NOT NULL,
+    GENERATED_DATE     TIMESTAMP,
+    DUE_DATE           TIMESTAMP,
+    CONSTRAINT uq_student_fee_cycles_student_month_year UNIQUE (STUDENT_ID, BILLING_MONTH, BILLING_YEAR)
 );
 
-CREATE INDEX IF NOT EXISTS idx_student_fee_cycles_student_id
-    ON student_fee_cycles (student_id);
+CREATE INDEX idx_fee_cycles_student_id ON STUDENT_FEE_CYCLES (STUDENT_ID);
+CREATE INDEX idx_fee_cycles_status ON STUDENT_FEE_CYCLES (STATUS);
+CREATE INDEX idx_fee_cycles_student_status ON STUDENT_FEE_CYCLES (STUDENT_ID, STATUS);
 
-CREATE INDEX IF NOT EXISTS idx_student_fee_cycles_status
-    ON student_fee_cycles (status);
-
-CREATE INDEX IF NOT EXISTS idx_student_fee_cycles_student_status
-    ON student_fee_cycles (student_id, status);
-
--- ============================================================
--- student_fee_details
--- One record per enrollment per fee cycle
--- ============================================================
-CREATE TABLE IF NOT EXISTS student_fee_details (
-    id                      BIGSERIAL       NOT NULL,
-    fee_cycle_id            BIGINT          NOT NULL,
-    student_id              BIGINT          NOT NULL,
-    enrollment_id           BIGINT          NOT NULL,
-    course_id               BIGINT          NOT NULL,
-    course_fee              NUMERIC(12, 2)  NOT NULL,
-    allocated_paid_amount   NUMERIC(12, 2)  NOT NULL DEFAULT 0,
-    outstanding_amount      NUMERIC(12, 2)  NOT NULL,
-    status                  VARCHAR(20)     NOT NULL DEFAULT 'UNPAID',
-    CONSTRAINT pk_student_fee_details PRIMARY KEY (id),
-    CONSTRAINT fk_student_fee_details_cycle
-        FOREIGN KEY (fee_cycle_id) REFERENCES student_fee_cycles (id) ON DELETE CASCADE,
-    CONSTRAINT uq_student_fee_details_cycle_enrollment
-        UNIQUE (fee_cycle_id, enrollment_id),
-    CONSTRAINT chk_student_fee_details_status
-        CHECK (status IN ('PAID', 'PARTIAL', 'UNPAID')),
-    CONSTRAINT chk_student_fee_details_course_fee
-        CHECK (course_fee >= 0),
-    CONSTRAINT chk_student_fee_details_allocated_paid_amount
-        CHECK (allocated_paid_amount >= 0),
-    CONSTRAINT chk_student_fee_details_outstanding_amount
-        CHECK (outstanding_amount >= 0)
+CREATE TABLE STUDENT_FEE_DETAILS (
+    ID                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    FEE_CYCLE_ID          UUID NOT NULL,
+    STUDENT_ID            UUID NOT NULL,
+    ENROLLMENT_ID         UUID NOT NULL,
+    COURSE_ID             UUID NOT NULL,
+    COURSE_FEE            NUMERIC(12, 2) NOT NULL,
+    ALLOCATED_PAID_AMOUNT NUMERIC(12, 2) NOT NULL,
+    OUTSTANDING_AMOUNT    NUMERIC(12, 2) NOT NULL,
+    STATUS                VARCHAR(20) NOT NULL,
+    CONSTRAINT uq_student_fee_details_cycle_enrollment UNIQUE (FEE_CYCLE_ID, ENROLLMENT_ID),
+    CONSTRAINT fk_fee_details_cycle FOREIGN KEY (FEE_CYCLE_ID) REFERENCES STUDENT_FEE_CYCLES (ID) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_student_fee_details_fee_cycle_id
-    ON student_fee_details (fee_cycle_id);
+CREATE INDEX idx_fee_details_cycle_id ON STUDENT_FEE_DETAILS (FEE_CYCLE_ID);
+CREATE INDEX idx_fee_details_student_id ON STUDENT_FEE_DETAILS (STUDENT_ID);
 
-CREATE INDEX IF NOT EXISTS idx_student_fee_details_student_id
-    ON student_fee_details (student_id);
-
-CREATE INDEX IF NOT EXISTS idx_student_fee_details_enrollment_id
-    ON student_fee_details (enrollment_id);
-
--- ============================================================
--- payments
--- A single payment transaction by a student
--- ============================================================
-CREATE TABLE IF NOT EXISTS payments (
-    id                      BIGSERIAL       NOT NULL,
-    fee_cycle_id            BIGINT          NOT NULL,
-    student_id              BIGINT          NOT NULL,
-    amount                  NUMERIC(12, 2)  NOT NULL,
-    payment_mode            VARCHAR(50)     NOT NULL,
-    transaction_reference   VARCHAR(200),
-    payment_date            TIMESTAMP,
-    remarks                 TEXT,
-    CONSTRAINT pk_payments PRIMARY KEY (id),
-    CONSTRAINT fk_payments_fee_cycle
-        FOREIGN KEY (fee_cycle_id) REFERENCES student_fee_cycles (id),
-    CONSTRAINT chk_payments_amount
-        CHECK (amount > 0)
+CREATE TABLE PAYMENTS (
+    ID                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    FEE_CYCLE_ID          UUID NOT NULL,
+    STUDENT_ID            UUID NOT NULL,
+    AMOUNT                NUMERIC(12, 2) NOT NULL,
+    PAYMENT_MODE          VARCHAR(50) NOT NULL,
+    TRANSACTION_REFERENCE VARCHAR(200),
+    PAYMENT_DATE          TIMESTAMP,
+    REMARKS               TEXT,
+    CONSTRAINT fk_payments_cycle FOREIGN KEY (FEE_CYCLE_ID) REFERENCES STUDENT_FEE_CYCLES (ID)
 );
 
-CREATE INDEX IF NOT EXISTS idx_payments_student_id
-    ON payments (student_id);
+CREATE INDEX idx_payments_cycle_id ON PAYMENTS (FEE_CYCLE_ID);
+CREATE INDEX idx_payments_student_id ON PAYMENTS (STUDENT_ID);
 
-CREATE INDEX IF NOT EXISTS idx_payments_fee_cycle_id
-    ON payments (fee_cycle_id);
-
--- ============================================================
--- payment_allocations
--- How a payment is split across individual fee detail lines
--- ============================================================
-CREATE TABLE IF NOT EXISTS payment_allocations (
-    id                  BIGSERIAL       NOT NULL,
-    payment_id          BIGINT          NOT NULL,
-    fee_detail_id       BIGINT          NOT NULL,
-    allocated_amount    NUMERIC(12, 2)  NOT NULL,
-    CONSTRAINT pk_payment_allocations PRIMARY KEY (id),
-    CONSTRAINT fk_payment_allocations_payment
-        FOREIGN KEY (payment_id) REFERENCES payments (id) ON DELETE CASCADE,
-    CONSTRAINT fk_payment_allocations_fee_detail
-        FOREIGN KEY (fee_detail_id) REFERENCES student_fee_details (id),
-    CONSTRAINT chk_payment_allocations_allocated_amount
-        CHECK (allocated_amount > 0)
+CREATE TABLE PAYMENT_ALLOCATIONS (
+    ID               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    PAYMENT_ID       UUID NOT NULL,
+    FEE_DETAIL_ID    UUID NOT NULL,
+    ALLOCATED_AMOUNT NUMERIC(12, 2) NOT NULL,
+    CONSTRAINT fk_allocations_payment FOREIGN KEY (PAYMENT_ID) REFERENCES PAYMENTS (ID) ON DELETE CASCADE,
+    CONSTRAINT fk_allocations_fee_detail FOREIGN KEY (FEE_DETAIL_ID) REFERENCES STUDENT_FEE_DETAILS (ID)
 );
 
-CREATE INDEX IF NOT EXISTS idx_payment_allocations_payment_id
-    ON payment_allocations (payment_id);
-
-CREATE INDEX IF NOT EXISTS idx_payment_allocations_fee_detail_id
-    ON payment_allocations (fee_detail_id);
+CREATE INDEX idx_allocations_payment_id ON PAYMENT_ALLOCATIONS (PAYMENT_ID);
+CREATE INDEX idx_allocations_fee_detail_id ON PAYMENT_ALLOCATIONS (FEE_DETAIL_ID);

@@ -1,38 +1,60 @@
--- V1__init_attendance_schema.sql
--- Initial schema for attendance-service: teacher_attendance, student_attendance
+-- Attendance service schema (attendance_db).
 
-CREATE TABLE IF NOT EXISTS teacher_attendance
-(
-    id              BIGSERIAL    PRIMARY KEY,
-    teacher_id      BIGINT       NOT NULL,
-    attendance_date DATE         NOT NULL,
-    status          VARCHAR(20)  NOT NULL,
-    remarks         TEXT
+CREATE TABLE CLASS_SESSION (
+    ID           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    CLASS_ID     UUID NOT NULL,
+    COURSE_ID    UUID,
+    SESSION_DATE DATE NOT NULL,
+    START_TIME   TIME,
+    END_TIME     TIME,
+    STATUS       VARCHAR(20) NOT NULL,
+    CONSTRAINT uq_class_session_class_date UNIQUE (CLASS_ID, SESSION_DATE)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_teacher_attendance_teacher_date
-    ON teacher_attendance (teacher_id, attendance_date);
+CREATE INDEX idx_class_session_class_id ON CLASS_SESSION (CLASS_ID);
 
-CREATE INDEX IF NOT EXISTS idx_teacher_attendance_date
-    ON teacher_attendance (attendance_date);
-
--- ----------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS student_attendance
-(
-    id              BIGSERIAL    PRIMARY KEY,
-    student_id      BIGINT       NOT NULL,
-    class_id        BIGINT       NOT NULL,
-    attendance_date DATE         NOT NULL,
-    status          VARCHAR(20)  NOT NULL,
-    remarks         TEXT
+CREATE TABLE STUDENT_ATTENDANCE (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ID      UUID NOT NULL,
+    CLASS_ID        UUID NOT NULL,
+    COURSE_ID       UUID,
+    SESSION_ID      UUID,
+    ATTENDANCE_DATE DATE NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    REMARKS         TEXT,
+    CONSTRAINT uq_student_attendance UNIQUE (STUDENT_ID, CLASS_ID, ATTENDANCE_DATE),
+    CONSTRAINT fk_student_attendance_session FOREIGN KEY (SESSION_ID) REFERENCES CLASS_SESSION (ID)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_student_attendance_student_class_date
-    ON student_attendance (student_id, class_id, attendance_date);
+CREATE INDEX idx_student_attendance_student_date ON STUDENT_ATTENDANCE (STUDENT_ID, ATTENDANCE_DATE);
+CREATE INDEX idx_student_attendance_class_date ON STUDENT_ATTENDANCE (CLASS_ID, ATTENDANCE_DATE);
 
-CREATE INDEX IF NOT EXISTS idx_student_attendance_student_date
-    ON student_attendance (student_id, attendance_date);
+CREATE TABLE TEACHER_ATTENDANCE (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TEACHER_ID      UUID NOT NULL,
+    ATTENDANCE_DATE DATE NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    REMARKS         TEXT,
+    CONSTRAINT uq_teacher_attendance UNIQUE (TEACHER_ID, ATTENDANCE_DATE)
+);
 
-CREATE INDEX IF NOT EXISTS idx_student_attendance_class_date
-    ON student_attendance (class_id, attendance_date);
+CREATE INDEX idx_teacher_attendance_date ON TEACHER_ATTENDANCE (ATTENDANCE_DATE);
+
+CREATE TABLE ATTENDANCE_CORRECTION (
+    ID                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ATTENDANCE_ID  UUID NOT NULL,
+    STUDENT_ID             UUID NOT NULL,
+    CLASS_ID               UUID NOT NULL,
+    ATTENDANCE_DATE        DATE NOT NULL,
+    REQUESTED_STATUS       VARCHAR(20) NOT NULL,
+    REASON                 TEXT,
+    REQUESTED_BY_TEACHER_ID UUID NOT NULL,
+    STATUS                 VARCHAR(20) NOT NULL,
+    REVIEWED_BY_PRINCIPAL_ID UUID,
+    REVIEW_NOTE            TEXT,
+    CREATED_AT             TIMESTAMP WITH TIME ZONE NOT NULL,
+    REVIEWED_AT            TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_correction_status ON ATTENDANCE_CORRECTION (STATUS);
+CREATE INDEX idx_correction_teacher ON ATTENDANCE_CORRECTION (REQUESTED_BY_TEACHER_ID);

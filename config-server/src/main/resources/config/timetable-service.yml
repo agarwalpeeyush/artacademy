@@ -13,3 +13,11 @@ spring:
       ddl-auto: validate
   flyway:
     locations: classpath:db/migration
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed

@@ -1,30 +1,43 @@
--- V1__init_notification_schema.sql
--- Notification Service schema: stores all outbound notifications
+-- Notification service schema (notification_db). Filled at runtime; no seed.
 
-CREATE TABLE IF NOT EXISTS notifications (
-    id                BIGSERIAL       NOT NULL,
-    user_id           BIGINT,
-    recipient_email   VARCHAR(200),
-    recipient_phone   VARCHAR(20),
-    subject           VARCHAR(500),
-    body              TEXT,
-    channel           VARCHAR(20)     NOT NULL DEFAULT 'EMAIL',
-    status            VARCHAR(20)     NOT NULL DEFAULT 'PENDING',
-    sent_at           TIMESTAMP,
-    created_at        TIMESTAMP       NOT NULL DEFAULT NOW(),
-    error_message     TEXT,
-    CONSTRAINT pk_notifications PRIMARY KEY (id),
-    CONSTRAINT chk_notifications_channel
-        CHECK (channel IN ('EMAIL', 'SMS', 'BOTH')),
-    CONSTRAINT chk_notifications_status
-        CHECK (status IN ('PENDING', 'SENT', 'FAILED'))
+CREATE TABLE NOTIFICATIONS (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    USER_ID         UUID,
+    RECIPIENT_EMAIL VARCHAR(200),
+    RECIPIENT_PHONE VARCHAR(20),
+    SUBJECT         VARCHAR(500),
+    TITLE           VARCHAR(500),
+    TYPE            VARCHAR(50),
+    BODY            TEXT,
+    IS_READ         BOOLEAN NOT NULL DEFAULT FALSE,
+    READ_AT         TIMESTAMP,
+    CHANNEL         VARCHAR(20) NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    SENT_AT         TIMESTAMP,
+    CREATED_AT      TIMESTAMP NOT NULL,
+    ERROR_MESSAGE   TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_notifications_user_id
-    ON notifications (user_id);
+CREATE INDEX idx_notifications_user_id ON NOTIFICATIONS (USER_ID);
+CREATE INDEX idx_notifications_status ON NOTIFICATIONS (STATUS);
+CREATE INDEX idx_notifications_user_created ON NOTIFICATIONS (USER_ID, CREATED_AT DESC);
+CREATE INDEX idx_notifications_user_read ON NOTIFICATIONS (USER_ID, IS_READ);
 
-CREATE INDEX IF NOT EXISTS idx_notifications_status
-    ON notifications (status);
+CREATE TABLE ANNOUNCEMENTS (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TITLE           VARCHAR(500) NOT NULL,
+    BODY            TEXT NOT NULL,
+    AUDIENCE        VARCHAR(30) NOT NULL,
+    SENDER_USER_ID  UUID,
+    SENDER_ROLE     VARCHAR(30),
+    RECIPIENT_COUNT INTEGER NOT NULL,
+    CREATED_AT      TIMESTAMP NOT NULL
+);
 
-CREATE INDEX IF NOT EXISTS idx_notifications_user_id_created_at
-    ON notifications (user_id, created_at DESC);
+CREATE INDEX idx_announcements_created_at ON ANNOUNCEMENTS (CREATED_AT DESC);
+
+CREATE TABLE TEACHER_BROADCAST_PERMISSIONS (
+    TEACHER_ID    UUID PRIMARY KEY,
+    CAN_BROADCAST BOOLEAN NOT NULL,
+    UPDATED_AT    TIMESTAMP NOT NULL
+);

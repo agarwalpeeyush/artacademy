@@ -19,3 +19,11 @@ spring:
     consumer:
       group-id: auth-service-group
       auto-offset-reset: earliest
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
