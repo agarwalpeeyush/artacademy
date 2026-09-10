@@ -25,16 +25,19 @@ import RoomsPage from './pages/principal/RoomsPage';
 import EnrollmentsPage from './pages/principal/EnrollmentsPage';
 import TimetablePage from './pages/principal/TimetablePage';
 import RoomAvailabilityPage from './pages/principal/RoomAvailabilityPage';
-import ScheduleConflictsPage from './pages/principal/ScheduleConflictsPage';
-import SchedulePublishPage from './pages/principal/SchedulePublishPage';
+import TimetablePublishPage from './pages/principal/TimetablePublishPage';
 import AttendanceReportPage from './pages/principal/AttendanceReportPage';
 import AttendanceCorrectionsPage from './pages/principal/AttendanceCorrectionsPage';
 import TeacherAttendancePage from './pages/principal/TeacherAttendancePage';
 import RevenuePage from './pages/principal/RevenuePage';
 import DefaultersPage from './pages/principal/DefaultersPage';
+import PrincipalPaymentsPage from './pages/principal/PaymentsPage';
 import AnalyticsPage from './pages/principal/AnalyticsPage';
 import AuditLogsPage from './pages/principal/AuditLogsPage';
 import UserManagementPage from './pages/principal/UserManagementPage';
+import PrincipalProfilePage from './pages/principal/ProfilePage';
+import PrincipalNotificationsPage from './pages/principal/NotificationsPage';
+import PrincipalAnnouncementsPage from './pages/principal/AnnouncementsPage';
 
 // Teacher
 import TeacherDashboardPage from './pages/teacher/TeacherDashboardPage';
@@ -43,19 +46,25 @@ import MyAttendancePage from './pages/teacher/MyAttendancePage';
 import CorrectionsPage from './pages/teacher/CorrectionsPage';
 import AssignedStudentsPage from './pages/teacher/AssignedStudentsPage';
 import FeeStatusPage from './pages/teacher/FeeStatusPage';
-import TeacherSchedulePage from './pages/teacher/TeacherSchedulePage';
+import TeacherPaymentsPage from './pages/teacher/PaymentsPage';
+import TeacherTimetablePage from './pages/teacher/TeacherTimetablePage';
 import AvailabilityExceptionsPage from './pages/teacher/AvailabilityExceptionsPage';
 import TeacherEnrollmentsPage from './pages/teacher/TeacherEnrollmentsPage';
+import TeacherProfilePage from './pages/teacher/TeacherProfilePage';
+import TeacherNotificationsPage from './pages/teacher/NotificationsPage';
+import TeacherAnnouncementsPage from './pages/teacher/AnnouncementsPage';
 
 // Student
 import StudentDashboardPage from './pages/student/StudentDashboardPage';
 import StudentProfilePage from './pages/student/StudentProfilePage';
 import StudentAttendancePage from './pages/student/StudentAttendancePage';
-import StudentSchedulePage from './pages/student/StudentSchedulePage';
+import StudentTimetablePage from './pages/student/StudentTimetablePage';
 import StudentUpcomingClassesPage from './pages/student/UpcomingClassesPage';
 import StudentEnrollmentsPage from './pages/student/StudentEnrollmentsPage';
 import FeesPage from './pages/student/FeesPage';
 import ReceiptsPage from './pages/student/ReceiptsPage';
+import MakePaymentPage from './pages/student/MakePaymentPage';
+import StudentNotificationsPage from './pages/student/NotificationsPage';
 
 // Parent
 import ParentDashboardPage from './pages/parent/ParentDashboardPage';
@@ -64,6 +73,7 @@ import ParentAttendancePage from './pages/parent/ParentAttendancePage';
 import ParentFeesPage from './pages/parent/ParentFeesPage';
 import ParentNotificationsPage from './pages/parent/ParentNotificationsPage';
 import ParentUpcomingClassesPage from './pages/parent/UpcomingClassesPage';
+import ParentProfilePage from './pages/parent/ParentProfilePage';
 
 const PrincipalLayout: React.FC = () => (
   <MainLayout sidebar={<PrincipalSidebar />} title="Art Academy — Principal" />
@@ -99,6 +109,7 @@ const App: React.FC = () => {
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="profile" element={<PrincipalProfilePage />} />
         <Route path="teachers" element={<TeachersPage />} />
         <Route path="teachers/:id" element={<TeacherDetailPage />} />
         <Route path="students" element={<StudentsPage />} />
@@ -110,16 +121,19 @@ const App: React.FC = () => {
         <Route path="enrollments" element={<EnrollmentsPage />} />
         <Route path="timetable" element={<TimetablePage />} />
         <Route path="room-availability" element={<RoomAvailabilityPage />} />
-        <Route path="conflicts" element={<ScheduleConflictsPage />} />
-        <Route path="schedule-publish" element={<SchedulePublishPage />} />
+        <Route path="conflicts" element={<Navigate to="/principal/dashboard" replace />} />
+        <Route path="timetable-publish" element={<TimetablePublishPage />} />
         <Route path="attendance" element={<AttendanceReportPage />} />
         <Route path="teacher-attendance" element={<TeacherAttendancePage />} />
         <Route path="attendance-corrections" element={<AttendanceCorrectionsPage />} />
         <Route path="revenue" element={<RevenuePage />} />
         <Route path="defaulters" element={<DefaultersPage />} />
+        <Route path="payments" element={<PrincipalPaymentsPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="users" element={<UserManagementPage />} />
+        <Route path="notifications" element={<PrincipalNotificationsPage />} />
+        <Route path="announcements" element={<PrincipalAnnouncementsPage />} />
       </Route>
 
       {/* Teacher Routes */}
@@ -133,14 +147,18 @@ const App: React.FC = () => {
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<TeacherDashboardPage />} />
+        <Route path="profile" element={<TeacherProfilePage />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="my-attendance" element={<MyAttendancePage />} />
         <Route path="corrections" element={<CorrectionsPage />} />
         <Route path="students" element={<AssignedStudentsPage />} />
         <Route path="enrollments" element={<TeacherEnrollmentsPage />} />
         <Route path="fee-status" element={<FeeStatusPage />} />
-        <Route path="schedule" element={<TeacherSchedulePage />} />
+        <Route path="payments" element={<TeacherPaymentsPage />} />
+        <Route path="timetable" element={<TeacherTimetablePage />} />
         <Route path="availability-exceptions" element={<AvailabilityExceptionsPage />} />
+        <Route path="notifications" element={<TeacherNotificationsPage />} />
+        <Route path="announcements" element={<TeacherAnnouncementsPage />} />
       </Route>
 
       {/* Student Routes */}
@@ -156,11 +174,13 @@ const App: React.FC = () => {
         <Route path="dashboard" element={<StudentDashboardPage />} />
         <Route path="profile" element={<StudentProfilePage />} />
         <Route path="attendance" element={<StudentAttendancePage />} />
-        <Route path="schedule" element={<StudentSchedulePage />} />
+        <Route path="timetable" element={<StudentTimetablePage />} />
         <Route path="upcoming" element={<StudentUpcomingClassesPage />} />
         <Route path="enrollments" element={<StudentEnrollmentsPage />} />
         <Route path="fees" element={<FeesPage />} />
+        <Route path="payments" element={<MakePaymentPage />} />
         <Route path="receipts" element={<ReceiptsPage />} />
+        <Route path="notifications" element={<StudentNotificationsPage />} />
       </Route>
 
       {/* Parent Routes */}
@@ -174,6 +194,7 @@ const App: React.FC = () => {
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<ParentDashboardPage />} />
+        <Route path="profile" element={<ParentProfilePage />} />
         <Route path="children" element={<MyChildrenPage />} />
         <Route path="attendance" element={<ParentAttendancePage />} />
         <Route path="upcoming" element={<ParentUpcomingClassesPage />} />

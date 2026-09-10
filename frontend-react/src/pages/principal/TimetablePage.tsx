@@ -11,10 +11,10 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchSchedules, createSchedule, deleteSchedule } from '../../store/slices/scheduleSlice';
+import { fetchTimetables, createTimetable, deleteTimetable } from '../../store/slices/timetableSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
-import { Schedule, Room, CourseClass } from '../../types';
+import { Timetable, Room, CourseClass } from '../../types';
 import courseService from '../../services/courseService';
 import roomService from '../../services/roomService';
 import PageHeader from '../../components/common/PageHeader';
@@ -32,7 +32,7 @@ const schema = yup.object({
   roomId: yup.string().required('Room is required'),
 });
 
-type ScheduleFormData = {
+type TimetableFormData = {
   classId: string;
   teacherId: string;
   daysOfWeek: string[];
@@ -43,40 +43,40 @@ type ScheduleFormData = {
 
 const TimetablePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { list: schedules, loading } = useSelector((state: RootState) => state.schedules);
+  const { list: timetables, loading } = useSelector((state: RootState) => state.timetables);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [classes, setClasses] = useState<CourseClass[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-  const { control, handleSubmit, reset, formState: { errors } } = useForm<ScheduleFormData>({
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<TimetableFormData>({
     resolver: yupResolver(schema) as never,
     defaultValues: { classId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00', roomId: '' },
   });
 
   useEffect(() => {
-    dispatch(fetchSchedules());
+    dispatch(fetchTimetables());
     dispatch(fetchTeachers());
     dispatch(fetchCourses());
     courseService.getAllClasses().then(setClasses).catch(() => {});
     roomService.getAll().then(setRooms).catch(() => {});
   }, [dispatch]);
 
-  const handleSubmitForm = async (data: ScheduleFormData) => {
+  const handleSubmitForm = async (data: TimetableFormData) => {
     const { daysOfWeek, ...rest } = data;
     const failures: string[] = [];
     let successCount = 0;
     for (const day of daysOfWeek) {
       try {
-        await dispatch(createSchedule({ ...rest, dayOfWeek: day })).unwrap();
+        await dispatch(createTimetable({ ...rest, dayOfWeek: day })).unwrap();
         successCount += 1;
       } catch (err: unknown) {
         failures.push(`${getDayName(day)}: ${String(err)}`);
       }
     }
     if (failures.length === 0) {
-      setSnackbar({ open: true, message: `Added ${successCount} schedule(s)`, severity: 'success' });
+      setSnackbar({ open: true, message: `Added ${successCount} timetable entr(ies)`, severity: 'success' });
       setDialogOpen(false);
       reset();
     } else {
@@ -90,8 +90,8 @@ const TimetablePage: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      await dispatch(deleteSchedule(id)).unwrap();
-      setSnackbar({ open: true, message: 'Schedule deleted', severity: 'success' });
+      await dispatch(deleteTimetable(id)).unwrap();
+      setSnackbar({ open: true, message: 'Timetable entry deleted', severity: 'success' });
     } catch (err: unknown) {
       setSnackbar({ open: true, message: String(err) || 'Delete failed', severity: 'error' });
     }
@@ -106,18 +106,18 @@ const TimetablePage: React.FC = () => {
     [teachers],
   );
 
-  const groupedByDay = DAYS.reduce<Record<string, Schedule[]>>((acc, day) => {
-    acc[day] = schedules.filter(s => s.dayOfWeek.toUpperCase() === day);
+  const groupedByDay = DAYS.reduce<Record<string, Timetable[]>>((acc, day) => {
+    acc[day] = timetables.filter(s => s.dayOfWeek.toUpperCase() === day);
     return acc;
   }, {});
 
-  if (loading && schedules.length === 0) return <LoadingSpinner />;
+  if (loading && timetables.length === 0) return <LoadingSpinner />;
 
   return (
     <Box>
       <PageHeader
         title="Timetable"
-        subtitle="Weekly class schedule"
+        subtitle="Weekly class timetable"
         breadcrumbs={[{ label: 'Principal' }, { label: 'Timetable' }]}
         action={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
@@ -141,12 +141,12 @@ const TimetablePage: React.FC = () => {
           </TableHead>
           <TableBody>
             {DAYS.flatMap(day => {
-              const daySchedules = groupedByDay[day];
-              if (daySchedules.length === 0) return [];
-              return daySchedules.map((s, idx) => (
+              const dayTimetables = groupedByDay[day];
+              if (dayTimetables.length === 0) return [];
+              return dayTimetables.map((s, idx) => (
                 <TableRow key={s.id} sx={{ bgcolor: idx === 0 ? '#f8f9ff' : 'inherit' }}>
                   {idx === 0 && (
-                    <TableCell rowSpan={daySchedules.length} sx={{ fontWeight: 600, bgcolor: '#E3F2FD', verticalAlign: 'top', pt: 2 }}>
+                    <TableCell rowSpan={dayTimetables.length} sx={{ fontWeight: 600, bgcolor: '#E3F2FD', verticalAlign: 'top', pt: 2 }}>
                       {getDayName(day)}
                     </TableCell>
                   )}
@@ -165,10 +165,10 @@ const TimetablePage: React.FC = () => {
                 </TableRow>
               ));
             })}
-            {schedules.length === 0 && (
+            {timetables.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                  <Typography color="text.secondary">No schedules found. Add a schedule to get started.</Typography>
+                  <Typography color="text.secondary">No timetables found. Add a schedule to get started.</Typography>
                 </TableCell>
               </TableRow>
             )}
@@ -177,7 +177,7 @@ const TimetablePage: React.FC = () => {
       </TableContainer>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Schedule Entry</DialogTitle>
+        <DialogTitle>Add Timetable Entry</DialogTitle>
         <Box component="form" onSubmit={handleSubmit(handleSubmitForm)}>
           <DialogContent>
             <Grid container spacing={2}>

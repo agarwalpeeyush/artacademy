@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,13 +48,16 @@ public class PaymentService {
                         "Fee cycle not found with id: " + request.getFeeCycleId()));
 
         // 2. Create Payment record
+        LocalDateTime paymentDate = request.getPaymentDate() != null
+                ? request.getPaymentDate().atStartOfDay()
+                : LocalDateTime.now();
         Payment payment = Payment.builder()
                 .feeCycle(cycle)
                 .studentId(request.getStudentId())
                 .amount(request.getAmount())
                 .paymentMode(request.getPaymentMode())
                 .transactionReference(request.getTransactionReference())
-                .paymentDate(LocalDateTime.now())
+                .paymentDate(paymentDate)
                 .remarks(request.getRemarks())
                 .build();
 
@@ -169,5 +173,48 @@ public class PaymentService {
                     return paymentMapper.toPaymentResponseWithAllocations(p);
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentById(UUID paymentId) {
+        Payment payment = loadPaymentWithAllocations(paymentId);
+        return paymentMapper.toPaymentResponseWithAllocations(payment);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getPaymentsByFeeCycle(UUID feeCycleId) {
+        return paymentRepository.findByFeeCycle_Id(feeCycleId).stream()
+                .map(p -> {
+                    p.setAllocations(paymentAllocationRepository.findByPayment_Id(p.getId()));
+                    return paymentMapper.toPaymentResponseWithAllocations(p);
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getAllPayments(LocalDate startDate, LocalDate endDate) {
+        List<Payment> payments;
+        if (startDate != null && endDate != null) {
+            payments = paymentRepository.findByPaymentDateBetween(
+                    startDate.atStartOfDay(), endDate.plusDays(1).atStartOfDay());
+        } else {
+            payments = paymentRepository.findAll();
+        }
+        return payments.stream()
+                .map(p -> {
+                    p.setAllocations(paymentAllocationRepository.findByPayment_Id(p.getId()));
+                    return paymentMapper.toPaymentResponseWithAllocations(p);
+                })
+                .collect(Collectors.toList());
+    }
+
+    /** Loads a payment together with its allocations (used for receipt generation). */
+    @Transactional(readOnly = true)
+    public Payment loadPaymentWithAllocations(UUID paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Payment not found with id: " + paymentId));
+        payment.setAllocations(paymentAllocationRepository.findByPayment_Id(payment.getId()));
+        return payment;
     }
 }

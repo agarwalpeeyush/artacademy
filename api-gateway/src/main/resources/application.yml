@@ -28,7 +28,7 @@ spring:
         - id: user-service
           uri: lb://user-service
           predicates:
-            - Path=/teachers/**,/students/**
+            - Path=/teachers/**,/students/**,/parents/**,/users/**
           filters:
             - JwtAuth
         - id: course-enrollment-service
@@ -43,10 +43,10 @@ spring:
             - Path=/attendance/**
           filters:
             - JwtAuth
-        - id: scheduling-service
-          uri: lb://scheduling-service
+        - id: timetable-service
+          uri: lb://timetable-service
           predicates:
-            - Path=/schedules/**,/rooms/**
+            - Path=/timetables/**,/rooms/**
           filters:
             - JwtAuth
         - id: payment-service

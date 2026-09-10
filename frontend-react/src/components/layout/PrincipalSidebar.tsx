@@ -22,16 +22,18 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import RoomPreferencesIcon from '@mui/icons-material/RoomPreferences';
-import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import PublishIcon from '@mui/icons-material/Publish';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import RuleIcon from '@mui/icons-material/Rule';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import PaymentIcon from '@mui/icons-material/Payment';
 import WarningIcon from '@mui/icons-material/Warning';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import SecurityIcon from '@mui/icons-material/Security';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import CampaignIcon from '@mui/icons-material/Campaign';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PaletteIcon from '@mui/icons-material/Palette';
 
@@ -41,7 +43,7 @@ const masterDataItems = [
   { label: 'Rooms', icon: <RoomPreferencesIcon />, path: '/principal/rooms' },
   { label: 'Courses', icon: <MenuBookIcon />, path: '/principal/courses' },
   { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
-  { label: 'Publish Timetable', icon: <PublishIcon />, path: '/principal/schedule-publish' },
+  { label: 'Publish Timetable', icon: <PublishIcon />, path: '/principal/timetable-publish' },
 ];
 
 const navItems = [
@@ -49,15 +51,17 @@ const navItems = [
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/principal/enrollments' },
   { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },
   { label: 'Room Availability', icon: <MeetingRoomIcon />, path: '/principal/room-availability' },
-  { label: 'Conflicts', icon: <ReportProblemIcon />, path: '/principal/conflicts' },
   { label: 'Attendance Report', icon: <EventNoteIcon />, path: '/principal/attendance' },
   { label: 'Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/teacher-attendance' },
   { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
   { label: 'Revenue', icon: <AttachMoneyIcon />, path: '/principal/revenue' },
+  { label: 'Payments', icon: <PaymentIcon />, path: '/principal/payments' },
   { label: 'Defaulters', icon: <WarningIcon />, path: '/principal/defaulters' },
   { label: 'Analytics', icon: <BarChartIcon />, path: '/principal/analytics' },
   { label: 'Audit Logs', icon: <SecurityIcon />, path: '/principal/audit-logs' },
   { label: 'User Management', icon: <ManageAccountsIcon />, path: '/principal/users' },
+  { label: 'Announcements', icon: <CampaignIcon />, path: '/principal/announcements' },
+  { label: 'Notifications', icon: <NotificationsIcon />, path: '/principal/notifications' },
 ];
 
 const PrincipalSidebar: React.FC = () => {

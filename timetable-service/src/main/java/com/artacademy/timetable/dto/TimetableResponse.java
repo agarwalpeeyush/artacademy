@@ -1,0 +1,30 @@
+package com.artacademy.timetable.dto;
+
+import com.artacademy.timetable.domain.TimetableStatus;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalTime;
+import java.util.UUID;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class TimetableResponse {
+
+    private UUID id;
+    private UUID classId;
+    private UUID teacherId;
+    private UUID roomId;
+    private String roomName;
+    private LocalTime startTime;
+    private LocalTime endTime;
+    private DayOfWeek dayOfWeek;
+    private TimetableStatus status;
+    private Instant publishedAt;
+}

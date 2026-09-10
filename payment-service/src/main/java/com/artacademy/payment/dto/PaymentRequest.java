@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Data
@@ -33,4 +34,7 @@ public class PaymentRequest {
     private String transactionReference;
 
     private String remarks;
+
+    /** Optional. When set, used as the fee-paid date; otherwise the server stamps the current time. */
+    private LocalDate paymentDate;
 }

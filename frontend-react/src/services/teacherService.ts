@@ -29,6 +29,16 @@ const teacherService = {
     return norm(unwrap(response));
   },
 
+  getMyProfile: async (): Promise<Teacher> => {
+    const response = await api.get('/teachers/me');
+    return norm(unwrap(response));
+  },
+
+  updateMyProfile: async (data: Partial<Teacher>): Promise<Teacher> => {
+    const response = await api.put('/teachers/me', data);
+    return norm(unwrap(response));
+  },
+
   create: async (data: Omit<Teacher, 'id'>): Promise<Teacher> => {
     const response = await api.post('/teachers', data);
     return norm(unwrap(response));

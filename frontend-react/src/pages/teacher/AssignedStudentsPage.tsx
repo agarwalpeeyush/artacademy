@@ -4,7 +4,7 @@ import {
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
+import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
 import studentService from '../../services/studentService';
 import { Student } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
@@ -15,13 +15,13 @@ import { formatDate } from '../../utils/formatters';
 const AssignedStudentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherSchedules } = useSelector((state: RootState) => state.schedules);
+  const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (user?.id) dispatch(fetchTeacherSchedules(user.id));
+    if (user?.id) dispatch(fetchTeacherTimetables(user.id));
   }, [dispatch, user]);
 
   useEffect(() => {
@@ -36,7 +36,7 @@ const AssignedStudentsPage: React.FC = () => {
     }
   }, [selectedClassId]);
 
-  const uniqueClasses = [...new Map(teacherSchedules.map(s => [s.classId, s])).values()];
+  const uniqueClasses = [...new Map(teacherTimetables.map(s => [s.classId, s])).values()];
 
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'firstName', label: 'First Name', minWidth: 120 },

@@ -52,6 +52,22 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/payments/student/**")
                             .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
 
+                    // Fee cycle details – any authenticated role
+                    .requestMatchers(HttpMethod.GET, "/fees/cycle/**")
+                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
+
+                    // List all payments (with date filter) – PRINCIPAL only
+                    .requestMatchers(HttpMethod.GET, "/payments")
+                            .hasRole("PRINCIPAL")
+
+                    // Receipts, payments-by-cycle and single payment – any authenticated role
+                    .requestMatchers(HttpMethod.GET, "/payments/*/receipt")
+                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/payments/fee-cycle/**")
+                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/payments/*")
+                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
+
                     // View fee details – TEACHER or PRINCIPAL
                     .requestMatchers(HttpMethod.GET, "/fees/**")
                             .hasAnyRole("TEACHER", "PRINCIPAL")

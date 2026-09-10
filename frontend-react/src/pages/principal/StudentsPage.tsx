@@ -30,6 +30,7 @@ import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import LoginIdField from '../../components/common/LoginIdField';
 import { formatDate } from '../../utils/formatters';
 
 const schema = yup.object({
@@ -59,9 +60,11 @@ const StudentsPage: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-  const { control, handleSubmit, reset, formState: { errors } } = useForm<StudentFormData>({
+  const { control, handleSubmit, reset, watch, formState: { errors } } = useForm<StudentFormData>({
     resolver: yupResolver(schema) as never,
   });
+
+  const watchedFirstName = watch('firstName');
 
   useEffect(() => { dispatch(fetchStudents()); }, [dispatch]);
 
@@ -190,10 +193,14 @@ const StudentsPage: React.FC = () => {
                     <TextField {...field} label="Last Name" fullWidth size="small" />
                   )} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12}>
                 <Controller name="loginId" control={control}
                   render={({ field }) => (
-                    <TextField {...field} label="Login ID (optional)" fullWidth size="small" />
+                    <LoginIdField
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      firstName={watchedFirstName || ''}
+                    />
                   )} />
               </Grid>
               <Grid item xs={12} sm={6}>

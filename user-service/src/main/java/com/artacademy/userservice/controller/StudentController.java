@@ -3,6 +3,7 @@ package com.artacademy.userservice.controller;
 import com.artacademy.common.dto.ApiResponse;
 import com.artacademy.userservice.dto.StudentRequest;
 import com.artacademy.userservice.dto.StudentResponse;
+import com.artacademy.userservice.dto.StudentSelfUpdateRequest;
 import com.artacademy.userservice.service.StudentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +32,15 @@ public class StudentController {
     public ResponseEntity<ApiResponse<StudentResponse>> getMyProfile(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(
                 studentService.getStudentByLoginId(authentication.getName())));
+    }
+
+    @PutMapping("/me")
+    @Operation(summary = "Update the authenticated student's own contact details")
+    public ResponseEntity<ApiResponse<StudentResponse>> updateMyProfile(
+            Authentication authentication,
+            @Valid @RequestBody StudentSelfUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                studentService.updateMyProfile(authentication.getName(), request)));
     }
 
     @GetMapping

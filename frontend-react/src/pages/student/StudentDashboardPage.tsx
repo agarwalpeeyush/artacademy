@@ -5,7 +5,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchStudentEnrollments } from '../../store/slices/enrollmentSlice';
-import { fetchStudentSchedules } from '../../store/slices/scheduleSlice';
+import { fetchStudentTimetables } from '../../store/slices/timetableSlice';
 import { fetchFeeCycles } from '../../store/slices/feeSlice';
 import attendanceService from '../../services/attendanceService';
 import PageHeader from '../../components/common/PageHeader';
@@ -15,7 +15,7 @@ const StudentDashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { studentEnrollments } = useSelector((state: RootState) => state.enrollments);
-  const { studentSchedules } = useSelector((state: RootState) => state.schedules);
+  const { studentTimetables } = useSelector((state: RootState) => state.timetables);
   const { feeCycles } = useSelector((state: RootState) => state.fees);
   const [attendancePct, setAttendancePct] = useState<number | null>(null);
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
@@ -23,7 +23,7 @@ const StudentDashboardPage: React.FC = () => {
   useEffect(() => {
     if (user?.id) {
       dispatch(fetchStudentEnrollments(user.id));
-      dispatch(fetchStudentSchedules(user.id));
+      dispatch(fetchStudentTimetables(user.id));
       dispatch(fetchFeeCycles({ studentId: user.id }));
       attendanceService.getStudentStats(user.id).then((stats: { attendancePercentage?: number }) => {
         if (stats?.attendancePercentage != null) setAttendancePct(stats.attendancePercentage);
@@ -33,7 +33,7 @@ const StudentDashboardPage: React.FC = () => {
 
   const activeEnrollments = studentEnrollments.filter(e => e.status === 'ACTIVE');
   const outstandingFees = feeCycles.filter(f => f.status !== 'PAID').reduce((sum, f) => sum + (f.dueAmount ?? 0), 0);
-  const todayClasses = studentSchedules.filter(s => s.dayOfWeek.toUpperCase() === today);
+  const todayClasses = studentTimetables.filter(s => s.dayOfWeek.toUpperCase() === today);
 
   return (
     <Box>

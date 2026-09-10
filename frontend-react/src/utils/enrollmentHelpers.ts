@@ -1,4 +1,4 @@
-import { Course, CourseClass, Enrollment, Schedule, Teacher } from '../types';
+import { Course, CourseClass, Enrollment, Timetable, Teacher } from '../types';
 
 const DAY_ORDER: Record<string, number> = {
   MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6, SUNDAY: 7,
@@ -69,11 +69,11 @@ export const filterEnrollments = (
 const hhmm = (t: string): string => (t ? t.slice(0, 5) : '');
 
 /**
- * Compact read-only weekly summary for a class's schedules,
+ * Compact read-only weekly summary for a class's timetable,
  * e.g. "Mon 17:00–18:00, Wed 17:00–18:00". Empty string when none.
  */
-export const formatClassSchedule = (schedules: Schedule[]): string => {
-  return [...schedules]
+export const formatClassTimetable = (entries: Timetable[]): string => {
+  return [...entries]
     .sort((a, b) => {
       const d = (DAY_ORDER[a.dayOfWeek?.toUpperCase()] ?? 99) - (DAY_ORDER[b.dayOfWeek?.toUpperCase()] ?? 99);
       return d !== 0 ? d : hhmm(a.startTime).localeCompare(hhmm(b.startTime));

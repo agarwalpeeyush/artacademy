@@ -19,9 +19,13 @@ public class NotificationResponse {
     private String recipientEmail;
     private String recipientPhone;
     private String subject;
+    private String title;
+    private String type;
     private String body;
     private String channel;
     private String status;
+    private boolean isRead;
+    private LocalDateTime readAt;
     private LocalDateTime sentAt;
     private LocalDateTime createdAt;
     private String errorMessage;

@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchRoomAvailability } from '../../store/slices/scheduleSlice';
+import { fetchRoomAvailability } from '../../store/slices/timetableSlice';
 import { Room } from '../../types';
 import roomService from '../../services/roomService';
 import PageHeader from '../../components/common/PageHeader';
@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 
 const RoomAvailabilityPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { roomAvailability, loading } = useSelector((state: RootState) => state.schedules);
+  const { roomAvailability, loading } = useSelector((state: RootState) => state.timetables);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomId, setRoomId] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -82,7 +82,7 @@ const RoomAvailabilityPage: React.FC = () => {
                   {roomAvailability.occupied.length === 0 ? (
                     <TableRow><TableCell colSpan={2} align="center" sx={{ py: 2 }}>None</TableCell></TableRow>
                   ) : roomAvailability.occupied.map((s, i) => (
-                    <TableRow key={s.scheduleId || i}>
+                    <TableRow key={s.timetableId || i}>
                       <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
                       <TableCell>{s.classId ? `Class ${s.classId.slice(0, 8)}` : '-'}</TableCell>
                     </TableRow>

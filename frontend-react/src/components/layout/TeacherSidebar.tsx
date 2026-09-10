@@ -16,8 +16,11 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import PeopleIcon from '@mui/icons-material/People';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import PaymentIcon from '@mui/icons-material/Payment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import CampaignIcon from '@mui/icons-material/Campaign';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PaletteIcon from '@mui/icons-material/Palette';
 
@@ -29,8 +32,11 @@ const navItems = [
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/teacher/enrollments' },
   { label: 'My Students', icon: <PeopleIcon />, path: '/teacher/students' },
   { label: 'Fee Status', icon: <AttachMoneyIcon />, path: '/teacher/fee-status' },
-  { label: 'Schedule', icon: <ScheduleIcon />, path: '/teacher/schedule' },
+  { label: 'Payments', icon: <PaymentIcon />, path: '/teacher/payments' },
+  { label: 'Timetable', icon: <ScheduleIcon />, path: '/teacher/timetable' },
   { label: 'Availability Exceptions', icon: <EventBusyIcon />, path: '/teacher/availability-exceptions' },
+  { label: 'Announcements', icon: <CampaignIcon />, path: '/teacher/announcements' },
+  { label: 'Notifications', icon: <NotificationsIcon />, path: '/teacher/notifications' },
 ];
 
 const TeacherSidebar: React.FC = () => {

@@ -197,7 +197,7 @@ export interface Room {
   capacity: number;
 }
 
-export interface Schedule {
+export interface Timetable {
   id: string;
   classId: string;
   className?: string;
@@ -218,7 +218,7 @@ export interface Schedule {
 export interface RoomAvailabilitySlot {
   startTime: string;
   endTime: string;
-  scheduleId?: string;
+  timetableId?: string;
   classId?: string;
 }
 
@@ -230,15 +230,15 @@ export interface RoomAvailability {
   free: RoomAvailabilitySlot[];
 }
 
-export type ScheduleConflictType = 'TEACHER_DOUBLE_BOOKED' | 'ROOM_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
+export type TimetableConflictType = 'TEACHER_DOUBLE_BOOKED' | 'ROOM_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
 
-export interface ScheduleConflict {
-  type: ScheduleConflictType;
+export interface TimetableConflict {
+  type: TimetableConflictType;
   dayOfWeek: string;
   startTime: string;
   endTime: string;
-  scheduleId: string;
-  otherScheduleId: string;
+  timetableId: string;
+  otherTimetableId: string;
   teacherId: string;
   roomId: string;
   classId: string;
@@ -246,7 +246,7 @@ export interface ScheduleConflict {
 }
 
 export interface UpcomingClass {
-  scheduleId: string;
+  timetableId: string;
   date: string;
   dayOfWeek: string;
   startTime: string;
@@ -285,6 +285,10 @@ export interface FeeCycle {
   dueDate?: string;
   generatedDate?: string;
   status: string;
+  overdue?: boolean;
+  displayStatus?: string;
+  excessAmount?: number;
+  shortAmount?: number;
 }
 
 export interface FeeDetail {
@@ -321,10 +325,28 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: 'INFO' | 'WARNING' | 'SUCCESS' | 'ERROR';
+  type: 'INFO' | 'WARNING' | 'SUCCESS' | 'ERROR' | 'ANNOUNCEMENT';
   isRead: boolean;
   createdAt: string;
   readAt?: string;
+}
+
+export type AnnouncementAudience = 'ALL_STUDENTS' | 'ALL_TEACHERS' | 'TEACHER_STUDENTS';
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  audience: AnnouncementAudience;
+  senderUserId?: string;
+  senderRole?: string;
+  recipientCount: number;
+  createdAt: string;
+}
+
+export interface TeacherBroadcastPermission {
+  teacherId: string;
+  canBroadcast: boolean;
 }
 
 export interface RevenueReport {

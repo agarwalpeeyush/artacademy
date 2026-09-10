@@ -31,8 +31,20 @@ public class Notification {
     @Column(name = "SUBJECT", length = 500)
     private String subject;
 
+    @Column(name = "TITLE", length = 500)
+    private String title;
+
+    @Column(name = "TYPE", length = 50)
+    private String type;
+
     @Column(name = "BODY", columnDefinition = "TEXT")
     private String body;
+
+    @Column(name = "IS_READ", nullable = false)
+    private boolean isRead;
+
+    @Column(name = "READ_AT")
+    private LocalDateTime readAt;
 
     /**
      * Notification channel: EMAIL, SMS, BOTH

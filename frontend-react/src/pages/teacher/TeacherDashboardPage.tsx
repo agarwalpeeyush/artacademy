@@ -5,21 +5,21 @@ import {
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
+import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
 import PageHeader from '../../components/common/PageHeader';
 import { formatTime, getDayName } from '../../utils/formatters';
 
 const TeacherDashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherSchedules } = useSelector((state: RootState) => state.schedules);
+  const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
 
   useEffect(() => {
-    if (user?.id) dispatch(fetchTeacherSchedules(user.id));
+    if (user?.id) dispatch(fetchTeacherTimetables(user.id));
   }, [dispatch, user]);
 
-  const todaySchedules = teacherSchedules.filter(s => s.dayOfWeek.toUpperCase() === today);
+  const todayTimetable = teacherTimetables.filter(s => s.dayOfWeek.toUpperCase() === today);
 
   return (
     <Box>
@@ -34,7 +34,7 @@ const TeacherDashboardPage: React.FC = () => {
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">Weekly Classes</Typography>
-              <Typography variant="h4" fontWeight={700} color="primary.main" mt={1}>{teacherSchedules.length}</Typography>
+              <Typography variant="h4" fontWeight={700} color="primary.main" mt={1}>{teacherTimetables.length}</Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -42,8 +42,8 @@ const TeacherDashboardPage: React.FC = () => {
           <Card>
             <CardContent sx={{ textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">Classes Today</Typography>
-              <Typography variant="h4" fontWeight={700} color={todaySchedules.length > 0 ? 'success.main' : 'text.secondary'} mt={1}>
-                {todaySchedules.length}
+              <Typography variant="h4" fontWeight={700} color={todayTimetable.length > 0 ? 'success.main' : 'text.secondary'} mt={1}>
+                {todayTimetable.length}
               </Typography>
             </CardContent>
           </Card>
@@ -64,11 +64,11 @@ const TeacherDashboardPage: React.FC = () => {
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>Today's Schedule</Typography>
-              {todaySchedules.length === 0 ? (
+              <Typography variant="h6" gutterBottom>Today's Timetable</Typography>
+              {todayTimetable.length === 0 ? (
                 <Typography color="text.secondary" variant="body2">No classes scheduled for today.</Typography>
               ) : (
-                todaySchedules.map(s => (
+                todayTimetable.map(s => (
                   <Box key={s.id} display="flex" alignItems="center" justifyContent="space-between" py={1.5} borderBottom="1px solid" borderColor="divider">
                     <Box>
                       <Typography variant="body1" fontWeight={500}>{s.className}</Typography>
@@ -96,12 +96,12 @@ const TeacherDashboardPage: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {teacherSchedules.length === 0 ? (
+                    {teacherTimetables.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} align="center">No schedules assigned</TableCell>
+                        <TableCell colSpan={3} align="center">No timetable assigned</TableCell>
                       </TableRow>
                     ) : (
-                      teacherSchedules.map(s => (
+                      teacherTimetables.map(s => (
                         <TableRow key={s.id} sx={s.dayOfWeek.toUpperCase() === today ? { bgcolor: '#E3F2FD' } : {}}>
                           <TableCell>{getDayName(s.dayOfWeek)}</TableCell>
                           <TableCell>{s.className}</TableCell>

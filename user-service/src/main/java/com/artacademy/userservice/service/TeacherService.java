@@ -12,10 +12,12 @@ import com.artacademy.userservice.dto.TeacherAvailabilityRequest;
 import com.artacademy.userservice.dto.TeacherAvailabilityResponse;
 import com.artacademy.userservice.dto.TeacherRequest;
 import com.artacademy.userservice.dto.TeacherResponse;
+import com.artacademy.userservice.dto.TeacherSelfUpdateRequest;
 import com.artacademy.userservice.mapper.TeacherMapper;
 import com.artacademy.userservice.repository.TeacherAvailabilityExceptionRepository;
 import com.artacademy.userservice.repository.TeacherAvailabilityRepository;
 import com.artacademy.userservice.repository.TeacherRepository;
+import com.artacademy.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -39,6 +41,7 @@ public class TeacherService {
     private static final String DEFAULT_TEMPORARY_PASSWORD = "Welcome@123";
 
     private final TeacherRepository teacherRepository;
+    private final UserRepository userRepository;
     private final TeacherAvailabilityRepository availabilityRepository;
     private final TeacherAvailabilityExceptionRepository availabilityExceptionRepository;
     private final TeacherMapper teacherMapper;
@@ -54,7 +57,28 @@ public class TeacherService {
         return teacherMapper.toResponse(findById(id));
     }
 
+    @Transactional(readOnly = true)
+    public TeacherResponse getTeacherByLoginId(String loginId) {
+        Teacher teacher = teacherRepository.findByLoginId(loginId)
+                .orElseThrow(() -> ApiException.notFound("Teacher not found with login ID: " + loginId));
+        return teacherMapper.toResponse(teacher);
+    }
+
+    public TeacherResponse updateMyProfile(String loginId, TeacherSelfUpdateRequest request) {
+        Teacher teacher = teacherRepository.findByLoginId(loginId)
+                .orElseThrow(() -> ApiException.notFound("Teacher not found with login ID: " + loginId));
+        teacher.setFirstName(request.getFirstName());
+        teacher.setLastName(request.getLastName());
+        teacher.setEmail(request.getEmail());
+        teacher.setPhone(request.getPhone());
+        teacher.setQualification(request.getQualification());
+        return teacherMapper.toResponse(teacherRepository.save(teacher));
+    }
+
     public TeacherResponse createTeacher(TeacherRequest request) {
+        if (request.getLoginId() != null && userRepository.existsByLoginId(request.getLoginId())) {
+            throw ApiException.conflict("Login ID '" + request.getLoginId() + "' is already taken");
+        }
         if (teacherRepository.existsByEmployeeCode(request.getEmployeeCode())) {
             throw ApiException.conflict("Teacher with employee code '" + request.getEmployeeCode() + "' already exists");
         }

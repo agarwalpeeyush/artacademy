@@ -127,6 +127,7 @@ public class FeeService {
     public List<FeeCycleResponse> getFeeCycles(UUID studentId) {
         return feeCycleRepository.findByStudentId(studentId).stream()
                 .map(paymentMapper::toCycleResponse)
+                .map(this::decorate)
                 .collect(Collectors.toList());
     }
 
@@ -138,7 +139,14 @@ public class FeeService {
 
         List<StudentFeeDetail> details = feeDetailRepository.findByFeeCycle_Id(feeCycleId);
         cycle.setDetails(details);
-        return paymentMapper.toCycleResponseWithDetails(cycle);
+        return decorate(paymentMapper.toCycleResponseWithDetails(cycle));
+    }
+
+    @Transactional(readOnly = true)
+    public List<FeeDetailResponse> getFeeDetailsByCycle(UUID feeCycleId) {
+        return feeDetailRepository.findByFeeCycle_Id(feeCycleId).stream()
+                .map(paymentMapper::toDetailResponse)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -148,6 +156,7 @@ public class FeeService {
         cycles.addAll(feeCycleRepository.findByStudentIdAndStatus(studentId, FeeStatus.PARTIAL));
         return cycles.stream()
                 .map(paymentMapper::toCycleResponse)
+                .map(this::decorate)
                 .collect(Collectors.toList());
     }
 
@@ -158,7 +167,31 @@ public class FeeService {
         cycles.addAll(feeCycleRepository.findByStatus(FeeStatus.PARTIAL));
         return cycles.stream()
                 .map(paymentMapper::toCycleResponse)
+                .map(this::decorate)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Fills in read-derived fields: OVERDUE flag/displayStatus and excess/short amounts.
+     * OVERDUE is not a persisted status — a cycle is overdue when it is not fully paid and
+     * its due date has passed.
+     */
+    private FeeCycleResponse decorate(FeeCycleResponse response) {
+        BigDecimal total = response.getTotalAmount() != null ? response.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal paid = response.getPaidAmount() != null ? response.getPaidAmount() : BigDecimal.ZERO;
+
+        BigDecimal excess = paid.subtract(total);
+        response.setExcessAmount(excess.signum() > 0 ? excess : BigDecimal.ZERO);
+        response.setShortAmount(excess.signum() < 0 ? excess.negate() : BigDecimal.ZERO);
+
+        boolean notFullyPaid = !FeeStatus.PAID.name().equals(response.getStatus());
+        boolean pastDue = response.getDueDate() != null
+                && response.getDueDate().isBefore(LocalDateTime.now());
+        boolean overdue = notFullyPaid && pastDue;
+
+        response.setOverdue(overdue);
+        response.setDisplayStatus(overdue ? "OVERDUE" : response.getStatus());
+        return response;
     }
 
     @Transactional(readOnly = true)

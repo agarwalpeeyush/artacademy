@@ -3,6 +3,7 @@ package com.artacademy.userservice.controller;
 import com.artacademy.common.dto.ApiResponse;
 import com.artacademy.userservice.dto.ParentRequest;
 import com.artacademy.userservice.dto.ParentResponse;
+import com.artacademy.userservice.dto.ParentSelfUpdateRequest;
 import com.artacademy.userservice.service.ParentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,6 +40,15 @@ public class ParentController {
     public ResponseEntity<ApiResponse<List<ParentResponse>>> getMyChildren(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(
                 parentService.getMyChildren(authentication.getName())));
+    }
+
+    @PutMapping("/me")
+    @Operation(summary = "Update the authenticated parent's own contact details")
+    public ResponseEntity<ApiResponse<ParentResponse>> updateMyProfile(
+            Authentication authentication,
+            @Valid @RequestBody ParentSelfUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                parentService.updateMyProfile(authentication.getName(), request)));
     }
 
     @GetMapping

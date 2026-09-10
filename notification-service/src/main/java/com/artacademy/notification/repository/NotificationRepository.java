@@ -17,4 +17,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     List<Notification> findByStatus(String status);
 
     Page<Notification> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
+
+    List<Notification> findByUserIdAndIsReadFalse(UUID userId);
+
+    long countByUserIdAndIsReadFalse(UUID userId);
 }

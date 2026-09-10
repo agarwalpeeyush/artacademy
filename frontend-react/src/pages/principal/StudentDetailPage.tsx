@@ -88,7 +88,7 @@ const StudentDetailPage: React.FC = () => {
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'PAID' ? 'success' : 'warning'} /> },
   ];
 
-  const scheduleCols: Column<Record<string, unknown>>[] = [
+  const timetableCols: Column<Record<string, unknown>>[] = [
     { id: 'courseName', label: 'Course', minWidth: 160 },
     { id: 'className', label: 'Class', minWidth: 160 },
     { id: 'status', label: 'Status', minWidth: 100 },
@@ -130,7 +130,7 @@ const StudentDetailPage: React.FC = () => {
         <Tab label="Enrollments" />
         <Tab label="Attendance" />
         <Tab label="Fees" />
-        <Tab label="Schedule" />
+        <Tab label="Timetable" />
       </Tabs>
 
       {tab === 0 && (
@@ -156,7 +156,7 @@ const StudentDetailPage: React.FC = () => {
       )}
 
       {tab === 3 && (
-        <DataTable columns={scheduleCols} rows={enrollments as unknown as Record<string, unknown>[]} emptyMessage="No scheduled classes." />
+        <DataTable columns={timetableCols} rows={enrollments as unknown as Record<string, unknown>[]} emptyMessage="No scheduled classes." />
       )}
     </Box>
   );

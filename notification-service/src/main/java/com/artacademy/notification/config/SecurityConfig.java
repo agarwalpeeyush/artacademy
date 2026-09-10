@@ -40,6 +40,23 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/notifications/send")
                             .hasRole("PRINCIPAL")
 
+                    // Announcements – broadcast allowed for PRINCIPAL/TEACHER (service enforces
+                    // teacher permission); history + permission management PRINCIPAL only.
+                    .requestMatchers(HttpMethod.POST, "/notifications/announcements")
+                            .hasAnyRole("PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.GET, "/notifications/announcements")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/notifications/announcements/permissions")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT, "/notifications/announcements/permissions/**")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/notifications/announcements/permissions/**")
+                            .authenticated()
+
+                    // Read tracking – any authenticated user
+                    .requestMatchers(HttpMethod.PUT, "/notifications/**")
+                            .authenticated()
+
                     // View notifications – any authenticated user
                     .requestMatchers(HttpMethod.GET, "/notifications/**")
                             .authenticated()

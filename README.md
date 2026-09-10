@@ -534,7 +534,7 @@ docker compose up -d service-registry config-server api-gateway auth-service
 ```
 
 ```bash
-docker compose up -d --no-deps user-service course-enrollment-service attendance-service scheduling-service payment-service notification-service reporting-service
+docker compose up -d --no-deps user-service course-enrollment-service attendance-service timetable-service payment-service notification-service reporting-service
 ```
 
 ```bash

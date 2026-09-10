@@ -16,8 +16,8 @@ public final class KafkaTopics {
     public static final String PAYMENT_RECEIVED = "payment-received";
     public static final String FEE_STATUS_UPDATED = "fee-status-updated";
 
-    public static final String SCHEDULE_GENERATED = "schedule-generated";
-    public static final String SCHEDULE_UPDATED = "schedule-updated";
+    public static final String TIMETABLE_GENERATED = "timetable-generated";
+    public static final String TIMETABLE_UPDATED = "timetable-updated";
 
     public static final String NOTIFICATION_REQUEST = "notification-request";
 }

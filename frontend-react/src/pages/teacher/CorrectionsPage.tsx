@@ -6,7 +6,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
+import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
 import { submitCorrection, fetchTeacherCorrections } from '../../store/slices/correctionSlice';
 import attendanceService from '../../services/attendanceService';
 import { StudentAttendance, AttendanceStatus, CorrectionStatus } from '../../types';
@@ -23,7 +23,7 @@ const STATUS_OPTIONS: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LEAVE', 'HALF_
 const CorrectionsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherSchedules } = useSelector((state: RootState) => state.schedules);
+  const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
   const { corrections } = useSelector((state: RootState) => state.corrections);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -37,7 +37,7 @@ const CorrectionsPage: React.FC = () => {
 
   useEffect(() => {
     if (user?.id) {
-      dispatch(fetchTeacherSchedules(user.id));
+      dispatch(fetchTeacherTimetables(user.id));
       dispatch(fetchTeacherCorrections(user.id));
     }
   }, [dispatch, user]);
@@ -74,7 +74,7 @@ const CorrectionsPage: React.FC = () => {
     }
   };
 
-  const uniqueClasses = [...new Map(teacherSchedules.map(s => [s.classId, s])).values()];
+  const uniqueClasses = [...new Map(teacherTimetables.map(s => [s.classId, s])).values()];
 
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'attendanceDate', label: 'Date', minWidth: 110 },

@@ -54,6 +54,18 @@ const paymentService = {
     return response.data;
   },
 
+  downloadReceipt: async (paymentId: string): Promise<void> => {
+    const blob = await paymentService.getReceipt(paymentId);
+    const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `receipt-${paymentId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   getMonthlyStats: async (month: number, year: number) => {
     const response = await api.get('/payments/stats', { params: { month, year } });
     return unwrap(response);

@@ -7,6 +7,7 @@ import com.artacademy.userservice.domain.Parent;
 import com.artacademy.userservice.domain.Student;
 import com.artacademy.userservice.dto.ParentRequest;
 import com.artacademy.userservice.dto.ParentResponse;
+import com.artacademy.userservice.dto.ParentSelfUpdateRequest;
 import com.artacademy.userservice.mapper.ParentMapper;
 import com.artacademy.userservice.repository.ParentRepository;
 import com.artacademy.userservice.repository.StudentRepository;
@@ -59,6 +60,24 @@ public class ParentService {
         return parentRepository.findAllByLoginId(loginId).stream()
                 .map(this::toEnrichedResponse)
                 .toList();
+    }
+
+    public ParentResponse updateMyProfile(String loginId, ParentSelfUpdateRequest request) {
+        List<Parent> rows = parentRepository.findAllByLoginId(loginId);
+        if (rows.isEmpty()) {
+            throw ApiException.notFound("Parent not found with login ID: " + loginId);
+        }
+        rows.forEach(parent -> {
+            parent.setFirstName(request.getFirstName());
+            parent.setLastName(request.getLastName());
+            parent.setEmail(request.getEmail());
+            parent.setPhone(request.getPhone());
+            parent.setAddress(request.getAddress());
+            parent.setOccupation(request.getOccupation());
+            parent.setRelationship(request.getRelationship());
+        });
+        List<Parent> saved = parentRepository.saveAll(rows);
+        return toEnrichedResponse(saved.get(0));
     }
 
     public ParentResponse createParent(ParentRequest request) {

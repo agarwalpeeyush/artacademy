@@ -40,6 +40,11 @@ const studentService = {
     return norm(unwrap(response));
   },
 
+  updateMyProfile: async (data: Partial<Student>): Promise<Student> => {
+    const response = await api.put('/students/me', data);
+    return norm(unwrap(response));
+  },
+
   create: async (data: Omit<Student, 'id'>): Promise<Student> => {
     const response = await api.post('/students', data);
     return norm(unwrap(response));

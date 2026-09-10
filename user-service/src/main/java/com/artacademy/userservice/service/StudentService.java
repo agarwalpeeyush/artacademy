@@ -6,8 +6,10 @@ import com.artacademy.common.exception.ApiException;
 import com.artacademy.userservice.domain.Student;
 import com.artacademy.userservice.dto.StudentRequest;
 import com.artacademy.userservice.dto.StudentResponse;
+import com.artacademy.userservice.dto.StudentSelfUpdateRequest;
 import com.artacademy.userservice.mapper.StudentMapper;
 import com.artacademy.userservice.repository.StudentRepository;
+import com.artacademy.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,6 +33,7 @@ public class StudentService {
     private static final String DEFAULT_TEMPORARY_PASSWORD = "Welcome@123";
 
     private final StudentRepository studentRepository;
+    private final UserRepository userRepository;
     private final StudentMapper studentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -51,9 +54,25 @@ public class StudentService {
         return studentMapper.toResponse(findById(id));
     }
 
+    public StudentResponse updateMyProfile(String loginId, StudentSelfUpdateRequest request) {
+        Student student = studentRepository.findByLoginId(loginId)
+                .orElseThrow(() -> ApiException.notFound("Student not found with login ID: " + loginId));
+        student.setFirstName(request.getFirstName());
+        student.setLastName(request.getLastName());
+        student.setEmail(request.getEmail());
+        student.setAddress(request.getAddress());
+        student.setFatherName(request.getFatherName());
+        student.setFatherPhone(request.getFatherPhone());
+        student.setMotherName(request.getMotherName());
+        student.setMotherPhone(request.getMotherPhone());
+        student.setGuardianName(request.getGuardianName());
+        student.setGuardianPhone(request.getGuardianPhone());
+        return studentMapper.toResponse(studentRepository.save(student));
+    }
+
     public StudentResponse createStudent(StudentRequest request) {
-        if (studentRepository.existsByLoginId(request.getLoginId())) {
-            throw ApiException.conflict("Student with login ID '" + request.getLoginId() + "' already exists");
+        if (userRepository.existsByLoginId(request.getLoginId())) {
+            throw ApiException.conflict("Login ID '" + request.getLoginId() + "' is already taken");
         }
         Student saved = studentRepository.save(studentMapper.toEntity(request));
         List<String> roles = new ArrayList<>(List.of("STUDENT"));
@@ -75,12 +94,11 @@ public class StudentService {
         return studentMapper.toResponse(saved);
     }
 
-    public StudentResponse updateStudent(UUID id, StudentRequest request) {
-        Student student = findById(id);
+    public StudentResponse updateStudent(UUID id, StudentRequest request) {        Student student = findById(id);
         if (request.getLoginId() != null
                 && !request.getLoginId().equals(student.getLoginId())
-                && studentRepository.existsByLoginId(request.getLoginId())) {
-            throw ApiException.conflict("Student with login ID '" + request.getLoginId() + "' already exists");
+                && userRepository.existsByLoginId(request.getLoginId())) {
+            throw ApiException.conflict("Login ID '" + request.getLoginId() + "' is already taken");
         }
         studentMapper.updateEntityFromRequest(request, student);
         return studentMapper.toResponse(studentRepository.save(student));

@@ -236,18 +236,18 @@ services:
       SERVER_PORT: 8084
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/attendance_db
 
-  scheduling-service:
+  timetable-service:
     <<: *svc
-    container_name: artacademy-scheduling-service
+    container_name: artacademy-timetable-service
     ports:
       - "8085:8085"
     volumes:
-      - ../scheduling-service/target/scheduling-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
+      - ../timetable-service/target/timetable-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
     entrypoint: ["java", "-jar", "/app.jar"]
     environment:
       <<: *env
       SERVER_PORT: 8085
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/schedule_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/timetable_db
 
   payment-service:
     <<: *svc

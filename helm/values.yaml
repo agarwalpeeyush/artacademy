@@ -108,8 +108,8 @@ services:
         cpu: "1000m"
         memory: "768Mi"
 
-  schedulingService:
-    name: scheduling-service
+  timetableService:
+    name: timetable-service
     replicaCount: 2
     port: 8085
     resources:
@@ -186,7 +186,7 @@ postgres:
     - user_db
     - academic_db
     - attendance_db
-    - schedule_db
+    - timetable_db
     - payment_db
     - notification_db
     - reporting_db

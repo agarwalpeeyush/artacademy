@@ -36,6 +36,11 @@ const parentService = {
     return norm(unwrap(response));
   },
 
+  updateMyProfile: async (data: Partial<Parent>): Promise<Parent> => {
+    const response = await api.put('/parents/me', data);
+    return norm(unwrap(response));
+  },
+
   getMyChildren: async (): Promise<Parent[]> => {
     const response = await api.get('/parents/me/children');
     const data = unwrap(response);

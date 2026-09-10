@@ -17,14 +17,14 @@ import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchEnrollments, createEnrollment, updateEnrollmentStatus, deleteEnrollment } from '../../store/slices/enrollmentSlice';
 import { Enrollment, Course, Teacher } from '../../types';
 import courseService from '../../services/courseService';
-import scheduleService from '../../services/scheduleService';
-import { CourseClass, Schedule } from '../../types';
+import timetableService from '../../services/timetableService';
+import { CourseClass, Timetable } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDate } from '../../utils/formatters';
-import { buildClassMap, resolveTeacherName, filterEnrollments, formatClassSchedule } from '../../utils/enrollmentHelpers';
+import { buildClassMap, resolveTeacherName, filterEnrollments, formatClassTimetable } from '../../utils/enrollmentHelpers';
 
 const schema = yup.object({
   studentId: yup.string().required('Student is required'),
@@ -54,7 +54,7 @@ const EnrollmentsPage: React.FC = () => {
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [allClasses, setAllClasses] = useState<CourseClass[]>([]);
   const [classes, setClasses] = useState<CourseClass[]>([]);
-  const [schedulesByClass, setSchedulesByClass] = useState<Map<string, Schedule[]>>(new Map());
+  const [timetablesByClass, setTimetablesByClass] = useState<Map<string, Timetable[]>>(new Map());
   const [searchCourse, setSearchCourse] = useState<Course | null>(null);
   const [searchTeacher, setSearchTeacher] = useState<Teacher | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,17 +75,17 @@ const EnrollmentsPage: React.FC = () => {
     dispatch(fetchTeachers());
     dispatch(fetchEnrollments());
     courseService.getAllClasses().then(setAllClasses).catch(() => setAllClasses([]));
-    scheduleService.getAll()
+    timetableService.getAll()
       .then((all) => {
-        const map = new Map<string, Schedule[]>();
+        const map = new Map<string, Timetable[]>();
         all.filter((s) => s.status === 'PUBLISHED').forEach((s) => {
           const arr = map.get(s.classId) ?? [];
           arr.push(s);
           map.set(s.classId, arr);
         });
-        setSchedulesByClass(map);
+        setTimetablesByClass(map);
       })
-      .catch(() => setSchedulesByClass(new Map()));
+      .catch(() => setTimetablesByClass(new Map()));
   }, [dispatch]);
 
   useEffect(() => {
@@ -152,7 +152,7 @@ const EnrollmentsPage: React.FC = () => {
       id: 'timetable', label: 'Timetable', minWidth: 200, sortable: false,
       format: (_v, row) => {
         const enrollment = row as unknown as Enrollment;
-        const summary = formatClassSchedule(schedulesByClass.get(enrollment.classId ?? '') ?? []);
+        const summary = formatClassTimetable(timetablesByClass.get(enrollment.classId ?? '') ?? []);
         return summary || <span style={{ color: '#9e9e9e' }}>Not scheduled</span>;
       },
     },

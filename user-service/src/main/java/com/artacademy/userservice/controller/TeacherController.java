@@ -7,6 +7,7 @@ import com.artacademy.userservice.dto.TeacherAvailabilityRequest;
 import com.artacademy.userservice.dto.TeacherAvailabilityResponse;
 import com.artacademy.userservice.dto.TeacherRequest;
 import com.artacademy.userservice.dto.TeacherResponse;
+import com.artacademy.userservice.dto.TeacherSelfUpdateRequest;
 import com.artacademy.userservice.service.TeacherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,6 +31,22 @@ import java.util.UUID;
 public class TeacherController {
 
     private final TeacherService teacherService;
+
+    @GetMapping("/me")
+    @Operation(summary = "Get currently authenticated teacher's profile")
+    public ResponseEntity<ApiResponse<TeacherResponse>> getMyProfile(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(
+                teacherService.getTeacherByLoginId(authentication.getName())));
+    }
+
+    @PutMapping("/me")
+    @Operation(summary = "Update the authenticated teacher's own contact details")
+    public ResponseEntity<ApiResponse<TeacherResponse>> updateMyProfile(
+            Authentication authentication,
+            @Valid @RequestBody TeacherSelfUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                teacherService.updateMyProfile(authentication.getName(), request)));
+    }
 
     @GetMapping
     @Operation(summary = "Get all teachers (paginated)")

@@ -9,22 +9,6 @@ Items required by the project skills spec (`art_academy_skills/*.md`) that are n
 These are actual code behaviors that diverge from the intended design. They are currently
 documented "as-implemented" in the relevant `DESIGN.md` files; fix the code later.
 
-- [ ] **payment-service returns raw DTOs, not `ApiResponse<T>`**
-  - Every other business service wraps responses in the shared `ApiResponse<T>` envelope, but
-    payment-service controllers return raw DTOs (`List<FeeCycleResponse>`, `PaymentResponse`, etc.)
-  - Response-shape inconsistency for API clients; wrap in `ApiResponse<T>` for consistency
-
-- [ ] **payment-service: live-cached enrollments get `courseFee = 0`**
-  - `EnrollmentCreatedEvent` carries no course fee, so `ENROLLMENT_CACHE.courseFee` defaults to 0
-    for enrollments cached from live Kafka events — fee cycles generated from them total **0**
-  - Only the V3 seed rows carry real fees. Wire up a fee-update event or include the fee in the
-    enrollment event so live fee generation produces non-zero amounts
-
-- [ ] **payment-service: overpayment surplus is not tracked**
-  - If a payment `amount` exceeds the cycle's total outstanding, the surplus is logged as a warning
-    but is **not** recorded as a credit/refund anywhere (only allocations up to outstanding are made)
-  - Track overpayment as a credit balance or reject/split it explicitly
-
 - [ ] **notification-service: SMS marked SENT without delivery**
   - There is no SMS provider integrated. An `SMS`-channel notification is optimistically set to
     `status = SENT` with a `sentAt` timestamp even though nothing is actually sent
@@ -32,9 +16,6 @@ documented "as-implemented" in the relevant `DESIGN.md` files; fix the code late
 
 - [ ] **`notificationSlice` wired to backend**
   - Redux slice exists but no Notifications page is rendered for any role in the current routing
-
-- [ ] **`ReceiptsPage` verified**
-  - File exists; confirm it is reachable via routing and renders real data from `GET /payments?studentId=...`
 
 - [ ] The notification feature still won't function: the backend only implements POST /notifications/send and GET /notifications/{userId}. The 3 endpoints the frontend needs — GET
   /notifications (current user), PUT /notifications/{id}/read, PUT /notifications/read-all — don't exist yet.
@@ -56,65 +37,23 @@ documented "as-implemented" in the relevant `DESIGN.md` files; fix the code late
   - Building the edit UI (and adding a photo field if wanted) is a frontend feature, not a bug fix
 
 ---
-## Phase 6 — Fees & Payments
 
-- [ ] **Make Payment screen (Student/Parent)**
-  - A form to initiate a payment for a fee cycle
-  - Currently `FeesPage` shows balances but has no "Pay Now" action
-  - Backend: payment gateway abstraction layer (`PaymentGatewayPort` interface + stub adapter)
-
-- [ ] **Receipt screen (Student/Parent)**
-  - `ReceiptsPage.tsx` exists in the file tree but needs to be verified as fully implemented
-  - `GET /payments/{id}/receipt` — generate a printable receipt
-
-- [ ] **Refund / adjustment workflow (Principal)**
-  - `POST /payments/refunds`, `POST /fees/adjustments`
-  - Frontend: Refunds/Adjustments page in Principal > Finance
-
-- [ ] **Fee Plans management (Principal)**
-  - Currently fees are derived directly from `Course.monthlyFee`; there is no `FeePlan` entity
-  - Add `FeePlan` entity (discount rules, siblings discount, admission waiver, etc.)
-  - Frontend: Fee Plans CRUD page in Principal > Finance
-
-- [ ] **Overdue fee status**
-  - Fee cycles past their due date that remain UNPAID should automatically transition to OVERDUE
-  - Add scheduled job in payment-service or derive status from `due_date < today AND status = UNPAID`
-
-- [ ] **Payment notification to student/parent on fee generation**
-  - notification-service already sends a fee reminder on `fee-generated` event, but the email template is minimal; add due date and itemised course breakdown
-
-- [ ] **Invoice PDF generation**
-  - `GET /fees/{cycleId}/invoice` returning a PDF
-  - Backend: PDF generation library (e.g. iText or OpenPDF)
-
----
-
-## Phase 7 — Mobile / PWA & Notifications
+Mobile / PWA & Notifications
 
 - [ ] **Notification bell / inbox (all roles)**
   - Frontend: Notifications page per role (Student, Teacher, Principal)
   - Show unread count badge on sidebar icon
-  - `GET /notifications?userId=...` is implemented in notification-service; wire it to the UI
-
-- [ ] **Push notification abstraction**
-  - notification-service currently only sends email; add a `PushNotificationPort` interface
+  - notification-service should send email, SMS and have whatsapp send capability (can be configured by Principal role)
   - Integrate with a provider (Firebase FCM or web push) for in-browser notifications
 
 - [ ] **PWA configuration**
   - Add `manifest.json` and a service worker to the React app
   - Enables "Add to Home Screen" on mobile browsers
 
-- [ ] **Responsive / mobile UX audit**
-  - Test all pages at 375 px (mobile) and 768 px (tablet) breakpoints
-  - Fix layout issues in DataTable-heavy pages (Enrollments, Attendance, Finance)
-
-- [ ] **Offline-friendly timetable**
-  - Service worker caches the student/teacher timetable for offline viewing
-
 - [ ] **Announcement notifications**
   - Principal can send a broadcast announcement to all students / teachers
-  - Backend: `POST /notifications/broadcast` (PRINCIPAL only)
-  - Frontend: Announcements management page in Principal > Administration
+  - Teacher can broadcast an announcement to their own students, depending upon whether principal has given this permission to teacher. Every teacher should not be able to send announcement. This is a permission that can be set by the principal.
+  - Announcements management page in Principal > Administration
 
 ---
 

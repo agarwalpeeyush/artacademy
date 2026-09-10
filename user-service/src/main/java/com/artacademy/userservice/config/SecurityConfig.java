@@ -51,6 +51,9 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT,    "/parents/**").hasRole("PRINCIPAL")
                     .requestMatchers(HttpMethod.DELETE, "/parents/**").hasRole("PRINCIPAL")
 
+                    // Login ID availability check – PRINCIPAL only (used at create time)
+                    .requestMatchers(HttpMethod.GET, "/users/login-id/available").hasRole("PRINCIPAL")
+
                     // Read endpoints – PRINCIPAL, TEACHER, STUDENT, or PARENT
                     .requestMatchers(HttpMethod.GET, "/teachers/**")
                             .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT")

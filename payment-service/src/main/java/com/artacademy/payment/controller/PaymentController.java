@@ -1,17 +1,23 @@
 package com.artacademy.payment.controller;
 
+import com.artacademy.payment.domain.Payment;
 import com.artacademy.payment.dto.PaymentRequest;
 import com.artacademy.payment.dto.PaymentResponse;
 import com.artacademy.payment.service.PaymentService;
+import com.artacademy.payment.service.ReceiptService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +28,7 @@ import java.util.UUID;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final ReceiptService receiptService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
@@ -32,10 +39,49 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "Get all payments, optionally filtered by date range")
+    public ResponseEntity<List<PaymentResponse>> getAllPayments(
+            @RequestParam(value = "startDate", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(value = "endDate", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return ResponseEntity.ok(paymentService.getAllPayments(startDate, endDate));
+    }
+
     @GetMapping("/student/{studentId}")
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
     @Operation(summary = "Get all payments for a student")
     public ResponseEntity<List<PaymentResponse>> getPayments(@PathVariable("studentId") UUID studentId) {
         return ResponseEntity.ok(paymentService.getPayments(studentId));
+    }
+
+    @GetMapping("/fee-cycle/{feeCycleId}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @Operation(summary = "Get all payments for a fee cycle")
+    public ResponseEntity<List<PaymentResponse>> getPaymentsByFeeCycle(
+            @PathVariable("feeCycleId") UUID feeCycleId) {
+        return ResponseEntity.ok(paymentService.getPaymentsByFeeCycle(feeCycleId));
+    }
+
+    @GetMapping("/{paymentId}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @Operation(summary = "Get a single payment by id")
+    public ResponseEntity<PaymentResponse> getPayment(@PathVariable("paymentId") UUID paymentId) {
+        return ResponseEntity.ok(paymentService.getPaymentById(paymentId));
+    }
+
+    @GetMapping("/{paymentId}/receipt")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @Operation(summary = "Download a PDF receipt for a payment")
+    public ResponseEntity<byte[]> downloadReceipt(@PathVariable("paymentId") UUID paymentId) {
+        Payment payment = paymentService.loadPaymentWithAllocations(paymentId);
+        byte[] pdf = receiptService.generateReceipt(payment);
+        String filename = "receipt-" + paymentId + ".pdf";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }

@@ -36,6 +36,36 @@ export const formatMonthYear = (month: number, year: number): string => {
   return format(date, 'MMMM yyyy');
 };
 
+/** Formats an ISO date/date-time string as dd/MM/yyyy. */
+export const formatDateDMY = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '-';
+  try {
+    const date = parseISO(dateStr);
+    if (!isValid(date)) return dateStr;
+    return format(date, 'dd/MM/yyyy');
+  } catch {
+    return dateStr;
+  }
+};
+
+/** Converts a dd/MM/yyyy string to an ISO date (yyyy-MM-dd). Returns null if invalid. */
+export const parseDMYtoISO = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const day = Number(dd);
+  const month = Number(mm);
+  const year = Number(yyyy);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day);
+  if (!isValid(date) || date.getDate() !== day || date.getMonth() !== month - 1) return null;
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+/** Today's date as dd/MM/yyyy, useful as a default for editable date inputs. */
+export const todayDMY = (): string => format(new Date(), 'dd/MM/yyyy');
+
 export const formatTime = (timeStr: string | null | undefined): string => {
   if (!timeStr) return '-';
   try {

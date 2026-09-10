@@ -56,6 +56,13 @@ public class FeeController {
         return ResponseEntity.ok(feeService.getFeeCycleDetails(feeCycleId));
     }
 
+    @GetMapping("/cycle/{feeCycleId}/details")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @Operation(summary = "Get per-course fee details for a fee cycle")
+    public ResponseEntity<List<FeeDetailResponse>> getFeeDetailsByCycle(@PathVariable("feeCycleId") UUID feeCycleId) {
+        return ResponseEntity.ok(feeService.getFeeDetailsByCycle(feeCycleId));
+    }
+
     @GetMapping("/outstanding/{studentId}")
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
     @Operation(summary = "Get outstanding (UNPAID or PARTIAL) fee cycles for a student")

@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchMyChildren } from '../../store/slices/parentSlice';
 import { UpcomingClass } from '../../types';
-import scheduleService from '../../services/scheduleService';
+import timetableService from '../../services/timetableService';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDate, formatTime, getDayName } from '../../utils/formatters';
@@ -32,7 +32,7 @@ const UpcomingClassesPage: React.FC = () => {
   useEffect(() => {
     if (!selectedStudent) return;
     setLoading(true);
-    scheduleService.getUpcomingForStudent(selectedStudent, 10)
+    timetableService.getUpcomingForStudent(selectedStudent, 10)
       .then(setUpcoming)
       .catch(() => setUpcoming([]))
       .finally(() => setLoading(false));
@@ -78,7 +78,7 @@ const UpcomingClassesPage: React.FC = () => {
             </TableHead>
             <TableBody>
               {upcoming.map((u, i) => (
-                <TableRow key={`${u.scheduleId}-${u.date}-${i}`}>
+                <TableRow key={`${u.timetableId}-${u.date}-${i}`}>
                   <TableCell><strong>{formatDate(u.date)}</strong></TableCell>
                   <TableCell>{getDayName(u.dayOfWeek)}</TableCell>
                   <TableCell>{formatTime(u.startTime)} – {formatTime(u.endTime)}</TableCell>

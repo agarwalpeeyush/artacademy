@@ -138,7 +138,7 @@ ON CONFLICT (student_id, course_id) DO NOTHING;
 -- =============================================================
 -- SCHEDULE DB: Rooms + Schedules
 -- =============================================================
-\c schedule_db
+\c timetable_db
 
 INSERT INTO rooms (id, room_name, capacity) VALUES
   ('ffffffff-0001-0001-0001-000000000001', 'Studio 1', 20),
@@ -147,7 +147,7 @@ INSERT INTO rooms (id, room_name, capacity) VALUES
   ('ffffffff-0004-0004-0004-000000000004', 'Art Room', 12)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO schedules (id, class_id, teacher_id, room_id, start_time, end_time, day_of_week) VALUES
+INSERT INTO timetables (id, class_id, teacher_id, room_id, start_time, end_time, day_of_week) VALUES
   -- Classical Dance: Mon/Wed/Fri 09:00–10:30
   ('gggggggg-0001-0001-0001-000000000001', 'dddddddd-0001-0001-0001-000000000001', 'aaaaaaaa-0002-0002-0002-000000000002', 'ffffffff-0001-0001-0001-000000000001', '09:00', '10:30', 'MONDAY'),
   ('gggggggg-0002-0002-0002-000000000002', 'dddddddd-0001-0001-0001-000000000001', 'aaaaaaaa-0002-0002-0002-000000000002', 'ffffffff-0001-0001-0001-000000000001', '09:00', '10:30', 'WEDNESDAY'),

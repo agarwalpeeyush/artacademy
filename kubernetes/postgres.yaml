@@ -107,8 +107,8 @@ data:
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'academic_db')\gexec
     SELECT 'CREATE DATABASE attendance_db'
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'attendance_db')\gexec
-    SELECT 'CREATE DATABASE schedule_db'
-    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'schedule_db')\gexec
+    SELECT 'CREATE DATABASE timetable_db'
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'timetable_db')\gexec
     SELECT 'CREATE DATABASE payment_db'
     WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payment_db')\gexec
     SELECT 'CREATE DATABASE notification_db'

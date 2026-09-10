@@ -7,10 +7,10 @@ import {
 import SaveIcon from '@mui/icons-material/Save';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherSchedules } from '../../store/slices/scheduleSlice';
+import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
 import { markStudentAttendance, fetchStudentAttendance } from '../../store/slices/attendanceSlice';
 import studentService from '../../services/studentService';
-import { Student, StudentAttendance, Schedule, AttendanceStatus } from '../../types';
+import { Student, StudentAttendance, Timetable, AttendanceStatus } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { format } from 'date-fns';
@@ -25,8 +25,8 @@ interface AttendanceEntry {
 const AttendancePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherSchedules } = useSelector((state: RootState) => state.schedules);
-  const [selectedClass, setSelectedClass] = useState<Schedule | null>(null);
+  const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
+  const [selectedClass, setSelectedClass] = useState<Timetable | null>(null);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [students, setStudents] = useState<Student[]>([]);
   const [entries, setEntries] = useState<AttendanceEntry[]>([]);
@@ -34,16 +34,16 @@ const AttendancePage: React.FC = () => {
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
-    if (user?.id) dispatch(fetchTeacherSchedules(user.id));
+    if (user?.id) dispatch(fetchTeacherTimetables(user.id));
   }, [dispatch, user]);
 
   const handleClassChange = async (classId: string) => {
-    const schedule = teacherSchedules.find(s => s.classId === classId) || null;
-    setSelectedClass(schedule);
-    if (schedule) {
+    const timetable = teacherTimetables.find(s => s.classId === classId) || null;
+    setSelectedClass(timetable);
+    if (timetable) {
       setLoading(true);
       try {
-        const data = await studentService.getByClass(schedule.classId);
+        const data = await studentService.getByClass(timetable.classId);
         setStudents(data);
         setEntries(data.map(s => ({ studentId: s.id, studentName: `${s.firstName} ${s.lastName}`, status: 'PRESENT', remarks: '' })));
       } catch { setStudents([]); setEntries([]); }
@@ -91,7 +91,7 @@ const AttendancePage: React.FC = () => {
               select label="Select Class" size="small" fullWidth
               onChange={e => handleClassChange(e.target.value)}
             >
-              {[...new Map(teacherSchedules.map(s => [s.classId, s])).values()].map(s => (
+              {[...new Map(teacherTimetables.map(s => [s.classId, s])).values()].map(s => (
                 <MenuItem key={s.classId} value={s.classId}>{s.className} – {s.courseName}</MenuItem>
               ))}
             </TextField>

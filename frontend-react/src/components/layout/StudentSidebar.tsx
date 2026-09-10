@@ -10,25 +10,27 @@ import {
   Divider,
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import PersonIcon from '@mui/icons-material/Person';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import UpcomingIcon from '@mui/icons-material/Upcoming';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import PaymentIcon from '@mui/icons-material/Payment';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PaletteIcon from '@mui/icons-material/Palette';
 
 const navItems = [
   { label: 'Dashboard', icon: <DashboardIcon />, path: '/student/dashboard' },
-  { label: 'My Profile', icon: <PersonIcon />, path: '/student/profile' },
   { label: 'Attendance', icon: <EventNoteIcon />, path: '/student/attendance' },
-  { label: 'Schedule', icon: <ScheduleIcon />, path: '/student/schedule' },
+  { label: 'Timetable', icon: <ScheduleIcon />, path: '/student/timetable' },
   { label: 'Upcoming Classes', icon: <UpcomingIcon />, path: '/student/upcoming' },
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/student/enrollments' },
   { label: 'Fees', icon: <AttachMoneyIcon />, path: '/student/fees' },
+  { label: 'Make Payment', icon: <PaymentIcon />, path: '/student/payments' },
   { label: 'Receipts', icon: <ReceiptIcon />, path: '/student/receipts' },
+  { label: 'Notifications', icon: <NotificationsIcon />, path: '/student/notifications' },
 ];
 
 const StudentSidebar: React.FC = () => {

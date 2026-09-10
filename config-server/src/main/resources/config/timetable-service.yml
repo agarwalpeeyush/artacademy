@@ -1,0 +1,15 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: timetable-service
+  datasource:
+    url: jdbc:postgresql://localhost:15432/timetable_db
+    username: artacademy
+    password: artacademy123
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration

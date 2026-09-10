@@ -5,19 +5,19 @@ import {
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchConflicts } from '../../store/slices/scheduleSlice';
-import { ScheduleConflictType } from '../../types';
+import { fetchConflicts } from '../../store/slices/timetableSlice';
+import { TimetableConflictType } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatTime, getDayName } from '../../utils/formatters';
 
-const typeLabel: Record<ScheduleConflictType, string> = {
+const typeLabel: Record<TimetableConflictType, string> = {
   TEACHER_DOUBLE_BOOKED: 'Teacher Double-Booked',
   ROOM_DOUBLE_BOOKED: 'Room Double-Booked',
   CLASS_OVERLAP: 'Class Overlap',
 };
 
-const typeColor: Record<ScheduleConflictType, 'error' | 'warning' | 'info'> = {
+const typeColor: Record<TimetableConflictType, 'error' | 'warning' | 'info'> = {
   TEACHER_DOUBLE_BOOKED: 'error',
   ROOM_DOUBLE_BOOKED: 'warning',
   CLASS_OVERLAP: 'info',
@@ -25,7 +25,7 @@ const typeColor: Record<ScheduleConflictType, 'error' | 'warning' | 'info'> = {
 
 const ScheduleConflictsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { conflicts, loading } = useSelector((state: RootState) => state.schedules);
+  const { conflicts, loading } = useSelector((state: RootState) => state.timetables);
 
   useEffect(() => {
     dispatch(fetchConflicts());
@@ -58,7 +58,7 @@ const ScheduleConflictsPage: React.FC = () => {
             </TableHead>
             <TableBody>
               {conflicts.map((c, i) => (
-                <TableRow key={`${c.scheduleId}-${c.otherScheduleId}-${i}`}>
+                <TableRow key={`${c.timetableId}-${c.otherTimetableId}-${i}`}>
                   <TableCell><Chip label={typeLabel[c.type]} color={typeColor[c.type]} size="small" /></TableCell>
                   <TableCell>{getDayName(c.dayOfWeek)}</TableCell>
                   <TableCell>{formatTime(c.startTime)} – {formatTime(c.endTime)}</TableCell>

@@ -18,6 +18,10 @@ const normCycle = (c: any): FeeCycle => ({
   dueDate: c.dueDate,
   generatedDate: c.generatedDate,
   status: c.status ?? 'UNPAID',
+  overdue: Boolean(c.overdue),
+  displayStatus: c.displayStatus ?? c.status ?? 'UNPAID',
+  excessAmount: Number(c.excessAmount ?? 0),
+  shortAmount: Number(c.shortAmount ?? 0),
 });
 
 const normDetail = (d: any): FeeDetail => ({
@@ -50,27 +54,27 @@ const feeService = {
   },
 
   getFeeCycleById: async (id: string): Promise<FeeCycle> => {
-    const response = await api.get(`/fees/${id}`);
+    const response = await api.get(`/fees/cycle/${id}`);
     return normCycle(unwrap(response));
   },
 
   getFeeDetails: async (feeCycleId: string): Promise<FeeDetail[]> => {
-    const response = await api.get(`/fees/${feeCycleId}/details`);
+    const response = await api.get(`/fees/cycle/${feeCycleId}/details`);
     return toArray(unwrap(response)).map(normDetail);
   },
 
   getOutstanding: async (): Promise<FeeCycle[]> => {
-    const response = await api.get('/fees/outstanding');
+    const response = await api.get('/fees/defaulters');
     return toArray(unwrap(response)).map(normCycle);
   },
 
   getStudentOutstanding: async (studentId: string): Promise<FeeCycle[]> => {
-    const response = await api.get(`/fees/student/${studentId}/outstanding`);
+    const response = await api.get(`/fees/outstanding/${studentId}`);
     return toArray(unwrap(response)).map(normCycle);
   },
 
   generateFees: async (month: number, year: number): Promise<FeeCycle[]> => {
-    const response = await api.post('/fees/generate', { month, year });
+    const response = await api.post('/fees/generate', { billingMonth: month, billingYear: year });
     return toArray(unwrap(response)).map(normCycle);
   },
 

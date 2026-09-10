@@ -92,6 +92,42 @@ public class NotificationService {
                 .map(this::toResponse);
     }
 
+    /**
+     * Marks a single notification as read.
+     */
+    @Transactional
+    public void markAsRead(UUID notificationId) {
+        notificationRepository.findById(notificationId).ifPresent(n -> {
+            if (!n.isRead()) {
+                n.setRead(true);
+                n.setReadAt(LocalDateTime.now());
+                notificationRepository.save(n);
+            }
+        });
+    }
+
+    /**
+     * Marks all of a user's unread notifications as read.
+     */
+    @Transactional
+    public void markAllAsRead(UUID userId) {
+        var unread = notificationRepository.findByUserIdAndIsReadFalse(userId);
+        LocalDateTime now = LocalDateTime.now();
+        unread.forEach(n -> {
+            n.setRead(true);
+            n.setReadAt(now);
+        });
+        notificationRepository.saveAll(unread);
+    }
+
+    /**
+     * Returns the count of unread notifications for a user.
+     */
+    @Transactional(readOnly = true)
+    public long getUnreadCount(UUID userId) {
+        return notificationRepository.countByUserIdAndIsReadFalse(userId);
+    }
+
     // -------------------------------------------------------------------------
     // Mapping helper
     // -------------------------------------------------------------------------
@@ -103,9 +139,13 @@ public class NotificationService {
                 .recipientEmail(n.getRecipientEmail())
                 .recipientPhone(n.getRecipientPhone())
                 .subject(n.getSubject())
+                .title(n.getTitle())
+                .type(n.getType())
                 .body(n.getBody())
                 .channel(n.getChannel())
                 .status(n.getStatus())
+                .isRead(n.isRead())
+                .readAt(n.getReadAt())
                 .sentAt(n.getSentAt())
                 .createdAt(n.getCreatedAt())
                 .errorMessage(n.getErrorMessage())

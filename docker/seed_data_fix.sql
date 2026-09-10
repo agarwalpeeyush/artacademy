@@ -3,9 +3,9 @@
 -- =============================================================
 -- SCHEDULE DB: Schedules (valid hex UUIDs)
 -- =============================================================
-\c schedule_db
+\c timetable_db
 
-INSERT INTO schedules (id, class_id, teacher_id, room_id, start_time, end_time, day_of_week) VALUES
+INSERT INTO timetables (id, class_id, teacher_id, room_id, start_time, end_time, day_of_week) VALUES
   ('a1a1a1a1-0001-0001-0001-000000000001', 'dddddddd-0001-0001-0001-000000000001', 'aaaaaaaa-0002-0002-0002-000000000002', 'ffffffff-0001-0001-0001-000000000001', '09:00', '10:30', 'MONDAY'),
   ('a1a1a1a1-0002-0002-0002-000000000002', 'dddddddd-0001-0001-0001-000000000001', 'aaaaaaaa-0002-0002-0002-000000000002', 'ffffffff-0001-0001-0001-000000000001', '09:00', '10:30', 'WEDNESDAY'),
   ('a1a1a1a1-0003-0003-0003-000000000003', 'dddddddd-0001-0001-0001-000000000001', 'aaaaaaaa-0002-0002-0002-000000000002', 'ffffffff-0001-0001-0001-000000000001', '09:00', '10:30', 'FRIDAY'),

@@ -49,4 +49,36 @@ public class NotificationController {
         Page<NotificationResponse> page = notificationService.getByUserId(userId, pageable);
         return ResponseEntity.ok(ApiResponse.success(page));
     }
+
+    /**
+     * Marks a single notification as read.
+     */
+    @PutMapping("/{id}/read")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Mark a notification as read")
+    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable UUID id) {
+        notificationService.markAsRead(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    /**
+     * Marks all of a user's notifications as read.
+     */
+    @PutMapping("/read-all")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Mark all notifications as read for a user")
+    public ResponseEntity<ApiResponse<Void>> markAllAsRead(@RequestParam UUID userId) {
+        notificationService.markAllAsRead(userId);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    /**
+     * Returns the count of unread notifications for a user.
+     */
+    @GetMapping("/unread-count")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get unread notification count for a user")
+    public ResponseEntity<ApiResponse<Long>> getUnreadCount(@RequestParam UUID userId) {
+        return ResponseEntity.ok(ApiResponse.success(notificationService.getUnreadCount(userId)));
+    }
 }

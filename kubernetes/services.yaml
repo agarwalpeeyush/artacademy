@@ -1,7 +1,7 @@
 ###############################################################################
 # Remaining Application Services
 # Each has: Deployment (2 replicas) + ClusterIP Service
-# Services: user, course-enrollment, attendance, scheduling,
+# Services: user, course-enrollment, attendance, timetable,
 #           payment, notification, reporting
 ###############################################################################
 
@@ -287,16 +287,16 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: scheduling-service
+  name: timetable-service
   namespace: artacademy
   labels:
-    app: scheduling-service
+    app: timetable-service
     app.kubernetes.io/part-of: artacademy
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: scheduling-service
+      app: timetable-service
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -305,7 +305,7 @@ spec:
   template:
     metadata:
       labels:
-        app: scheduling-service
+        app: timetable-service
     spec:
       initContainers:
         - name: wait-for-config
@@ -315,8 +315,8 @@ spec:
           image: busybox:1.36
           command: ["sh", "-c", "until nc -z postgres 5432; do sleep 3; done"]
       containers:
-        - name: scheduling-service
-          image: artacademy/scheduling-service:latest
+        - name: timetable-service
+          image: artacademy/timetable-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8085
@@ -327,7 +327,7 @@ spec:
             - name: SERVER_PORT
               value: "8085"
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres:5432/schedule_db"
+              value: "jdbc:postgresql://postgres:5432/timetable_db"
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -361,14 +361,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: scheduling-service
+  name: timetable-service
   namespace: artacademy
   labels:
-    app: scheduling-service
+    app: timetable-service
 spec:
   type: ClusterIP
   selector:
-    app: scheduling-service
+    app: timetable-service
   ports:
     - port: 8085
       targetPort: 8085

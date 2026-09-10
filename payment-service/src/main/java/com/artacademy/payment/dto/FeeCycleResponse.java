@@ -27,4 +27,10 @@ public class FeeCycleResponse {
     private LocalDateTime generatedDate;
     private LocalDateTime dueDate;
     private List<FeeDetailResponse> details;
+
+    // Derived on read (not persisted)
+    private boolean overdue;
+    private String displayStatus;
+    private BigDecimal excessAmount;
+    private BigDecimal shortAmount;
 }
