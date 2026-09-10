@@ -2,59 +2,80 @@
 
 ## 1. Overview
 
-The `user-service` manages the master data for the three human actor profiles in the academy:
-**Students**, **Teachers**, and **Parents**. It stores demographic and contact information,
-tracks teacher weekly availability and one-off availability exceptions (leave/sick days), links
-parents to their children, and publishes domain events when new users are created so downstream
-services (auth, reporting, notification) can react asynchronously.
+The **User Service** owns the master data for every human actor in the Art Academy
+platform: **students**, **teachers**, and **parents**. It is the system of record
+for profiles (names, contact details, qualifications, guardian information),
+teacher **weekly availability** and one-off **availability exceptions**, and the
+parent-to-student links.
 
-Identity is shared across the platform: the UUID minted here for a person is reused verbatim by
-auth-service (via a `*.created` Kafka event) and appears as `STUDENT_ID` / `TEACHER_ID` in the
-academic, attendance, schedule, and payment databases.
+The service is deliberately separated from the **auth-service**, which owns login
+credentials and roles. When a profile is created here, the User Service **publishes
+a `*-created` Kafka event** carrying the new person's UUID plus a temporary password
+and role list; the auth-service consumes it and provisions a login **with the same
+UUID**. This shared-UUID convention lets a person be joined across `user_db`,
+`auth_db`, and every downstream service database.
 
----
+Key characteristics:
+
+- **JOINED inheritance** — one `USERS` base table with a `USER_TYPE` discriminator,
+  and per-type child tables (`STUDENTS`, `TEACHERS`, `PARENTS`) keyed by the same ID.
+- **Kafka producer only** — no consumers live in this service.
+- Stateless JWT security; role-based authorization enforced centrally in
+  `SecurityConfig`.
 
 ## 2. Module Coordinates
 
 | Property | Value |
 |----------|-------|
-| ArtifactId | `user-service` |
-| Package root | `com.artacademy.userservice` |
-| Server port | **8082** local/dev · **8082** Docker container (host-mapped `8082:8082`) |
+| Service name | `user-service` |
+| HTTP port | `8082` |
 | Database | `user_db` (PostgreSQL) |
+| Package root | `com.artacademy.userservice` |
+| Framework | Spring Boot 3.3.4, Java 21 |
+| Persistence | Spring Data JPA / Hibernate, `ddl-auto: validate` |
+| Migrations | Flyway (`classpath:db/migration`; `db/seed` added under `docker` profile) |
+| Messaging | Spring Kafka (producer) |
+| Config source | Config Server at `http://localhost:8888` |
+| Service discovery | Eureka (`@EnableDiscoveryClient`) |
+| API docs | springdoc OpenAPI / Swagger UI |
 
----
+Datasource (from `config-server/config/user-service.yml`):
+`jdbc:postgresql://localhost:15432/user_db`.
 
 ## 3. Component Structure
 
+Package tree (actual files under `src/main/java/com/artacademy/userservice`):
+
 ```
 com.artacademy.userservice
-├── UserServiceApplication.java
+├── UserServiceApplication.java          # @SpringBootApplication, @EnableDiscoveryClient
 ├── config
-│   ├── SecurityConfig.java
-│   └── KafkaProducerConfig.java
+│   ├── KafkaProducerConfig.java         # ProducerFactory + KafkaTemplate (JSON, idempotent)
+│   └── SecurityConfig.java              # JWT filter chain + role rules
 ├── controller
-│   ├── StudentController.java
-│   ├── TeacherController.java
-│   └── ParentController.java
+│   ├── StudentController.java           # /students
+│   ├── TeacherController.java           # /teachers (+ availability, exceptions)
+│   ├── ParentController.java            # /parents (+ /me/children)
+│   └── UserController.java              # /users/login-id/available
 ├── domain
-│   ├── User.java
-│   ├── Student.java
-│   ├── Teacher.java
-│   ├── Parent.java
-│   ├── TeacherAvailability.java
-│   └── TeacherAvailabilityException.java
+│   ├── User.java                        # @Entity USERS, JOINED, @DiscriminatorColumn USER_TYPE
+│   ├── Student.java                     # @DiscriminatorValue("STUDENT")
+│   ├── Teacher.java                     # @DiscriminatorValue("TEACHER")
+│   ├── Parent.java                      # @DiscriminatorValue("PARENT")
+│   ├── TeacherAvailability.java         # TEACHER_AVAILABILITY
+│   └── TeacherAvailabilityException.java# TEACHER_AVAILABILITY_EXCEPTIONS
 ├── dto
-│   ├── StudentRequest.java / StudentResponse.java
-│   ├── TeacherRequest.java / TeacherResponse.java
-│   ├── ParentRequest.java / ParentResponse.java
+│   ├── StudentRequest.java / StudentResponse.java / StudentSelfUpdateRequest.java
+│   ├── TeacherRequest.java / TeacherResponse.java / TeacherSelfUpdateRequest.java
 │   ├── TeacherAvailabilityRequest.java / TeacherAvailabilityResponse.java
-│   └── TeacherAvailabilityExceptionRequest.java / TeacherAvailabilityExceptionResponse.java
+│   ├── TeacherAvailabilityExceptionRequest.java / TeacherAvailabilityExceptionResponse.java
+│   └── ParentRequest.java / ParentResponse.java / ParentSelfUpdateRequest.java
 ├── mapper
-│   ├── StudentMapper.java   (MapStruct)
-│   ├── TeacherMapper.java   (MapStruct)
-│   └── ParentMapper.java    (MapStruct)
+│   ├── StudentMapper.java               # MapStruct
+│   ├── TeacherMapper.java               # MapStruct
+│   └── ParentMapper.java                # MapStruct
 ├── repository
+│   ├── UserRepository.java
 │   ├── StudentRepository.java
 │   ├── TeacherRepository.java
 │   ├── ParentRepository.java
@@ -63,281 +84,453 @@ com.artacademy.userservice
 └── service
     ├── StudentService.java
     ├── TeacherService.java
-    └── ParentService.java
+    ├── ParentService.java
+    └── UserAccountService.java          # login-id availability
 ```
-
----
 
 ## 4. Domain Model
 
-### 4.1 Inheritance Strategy
+### JOINED inheritance + discriminator
 
-`JOINED` table inheritance: a single `USERS` base table holds common fields; `STUDENTS`,
-`TEACHERS`, and `PARENTS` hold subtype-specific columns and join to `USERS` on `id`.
+`User` is an `@Entity` mapped to table `USERS` with
+`@Inheritance(strategy = InheritanceType.JOINED)` and
+`@DiscriminatorColumn(name = "USER_TYPE", discriminatorType = STRING)`.
 
-```
-@Entity @Inheritance(JOINED) @DiscriminatorColumn("USER_TYPE")
-User (base)
-├── @DiscriminatorValue("STUDENT")  Student
-├── @DiscriminatorValue("TEACHER")  Teacher
-└── @DiscriminatorValue("PARENT")   Parent
-```
+Each subtype (`Student`, `Teacher`, `Parent`) is an `@Entity` that `extends User`,
+annotated with `@DiscriminatorValue(...)` and `@PrimaryKeyJoinColumn(name = "ID")`.
+Under the JOINED strategy the subtype's own columns live in its **own child table**
+(`STUDENTS`, `TEACHERS`, `PARENTS`), and the child row shares the **same primary key
+UUID** as its `USERS` row (a FK back to `USERS.ID`, cascade delete). Hibernate writes
+the concrete class name (`STUDENT` / `TEACHER` / `PARENT`) into `USERS.USER_TYPE`; the
+column is not exposed as a mapped field on the `User` entity — JPA manages it.
 
-### 4.2 `User` (base entity)
+### `User` (table `USERS`)
 
-```
-UUID     id           (PK)
-String   loginId      (nullable — links to auth-service username)
-String   firstName    (not null)
-String   lastName
-```
+| Field | Column | Type | Notes |
+|-------|--------|------|-------|
+| `id` | `ID` | UUID | PK, `@GeneratedValue(UUID)` |
+| `loginId` | `LOGIN_ID` | String | unique; equals the auth username |
+| `firstName` | `FIRST_NAME` | String | `NOT NULL` |
+| `lastName` | `LAST_NAME` | String | nullable |
 
-### 4.3 `Student`
+The discriminator `USER_TYPE` is stored in `USERS` but is not a mapped Java field.
 
-Inherits `User`, adds `dob`, `fatherName`/`fatherPhone`, `motherName`/`motherPhone`,
-`guardianName`/`guardianPhone`, `email`, `address`, `enrollmentDate`, `status` (ACTIVE | INACTIVE).
+### `Student` (table `STUDENTS`, discriminator `STUDENT`)
 
-### 4.4 `Teacher`
+| Field | Column | Type |
+|-------|--------|------|
+| `dob` | `DATE_OF_BIRTH` | LocalDate |
+| `fatherName` | `FATHER_NAME` | String |
+| `fatherPhone` | `FATHER_PHONE` | String |
+| `motherName` | `MOTHER_NAME` | String |
+| `motherPhone` | `MOTHER_PHONE` | String |
+| `guardianName` | `GUARDIAN_NAME` | String |
+| `guardianPhone` | `GUARDIAN_PHONE` | String |
+| `email` | `EMAIL` | String |
+| `address` | `ADDRESS` | TEXT |
+| `enrollmentDate` | `ENROLLMENT_DATE` | LocalDate |
+| `status` | `STATUS` | String (`NOT NULL`) |
 
-Inherits `User`, adds `employeeCode` (unique, max 50), `email`, `phone`, `qualification`,
-`joiningDate` (not null), `status` (ACTIVE | INACTIVE).
+### `Teacher` (table `TEACHERS`, discriminator `TEACHER`)
 
-### 4.5 `Parent`
+| Field | Column | Type | Notes |
+|-------|--------|------|-------|
+| `employeeCode` | `EMPLOYEE_CODE` | String(50) | unique |
+| `email` | `EMAIL` | String |
+| `phone` | `PHONE` | String |
+| `qualification` | `QUALIFICATION` | String |
+| `joiningDate` | `JOINING_DATE` | LocalDate |
+| `status` | `STATUS` | String (`NOT NULL`) |
 
-Inherits `User`, adds:
+### `Parent` (table `PARENTS`, discriminator `PARENT`)
 
-```
-String  relationship
-String  phone
-String  email
-String  address
-String  occupation
-UUID    studentId     (FK → STUDENTS.ID — the linked child)
-String  status        (not null)
-```
+| Field | Column | Type | Notes |
+|-------|--------|------|-------|
+| `relationship` | `RELATIONSHIP` | String |
+| `phone` | `PHONE` | String |
+| `email` | `EMAIL` | String |
+| `address` | `ADDRESS` | TEXT |
+| `occupation` | `OCCUPATION` | String |
+| `studentId` | `STUDENT_ID` | UUID | FK → `STUDENTS.ID` |
+| `status` | `STATUS` | String (`NOT NULL`) |
 
-### 4.6 `TeacherAvailability` (recurring weekly slots)
+A single parent login (`loginId`) may have **multiple `PARENTS` rows**, one per
+linked child (each row shares the same `loginId` but a different `id` and
+`studentId`). This models a parent with several children.
 
-```
-UUID        id
-Teacher     teacher    (ManyToOne LAZY)
-DayOfWeek   dayOfWeek  (Java enum: MONDAY…SUNDAY)
-LocalTime   startTime
-LocalTime   endTime
-```
+### `TeacherAvailability` (table `TEACHER_AVAILABILITY`)
 
-### 4.7 `TeacherAvailabilityException` (one-off leave/sick days)
+| Field | Column | Type | Notes |
+|-------|--------|------|-------|
+| `id` | `ID` | UUID | PK |
+| `teacher` | `TEACHER_ID` | UUID | `@ManyToOne` → `Teacher`, `NOT NULL` |
+| `dayOfWeek` | `DAY_OF_WEEK` | enum (`DayOfWeek`, STRING) |
+| `startTime` | `START_TIME` | LocalTime |
+| `endTime` | `END_TIME` | LocalTime |
 
-```
-UUID       id
-Teacher    teacher            (ManyToOne LAZY, not null)
-LocalDate  date               (EXCEPTION_DATE, not null)
-String     reason             (max 255; e.g. LEAVE / SICK + note)
-boolean    unavailableAllDay  (not null, default true)
-LocalTime  startTime          (nullable — set for partial-day)
-LocalTime  endTime            (nullable — set for partial-day)
-```
+Represents a **recurring weekly** window.
 
----
+### `TeacherAvailabilityException` (table `TEACHER_AVAILABILITY_EXCEPTIONS`)
+
+| Field | Column | Type | Notes |
+|-------|--------|------|-------|
+| `id` | `ID` | UUID | PK |
+| `teacher` | `TEACHER_ID` | UUID | `@ManyToOne` → `Teacher`, `NOT NULL` |
+| `date` | `EXCEPTION_DATE` | LocalDate | `NOT NULL` |
+| `reason` | `REASON` | String(255) |
+| `unavailableAllDay` | `UNAVAILABLE_ALL_DAY` | boolean | `NOT NULL` |
+| `startTime` | `START_TIME` | LocalTime | null when all-day |
+| `endTime` | `END_TIME` | LocalTime | null when all-day |
+
+Represents a **one-off** override (leave / sick day / partial-day unavailability).
+Note the Java field is named `date`, mapped to column `EXCEPTION_DATE`.
 
 ## 5. Database Schema
 
-Final state after V4 migration (V5 seeds sample rows):
+Actual `V1__init_user_schema.sql`:
 
 ```sql
+-- User service schema (user_db). JOINED inheritance: USERS base + STUDENTS/TEACHERS/PARENTS.
+
 CREATE TABLE USERS (
     ID         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    USER_TYPE  VARCHAR(20) NOT NULL,   -- discriminator
-    LOGIN_ID   VARCHAR(100),
-    FIRST_NAME VARCHAR(100) NOT NULL,
-    LAST_NAME  VARCHAR(100)
+    USER_TYPE  VARCHAR(31) NOT NULL,
+    LOGIN_ID   VARCHAR(255) UNIQUE,
+    FIRST_NAME VARCHAR(255) NOT NULL,
+    LAST_NAME  VARCHAR(255)
 );
 
+CREATE INDEX idx_users_login_id ON USERS (LOGIN_ID);
+
 CREATE TABLE STUDENTS (
-    ID              UUID PRIMARY KEY REFERENCES USERS(ID) ON DELETE CASCADE,
-    DOB             DATE,
-    FATHER_NAME     VARCHAR(100),
-    FATHER_PHONE    VARCHAR(20),
-    MOTHER_NAME     VARCHAR(100),
-    MOTHER_PHONE    VARCHAR(20),
-    GUARDIAN_NAME   VARCHAR(100),
-    GUARDIAN_PHONE  VARCHAR(20),
+    ID              UUID PRIMARY KEY,
+    DATE_OF_BIRTH   DATE,
+    FATHER_NAME     VARCHAR(255),
+    FATHER_PHONE    VARCHAR(255),
+    MOTHER_NAME     VARCHAR(255),
+    MOTHER_PHONE    VARCHAR(255),
+    GUARDIAN_NAME   VARCHAR(255),
+    GUARDIAN_PHONE  VARCHAR(255),
     EMAIL           VARCHAR(255),
     ADDRESS         TEXT,
     ENROLLMENT_DATE DATE,
-    STATUS          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+    STATUS          VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_students_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE
 );
 
 CREATE TABLE TEACHERS (
-    ID             UUID PRIMARY KEY REFERENCES USERS(ID) ON DELETE CASCADE,
-    EMPLOYEE_CODE  VARCHAR(50) UNIQUE NOT NULL,
-    EMAIL          VARCHAR(255),
-    PHONE          VARCHAR(20),
-    QUALIFICATION  VARCHAR(255),
-    JOINING_DATE   DATE NOT NULL,
-    STATUS         VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+    ID            UUID PRIMARY KEY,
+    EMPLOYEE_CODE VARCHAR(50) UNIQUE,
+    EMAIL         VARCHAR(255),
+    PHONE         VARCHAR(255),
+    QUALIFICATION VARCHAR(255),
+    JOINING_DATE  DATE,
+    STATUS        VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_teachers_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE
 );
 
+CREATE INDEX idx_teachers_employee_code ON TEACHERS (EMPLOYEE_CODE);
+
 CREATE TABLE PARENTS (
-    ID           UUID PRIMARY KEY REFERENCES USERS(ID) ON DELETE CASCADE,
-    RELATIONSHIP VARCHAR(50),
-    PHONE        VARCHAR(50),
+    ID           UUID PRIMARY KEY,
+    RELATIONSHIP VARCHAR(255),
+    PHONE        VARCHAR(255),
     EMAIL        VARCHAR(255),
     ADDRESS      TEXT,
     OCCUPATION   VARCHAR(255),
-    STUDENT_ID   UUID REFERENCES STUDENTS(ID),
-    STATUS       VARCHAR(50) NOT NULL
+    STUDENT_ID   UUID,
+    STATUS       VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_parents_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE,
+    CONSTRAINT fk_parents_student FOREIGN KEY (STUDENT_ID) REFERENCES STUDENTS (ID)
 );
-CREATE INDEX idx_parents_student_id ON PARENTS(STUDENT_ID);
+
+CREATE INDEX idx_parents_student_id ON PARENTS (STUDENT_ID);
 
 CREATE TABLE TEACHER_AVAILABILITY (
     ID          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    TEACHER_ID  UUID NOT NULL REFERENCES TEACHERS(ID) ON DELETE CASCADE,
-    DAY_OF_WEEK VARCHAR(10) NOT NULL,
-    START_TIME  TIME NOT NULL,
-    END_TIME    TIME NOT NULL
+    TEACHER_ID  UUID NOT NULL,
+    DAY_OF_WEEK VARCHAR(255),
+    START_TIME  TIME,
+    END_TIME    TIME,
+    CONSTRAINT fk_availability_teacher FOREIGN KEY (TEACHER_ID) REFERENCES TEACHERS (ID) ON DELETE CASCADE
 );
+
+CREATE INDEX idx_availability_teacher_id ON TEACHER_AVAILABILITY (TEACHER_ID);
 
 CREATE TABLE TEACHER_AVAILABILITY_EXCEPTIONS (
-    ID                  UUID PRIMARY KEY,
-    TEACHER_ID          UUID NOT NULL REFERENCES TEACHERS(ID) ON DELETE CASCADE,
+    ID                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TEACHER_ID          UUID NOT NULL,
     EXCEPTION_DATE      DATE NOT NULL,
     REASON              VARCHAR(255),
-    UNAVAILABLE_ALL_DAY BOOLEAN NOT NULL DEFAULT TRUE,
+    UNAVAILABLE_ALL_DAY BOOLEAN NOT NULL,
     START_TIME          TIME,
-    END_TIME            TIME
+    END_TIME            TIME,
+    CONSTRAINT fk_availability_exceptions_teacher FOREIGN KEY (TEACHER_ID) REFERENCES TEACHERS (ID) ON DELETE CASCADE
 );
-CREATE INDEX idx_availability_exceptions_teacher_id ON TEACHER_AVAILABILITY_EXCEPTIONS(TEACHER_ID);
+
+CREATE INDEX idx_availability_exceptions_teacher_id ON TEACHER_AVAILABILITY_EXCEPTIONS (TEACHER_ID);
 ```
-
-`ddl-auto: validate` — the schema must match the JPA entities exactly.
-
----
 
 ## 6. REST API
 
-### 6.1 Student Endpoints — `/students`
+All endpoints are authenticated via JWT. Roles below are enforced centrally in
+`SecurityConfig` by HTTP method + path prefix (there are **no** per-method
+`@PreAuthorize` annotations). All responses are wrapped in the common
+`ApiResponse<T>` envelope. When routed through the API gateway the base URL is
+`http://localhost:8080`; direct access is `http://localhost:8082`.
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/students/me` | Any authenticated | Own profile resolved by `loginId` (JWT `Authentication.getName()`) |
-| `GET` | `/students` | PRINCIPAL | List all students (paginated, `size=20`) |
-| `GET` | `/students/{id}` | PRINCIPAL | Get student by UUID |
-| `POST` | `/students` | PRINCIPAL | Create student |
-| `PUT` | `/students/{id}` | PRINCIPAL | Update student (also used for student self-profile edit) |
-| `DELETE` | `/students/{id}` | PRINCIPAL | Delete student |
+The full `SecurityConfig` rule set: `POST`/`PUT`/`DELETE` on `/students/**`,
+`/teachers/**`, `/parents/**` → `PRINCIPAL`; `GET /users/login-id/available` →
+`PRINCIPAL`; `GET /teachers/**` → PRINCIPAL/TEACHER/STUDENT; `GET /students/**` and
+`GET /parents/**` → PRINCIPAL/TEACHER/STUDENT/PARENT; everything else authenticated.
 
-### 6.2 Teacher Endpoints — `/teachers`
+### `/students`
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/teachers` | PRINCIPAL | List all teachers (paginated) |
-| `GET` | `/teachers/{id}` | PRINCIPAL | Get teacher by UUID |
-| `POST` | `/teachers` | PRINCIPAL | Create teacher |
-| `PUT` | `/teachers/{id}` | PRINCIPAL | Update teacher |
-| `DELETE` | `/teachers/{id}` | PRINCIPAL | Delete teacher |
-| `GET` | `/teachers/{id}/availability` | — | Get recurring weekly availability slots |
-| `PUT` | `/teachers/{id}/availability` | — | Replace all availability slots (full replace) |
-| `GET` | `/teachers/{id}/availability-exceptions` | — | List one-off exceptions |
-| `POST` | `/teachers/{id}/availability-exceptions` | — | Add a one-off exception (leave/sick) |
-| `DELETE` | `/teachers/{id}/availability-exceptions/{exceptionId}` | — | Delete an exception |
+| Method | Path | Auth (roles) | Description |
+|--------|------|--------------|-------------|
+| GET | `/students/me` | PRINCIPAL, TEACHER, STUDENT, PARENT (GET `/students/**`) | Authenticated student's own profile |
+| PUT | `/students/me` | PRINCIPAL (PUT `/students/**`) | Update own contact details (self-update DTO) |
+| GET | `/students` | PRINCIPAL, TEACHER, STUDENT, PARENT | List all students (paginated, default size 20) |
+| GET | `/students/{id}` | PRINCIPAL, TEACHER, STUDENT, PARENT | Get one student by UUID |
+| POST | `/students` | PRINCIPAL | Create a student (publishes `student-created`) |
+| PUT | `/students/{id}` | PRINCIPAL | Update a student |
+| DELETE | `/students/{id}` | PRINCIPAL | Delete a student |
 
-#### `POST /teachers/{id}/availability-exceptions` — Request Body
+### `/teachers`
+
+| Method | Path | Auth (roles) | Description |
+|--------|------|--------------|-------------|
+| GET | `/teachers/me` | PRINCIPAL, TEACHER, STUDENT (GET `/teachers/**`) | Authenticated teacher's own profile |
+| PUT | `/teachers/me` | PRINCIPAL (PUT `/teachers/**`) | Update own contact details |
+| GET | `/teachers` | PRINCIPAL, TEACHER, STUDENT | List all teachers (paginated) |
+| GET | `/teachers/{id}` | PRINCIPAL, TEACHER, STUDENT | Get one teacher |
+| POST | `/teachers` | PRINCIPAL | Create a teacher (publishes `teacher-created`) |
+| PUT | `/teachers/{id}` | PRINCIPAL | Update a teacher |
+| DELETE | `/teachers/{id}` | PRINCIPAL | Delete a teacher (also removes availability + exceptions) |
+| GET | `/teachers/{id}/availability` | PRINCIPAL, TEACHER, STUDENT | List recurring weekly availability slots |
+| PUT | `/teachers/{id}/availability` | PRINCIPAL | Replace **all** availability slots for the teacher |
+| GET | `/teachers/{id}/availability-exceptions` | PRINCIPAL, TEACHER, STUDENT | List one-off exceptions (newest first) |
+| POST | `/teachers/{id}/availability-exceptions` | PRINCIPAL | Add a one-off exception |
+| DELETE | `/teachers/{id}/availability-exceptions/{exceptionId}` | PRINCIPAL | Delete a specific exception |
+
+### `/parents`
+
+| Method | Path | Auth (roles) | Description |
+|--------|------|--------------|-------------|
+| GET | `/parents/me` | PRINCIPAL, TEACHER, STUDENT, PARENT (GET `/parents/**`) | Authenticated parent's own profile |
+| GET | `/parents/me/children` | PRINCIPAL, TEACHER, STUDENT, PARENT | All child links for the authenticated parent |
+| PUT | `/parents/me` | PRINCIPAL (PUT `/parents/**`) | Update own contact details (applied to all rows sharing the login) |
+| GET | `/parents` | PRINCIPAL, TEACHER, STUDENT, PARENT | List all parents (paginated) |
+| GET | `/parents/{id}` | PRINCIPAL, TEACHER, STUDENT, PARENT | Get one parent |
+| POST | `/parents` | PRINCIPAL | Create a parent / add a child link (publishes `parent-created` on first login) |
+| PUT | `/parents/{id}` | PRINCIPAL | Update a parent row |
+| DELETE | `/parents/{id}` | PRINCIPAL | Delete a parent row |
+
+### `/users`
+
+| Method | Path | Auth (roles) | Description |
+|--------|------|--------------|-------------|
+| GET | `/users/login-id/available?loginId=...` | PRINCIPAL | Returns `{"available": true|false}` — whether the login ID is free across all user types |
+
+### Request JSON — create a student (`POST /students`)
 
 ```json
 {
-  "date": "2026-09-20",
-  "reason": "SICK",
-  "unavailableAllDay": true,
-  "startTime": null,
-  "endTime": null
+  "loginId": "student5",
+  "firstName": "Ishaan",
+  "lastName": "Mehta",
+  "dob": "2011-03-14",
+  "fatherName": "Rohit Mehta",
+  "fatherPhone": "9100000010",
+  "motherName": "Kavya Mehta",
+  "motherPhone": "9100000011",
+  "email": "student5@artacademy.test",
+  "address": "22 Hill Road, Mumbai",
+  "enrollmentDate": "2025-08-01",
+  "status": "ACTIVE",
+  "additionalRoles": []
+}
+```
+`temporaryPassword` is optional; if blank/absent the service defaults it to
+`Welcome@123` before publishing the auth event. Required fields: `loginId`,
+`firstName`, `dob`, `status`.
+
+### Request JSON — create a teacher (`POST /teachers`)
+
+```json
+{
+  "loginId": "teacher3",
+  "firstName": "Neha",
+  "lastName": "Iyer",
+  "employeeCode": "EMP-003",
+  "email": "teacher3@artacademy.test",
+  "phone": "9000000003",
+  "qualification": "M.F.A Printmaking",
+  "joiningDate": "2025-02-01",
+  "status": "ACTIVE",
+  "additionalRoles": ["PRINCIPAL"]
+}
+```
+Required fields: `loginId`, `firstName`, `employeeCode` (≤ 50 chars, unique),
+`joiningDate`, `status`.
+
+### Request JSON — replace availability (`PUT /teachers/{id}/availability`)
+
+The body is a **JSON array** that fully replaces existing slots:
+
+```json
+[
+  { "dayOfWeek": "MONDAY",    "startTime": "09:00", "endTime": "12:00" },
+  { "dayOfWeek": "MONDAY",    "startTime": "14:00", "endTime": "17:00" },
+  { "dayOfWeek": "WEDNESDAY", "startTime": "10:00", "endTime": "13:00" }
+]
+```
+`dayOfWeek` is a Java `DayOfWeek` enum value (`MONDAY`..`SUNDAY`); all three fields
+are required per slot.
+
+### Request JSON — add an exception (`POST /teachers/{id}/availability-exceptions`)
+
+Full-day leave:
+
+```json
+{
+  "date": "2026-09-21",
+  "reason": "Sick leave",
+  "unavailableAllDay": true
 }
 ```
 
-For a partial-day exception, set `unavailableAllDay: false` and provide `startTime`/`endTime`.
+Partial-day unavailability:
 
-### 6.3 Parent Endpoints — `/parents`
+```json
+{
+  "date": "2026-09-22",
+  "reason": "Doctor appointment",
+  "unavailableAllDay": false,
+  "startTime": "13:00",
+  "endTime": "15:00"
+}
+```
+When `unavailableAllDay` is `true`, the service **nulls out** `startTime`/`endTime`
+regardless of what was sent. Only `date` is required.
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/parents/me` | Any authenticated | Authenticated parent's own profile (by `loginId`) |
-| `GET` | `/parents/me/children` | Any authenticated | Children linked to the authenticated parent |
-| `GET` | `/parents` | PRINCIPAL | List all parents (paginated) |
-| `GET` | `/parents/{id}` | PRINCIPAL | Get parent by UUID |
-| `POST` | `/parents` | PRINCIPAL | Create parent (links to a `studentId`) |
-| `PUT` | `/parents/{id}` | PRINCIPAL | Update parent |
-| `DELETE` | `/parents/{id}` | PRINCIPAL | Delete parent |
+### Request JSON — create a parent (`POST /parents`)
 
-All responses use the shared `ApiResponse.success(...)` envelope.
-
----
+```json
+{
+  "loginId": "parent2",
+  "firstName": "Rohit",
+  "lastName": "Mehta",
+  "relationship": "FATHER",
+  "phone": "9100000010",
+  "email": "parent2@artacademy.test",
+  "address": "22 Hill Road, Mumbai",
+  "occupation": "Engineer",
+  "studentId": "00000000-0000-0000-0003-000000000005",
+  "status": "ACTIVE"
+}
+```
+Required fields: `loginId`, `firstName`, `studentId` (must reference an existing
+student), `status`.
 
 ## 7. Service Logic
 
-### `StudentService`
+### Self vs. admin access
 
-| Method | Logic |
-|--------|-------|
-| `getAllStudents(Pageable)` | Paginated `findAll` |
-| `getStudentByLoginId(loginId)` | Find or throw `404` (used by `/students/me`) |
-| `getStudentById(id)` | Find or throw `404` |
-| `createStudent(request)` | `existsByLoginId` → `409` if duplicate; save; publish `StudentCreatedEvent` |
-| `updateStudent(id, request)` | Load; loginId conflict check (exclude self); save |
-| `deleteStudent(id)` | Load; delete |
+- **Self endpoints (`/me`, `/me/children`)** resolve the caller from
+  `Authentication.getName()` (the JWT subject = `loginId`) and look the profile up
+  by `loginId`. Self-updates use dedicated `*SelfUpdateRequest` DTOs that expose only
+  a safe subset of contact fields (name, email, phone/address, guardian info, etc.)
+  and never touch identity keys such as `employeeCode` or `status`.
+- **Admin endpoints (create/update/delete by `{id}`)** are PRINCIPAL-only and operate
+  by UUID. Missing entities raise `ApiException.notFound`; duplicate `loginId` /
+  `employeeCode` raise `ApiException.conflict`.
 
-### `TeacherService`
+### Student / Teacher / Parent creation
 
-| Method | Logic |
-|--------|-------|
-| `getAllTeachers(Pageable)` | Paginated `findAll` |
-| `getTeacherById(id)` | Find or throw `404` |
-| `createTeacher(request)` | `existsByEmployeeCode` → `409`; save; publish `TeacherCreatedEvent` |
-| `updateTeacher(id, request)` | Load; employeeCode conflict check (exclude self); save |
-| `deleteTeacher(id)` | Delete availability slots first, then teacher |
-| `getAvailability(id)` / `updateAvailability(id, list)` | Read / full-replace weekly slots |
-| `getExceptions(id)` | List exceptions ordered by date |
-| `addException(id, request)` | Load teacher; persist a new exception |
-| `deleteException(id, exceptionId)` | Delete the exception scoped to the teacher |
+1. Validate uniqueness — `existsByLoginId` (all users) and, for teachers,
+   `existsByEmployeeCode`.
+2. Map the request to the entity and `save` it (JOINED insert into `USERS` + child).
+3. Build the role list: base role (`STUDENT` / `TEACHER` / `PARENT`) plus any
+   distinct `additionalRoles`.
+4. Publish the corresponding `*-created` event carrying the new UUID, username
+   (`loginId`), email, a resolved temporary password, names, and roles.
 
-### `ParentService`
+### Parent linking & multi-child logic
 
-| Method | Logic |
-|--------|-------|
-| `getAllParents(Pageable)` | Paginated `findAll` |
-| `getParentByLoginId(loginId)` | Authenticated parent lookup for `/parents/me` |
-| `getMyChildren(loginId)` | Resolve the parent, return the linked child/children |
-| `getParentById(id)` | Find or throw `404` |
-| `createParent(request)` | Save with linked `studentId`; publish `ParentCreatedEvent` |
-| `updateParent(id, request)` / `deleteParent(id)` | Standard update / delete |
+A parent login can be linked to several students. `createParent` requires an existing
+`studentId`. It publishes `parent-created` **only for the first row** of a given
+`loginId` (`firstAccount = !existsByLoginId(loginId)`); subsequent calls with the same
+`loginId` add another `PARENTS` row (another child link) and log an "added child link"
+message **without** re-publishing an auth event. `getMyChildren`, `getParentByLoginId`,
+and `updateMyProfile` all operate over **all** rows matching the login
+(`findAllByLoginId`). Parent responses are enriched with the linked student's display
+name (`studentName`).
 
----
+### Availability handling
 
-## 8. Kafka Events Published
+- `getAvailability(teacherId)` validates the teacher exists, then returns the slots.
+- `updateAvailability(teacherId, requests)` is a **full replace**: it
+  `deleteByTeacherId` first, then persists the supplied list. There is no partial
+  merge.
 
-| Topic | Event | When |
-|-------|-------|------|
-| `student.created` | `StudentCreatedEvent` | After student persist |
-| `teacher.created` | `TeacherCreatedEvent` | After teacher persist |
-| `parent.created` | `ParentCreatedEvent` | After parent persist |
+### Exceptions handling
 
-Consumers: `auth-service` (creates a matching auth user with the **same** UUID + role) and
-`reporting-service` (creates summary rows).
+- `getExceptions` returns rows `OrderByDateDesc` (newest first).
+- `addException` forces `startTime`/`endTime` to `null` when `unavailableAllDay` is
+  true.
+- `deleteException` verifies the exception belongs to the given `teacherId` before
+  deleting; a mismatch is reported as not-found.
+- Deleting a teacher cascades: the service explicitly deletes exceptions and
+  availability rows before removing the teacher.
 
----
+### Login-ID availability check
 
-## 9. MapStruct Mappers
+`UserAccountService.isLoginIdAvailable(loginId)` returns
+`!userRepository.existsByLoginId(loginId)` — i.e. true when **no** user of any type
+already owns that login. The controller wraps it as `{"available": <boolean>}`.
+Restricted to PRINCIPAL (used by the create-user UI).
 
-`StudentMapper`, `TeacherMapper`, and `ParentMapper` are interface-based MapStruct mappers;
-implementations are generated at compile time under `target/generated-sources/annotations/`.
+## 8. Kafka Producers
 
----
+This service is a **producer only** (no `@KafkaListener` anywhere). Topic name
+constants live in `common-library` at
+`com.artacademy.common.events.KafkaTopics`. Producer settings
+(`KafkaProducerConfig`): `StringSerializer` key, `JsonSerializer` value, type-info
+headers disabled, `acks=all`, `retries=3`, idempotence enabled. The **message key is
+the new person's UUID string**.
 
-## 10. Migration History
+| Topic constant | Topic name | Event class | Published when | Payload fields |
+|----------------|------------|-------------|----------------|----------------|
+| `KafkaTopics.STUDENT_CREATED` | `student-created` | `StudentCreatedEvent` | After a student is saved (`POST /students`) | `studentId` (UUID), `username`, `email`, `temporaryPassword`, `firstName`, `lastName`, `roles` (List, defaults `["STUDENT"]`), `occurredAt` |
+| `KafkaTopics.TEACHER_CREATED` | `teacher-created` | `TeacherCreatedEvent` | After a teacher is saved (`POST /teachers`) | `teacherId` (UUID), `username`, `email`, `temporaryPassword`, `employeeCode`, `firstName`, `lastName`, `roles` (defaults `["TEACHER"]`), `occurredAt` |
+| `KafkaTopics.PARENT_CREATED` | `parent-created` | `ParentCreatedEvent` | After the **first** parent row for a login is saved (`POST /parents`) | `parentId` (UUID), `username`, `email`, `temporaryPassword`, `firstName`, `lastName`, `roles` (defaults `["PARENT"]`), `occurredAt` |
 
-| Version | Description |
-|---------|-------------|
-| V1 | Initial schema with BIGSERIAL IDs and separate teacher/student tables |
-| V2 | Redesign: JOINED inheritance with UUID PKs; `USERS` base + `STUDENTS`, `TEACHERS`, `TEACHER_AVAILABILITY` |
-| V3 | Added `PARENTS` child table (parent → student link) |
-| V4 | Added `TEACHER_AVAILABILITY_EXCEPTIONS` (one-off leave/sick days, all-day or partial) |
-| V5 | Seed sample users: principal, 2 teachers (+ weekly availability), 3 students, 1 parent linked to student1 — UUIDs match auth/academic/attendance/schedule/payment seeds |
+The auth-service consumes these events and creates a login **with the same UUID**,
+the given temporary password, and the roles — realizing the shared-UUID contract.
+
+## 9. Migrations
+
+Clean-slate Flyway layout:
+
+- `db/migration/V1__init_user_schema.sql` — schema only (tables, indexes, FKs). Always
+  applied.
+- `db/seed/V2__seed_dev_data.sql` — profile-gated dev/docker seed. The `db/seed`
+  location is added to `spring.flyway.locations` **only under the `docker` profile**
+  (see `config-server/config/user-service.yml`), so production runs schema only.
+
+The seed inserts **7 profile rows** whose UUIDs match `auth_db` and whose `loginId`
+equals the username:
+
+| Row | UUID (suffix) | Type | loginId | Name | Extra |
+|-----|---------------|------|---------|------|-------|
+| teacher1 | `...0002-...0001` | TEACHER | teacher1 | Aisha Khan | EMP-001 |
+| teacher2 | `...0002-...0002` | TEACHER | teacher2 | Rahul Verma | EMP-002 |
+| student1 | `...0003-...0001` | STUDENT | student1 | Meera Nair | linked to parent1 |
+| student2 | `...0003-...0002` | STUDENT | student2 | Arjun Sharma | |
+| student3 | `...0003-...0003` | STUDENT | student3 | Diya Patel | |
+| student4 | `...0003-...0004` | STUDENT | student4 | Kabir Singh | |
+| parent1 | `...0004-...0001` | PARENT | parent1 | Sunita Nair | → student1 |
+
+Inserts are idempotent (`ON CONFLICT (ID) DO NOTHING`). `ddl-auto` is `validate`, so
+Hibernate never mutates the schema — Flyway is the single source of truth.

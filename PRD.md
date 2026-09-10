@@ -10,8 +10,8 @@ the functional requirements and features currently implemented.
 ## 2. Scope
 
 In scope: authentication & user administration, academy management (teachers, students, courses,
-classes, enrolments), attendance (with a correction workflow), scheduling & timetabling (draft/
-publish/history/conflicts/room availability/upcoming), fees & payments, notifications, and
+classes, enrolments), attendance (with a correction workflow), timetabling (draft/publish/room
+availability/upcoming classes), fees & payments, notifications & announcements, and
 reporting/analytics.
 
 Out of scope (tracked in `TODO.md`): payment-gateway integration, PWA/offline, push
@@ -22,8 +22,8 @@ notifications, multi-tenancy, gallery/CMS, and CI/CD hardening items.
 | Role | Persona | Primary goals |
 |------|---------|---------------|
 | Principal | Academy administrator | Run the academy: manage people, courses, timetable, fees; monitor attendance, revenue, and system activity |
-| Teacher | Instructor | Mark attendance, view own schedule & students, request corrections, manage own availability |
-| Student | Learner | See schedule/upcoming classes, track attendance, view & pay fees, download receipts |
+| Teacher | Instructor | Mark attendance, view own timetable & students, request corrections, manage own availability, broadcast announcements when permitted |
+| Student | Learner | See timetable/upcoming classes, track attendance, view & pay fees, download receipts |
 | Parent | Guardian | Monitor children's attendance, upcoming classes and fees; pay fees; receive notifications |
 
 ## 4. Non-Functional Requirements
@@ -32,7 +32,7 @@ notifications, multi-tenancy, gallery/CMS, and CI/CD hardening items.
 |------|-------------|
 | Security | JWT bearer auth; BCrypt password hashing; role-based route guards (backend + frontend); login rate limiting (5 failures → 15-min lock); audit logging of security events |
 | Availability | Stateless services behind Eureka; independently deployable and scalable |
-| Data integrity | Database-per-service; Flyway `validate` migrations; idempotent seed data |
+| Data integrity | Database-per-service; single-`V1` Flyway `validate` migrations; idempotent, profile-gated seed data |
 | Consistency | Event-driven (Kafka) cross-service propagation; shared UUID identity across DBs |
 | Observability | Centralised JSON logging via ELK; per-service Swagger/OpenAPI |
 | Portability | Docker Compose, Kubernetes manifests, and Helm chart provided |
@@ -54,16 +54,16 @@ notifications, multi-tenancy, gallery/CMS, and CI/CD hardening items.
 | AUTH-7 | Account activation/deactivation | Principal | Toggle ACTIVE/INACTIVE; deactivated users cannot log in |
 | AUTH-8 | User management | Principal | Paginated list of all users with status & roles |
 | AUTH-9 | Role management | Principal | View/edit a user's roles (multi-select) |
-| AUTH-10 | Audit log | Principal | Records logins, failures, logout, password events, role/status changes; filter by username, paginated |
+| AUTH-10 | Audit log | Principal | Records logins, failures, logout, password events; filter by username, paginated |
 
 ### 5.2 People — Teachers, Students, Parents
 
 | ID | Feature | Role | Description |
 |----|---------|------|-------------|
 | PPL-1 | Teacher CRUD | Principal | Create/list/edit/delete teachers (employee code, qualification, contact, joining date) |
-| PPL-2 | Teacher detail | Principal | Profile with assigned classes, schedule, attendance stats, availability |
+| PPL-2 | Teacher detail | Principal | Profile with assigned classes, timetable, attendance stats, availability |
 | PPL-3 | Student CRUD | Principal | Create/list/edit/delete students (DOB, guardians, contact, address, enrolment date) |
-| PPL-4 | Student detail | Principal | Profile with enrolments, attendance summary, fee history, schedule |
+| PPL-4 | Student detail | Principal | Profile with enrolments, attendance summary, fee history, timetable |
 | PPL-5 | Student self-profile | Student | View and edit own contact/profile details |
 | PPL-6 | Parent profiles & linking | Principal/Parent | Parent entity linked to a student; parent portal reads linked child data |
 | PPL-7 | Search / filter / sort | Principal | On all list pages (students, teachers, courses, classes, enrolments) |
@@ -77,36 +77,35 @@ notifications, multi-tenancy, gallery/CMS, and CI/CD hardening items.
 | ACD-1 | Course CRUD | Principal | Course code/name/type, description, monthly & admission fee, duration |
 | ACD-2 | Course detail | Principal | Description, fees, classes, teacher assignments, enrolled students |
 | ACD-3 | Class CRUD | Principal | Class name, course, assigned teacher, room, capacity, status |
-| ACD-4 | Enrolment management | Principal | Enrol a student into a course/class; unique per (student, course); status changes |
+| ACD-4 | Enrolment management | Principal/Teacher | Enrol a student into a course/class; unique active per (student, course); status changes; soft-cancel |
 | ACD-5 | Enrolment views | Student/Parent | View active/inactive enrolments |
 
 ### 5.4 Attendance
 
 | ID | Feature | Role | Description |
 |----|---------|------|-------------|
-| ATT-1 | Mark student attendance | Teacher | Bulk mark present/absent for a class on a date (class session) |
-| ATT-2 | Student attendance view | Student/Parent | Attendance history by class; summary percentage |
-| ATT-3 | Teacher self-attendance | Teacher | Record own present/absent per day |
+| ATT-1 | Mark student attendance | Teacher/Principal | Single or bulk mark present/absent/leave/half-day for a class on a date (class session) |
+| ATT-2 | Student attendance view | Student/Teacher/Principal | Attendance history by class; summary percentage (half-day = 0.5) |
+| ATT-3 | Teacher self-attendance | Teacher/Principal | Record own present/absent per day |
 | ATT-4 | Class session unit | System | `ClassSession` represents a scheduled occurrence; attendance references a session |
 | ATT-5 | Correction workflow | Teacher/Principal | Teacher requests a change to a past record with reason; Principal approves/rejects with note |
 | ATT-6 | Attendance report | Principal | Filter by student/class/date range |
-| ATT-7 | Attendance exceptions report | Principal | Students/teachers below a configurable threshold (e.g. 75%) |
+| ATT-7 | Attendance exceptions report | Principal | Students/teachers below a configurable threshold |
 | ATT-8 | Monthly / course summaries | Principal | Attendance grouped by course and month |
 | ATT-9 | Export | Principal | Download attendance data as CSV |
 
-### 5.5 Scheduling & Timetable
+### 5.5 Timetable
 
 | ID | Feature | Role | Description |
 |----|---------|------|-------------|
-| SCH-1 | Timetable builder | Principal | Assign class/teacher/room to a day-of-week + time slot |
-| SCH-2 | Draft/publish workflow | Principal | Schedules start as DRAFT; publishing makes them visible to teachers/students |
-| SCH-3 | Unpublish | Principal | Revert a published schedule to DRAFT |
-| SCH-4 | Schedule history | Principal | Each publish snapshots the timetable into an immutable version; browse versions & entries |
-| SCH-5 | Conflict dashboard | Principal | Detect teacher double-booking, room double-booking, class overlap |
-| SCH-6 | Room availability | Principal | For a room + date, show occupied vs free slots within a working-day window |
-| SCH-7 | Teacher schedule | Teacher | Own weekly published schedule |
-| SCH-8 | Student timetable | Student | Published schedule across all enrolled classes/courses |
-| SCH-9 | Upcoming classes | Student/Parent | Next N sessions in chronological (calendar-date) order |
+| TT-1 | Timetable builder | Principal | Assign class/teacher/room to a day-of-week + time slot |
+| TT-2 | Draft/publish workflow | Principal | Timetables start as DRAFT; publishing makes them visible to teachers/students |
+| TT-3 | Unpublish | Principal | Revert a published timetable entry to DRAFT |
+| TT-4 | Room CRUD | Principal | Manage rooms (name, capacity) |
+| TT-5 | Room availability | Principal | For a room + day, show occupied vs free slots within a working-day window (08:00–20:00) |
+| TT-6 | Teacher timetable | Teacher | Own weekly published timetable |
+| TT-7 | Student timetable | Student | Published timetable across all enrolled classes/courses |
+| TT-8 | Upcoming classes | Student/Parent | Next N sessions in chronological (calendar-date) order |
 
 ### 5.6 Fees & Payments
 
@@ -115,48 +114,50 @@ notifications, multi-tenancy, gallery/CMS, and CI/CD hardening items.
 | FEE-1 | Fee generation | Principal | Generate monthly fee cycles per student from active enrolments |
 | FEE-2 | Fee cycle view | Student/Parent | Billing period, total/paid/outstanding, status (PAID/PARTIAL/UNPAID) |
 | FEE-3 | Fee detail breakdown | Student/Parent/Principal | Per-course line items within a cycle |
-| FEE-4 | Make payment | Student/Parent | Record a payment against a fee cycle; allocation to details |
-| FEE-5 | Receipts | Student/Parent | View/download payment receipts |
+| FEE-4 | Make payment | Student/Parent | Record a payment against a fee cycle; FIFO allocation to details |
+| FEE-5 | Receipts | Student/Parent | View/download payment receipts (PDF) |
 | FEE-6 | Outstanding / defaulters | Principal/Teacher | Students with outstanding balances |
 | FEE-7 | Revenue report | Principal | Monthly/yearly collection trends |
 
-### 5.7 Notifications
+### 5.7 Notifications & Announcements
 
 | ID | Feature | Role | Description |
 |----|---------|------|-------------|
-| NTF-1 | Absent alert | System→Parent/Student | Triggered on `attendance.recorded` for an absence |
-| NTF-2 | Fee reminder | System→Student/Parent | Triggered on `fee.generated` |
-| NTF-3 | Payment receipt | System→Student/Parent | Triggered on `payment.received` |
-| NTF-4 | Notification centre | Parent | View notifications for the account |
+| NTF-1 | Absent alert | System→Parent/Student | Triggered on `attendance-recorded` for an absence |
+| NTF-2 | Fee reminder | System→Student/Parent | Triggered on `fee-generated` |
+| NTF-3 | Payment receipt | System→Student/Parent | Triggered on `payment-received` |
+| NTF-4 | Notification centre | All | View notifications, mark read/read-all, unread count |
+| NTF-5 | Announcements | Principal/Teacher | Principal broadcasts to audiences; teachers broadcast to their students when granted permission |
+| NTF-6 | Broadcast permission | Principal | Grant/revoke a teacher's announcement permission |
 
 ### 5.8 Reporting & Analytics
 
 | ID | Feature | Role | Description |
 |----|---------|------|-------------|
 | RPT-1 | Principal dashboard | Principal | Totals: students, teachers, courses, classes, active enrolments, revenue, pending fees, today's attendance % |
-| RPT-2 | Teacher dashboard | Teacher | Weekly class count, today's schedule |
+| RPT-2 | Teacher dashboard | Teacher | Weekly class count, today's timetable |
 | RPT-3 | Student dashboard | Student | Active enrolments, attendance %, outstanding fees, today's classes |
 | RPT-4 | Parent dashboard | Parent | Children count, average attendance, total outstanding |
 | RPT-5 | Revenue analytics | Principal | Revenue by period |
 | RPT-6 | Defaulters | Principal | Outstanding-fee list |
-| RPT-7 | Attendance analytics | Principal | Trends and exception reports |
+| RPT-7 | Attendance analytics | Principal | Trends, monthly summaries, exception reports, CSV export |
 
 ---
 
 ## 6. Key Business Rules
 
-1. **Identity is shared**: a person's UUID is identical across auth, user, academic, attendance, schedule, and payment databases; `username == loginId`.
-2. **Published-only visibility**: teachers and students only see `PUBLISHED` schedules; the Principal sees drafts and published.
-3. **History is immutable**: publishing snapshots the current timetable; historical versions are never mutated.
-4. **Enrolment uniqueness**: a student can be enrolled in a given course only once (`UNIQUE(STUDENT_ID, COURSE_ID)`).
-5. **Attendance uniqueness**: one student-attendance row per `(student, class, date)`; one teacher-attendance row per `(teacher, date)`.
-6. **Fee cycle uniqueness**: one cycle per `(student, month, year)`; status derives from paid vs total.
-7. **Correction approval**: only a Principal can approve/reject a correction; approval updates the underlying attendance record.
-8. **Security lockout**: 5 failed logins lock an account for 15 minutes; deactivated accounts cannot authenticate.
+1. **Identity is shared**: a person's UUID is identical across auth, user, academic, attendance, timetable, and payment databases; `username == loginId`.
+2. **Published-only visibility**: teachers and students only see `PUBLISHED` timetable entries; the Principal sees drafts and published.
+3. **Enrolment uniqueness**: a student can hold only one *active* enrolment per course (`UNIQUE(STUDENT_ID, COURSE_ID) WHERE STATUS='ACTIVE'`); cancellation is a soft status change.
+4. **Attendance uniqueness**: one student-attendance row per `(student, class, date)`; one teacher-attendance row per `(teacher, date)`; one class session per `(class, date)`.
+5. **Fee cycle uniqueness**: one cycle per `(student, month, year)`; status derives from paid vs total; payments allocate FIFO across fee details.
+6. **Correction approval**: only a Principal can approve/reject a correction; approval updates the underlying attendance record and publishes `attendance-updated`.
+7. **Security lockout**: 5 failed logins lock an account for 15 minutes; deactivated accounts cannot authenticate.
+8. **Clean-slate data**: schema is created by a single `V1` migration; demo data is loaded only under the `docker`/`dev` profile via `V2__seed_dev_data.sql`.
 
 ## 7. Assumptions & Constraints
 
 - Payment capture is an internal record (no external gateway integration yet).
-- Notifications are email/SMS via the notification-service; only the Parent portal renders an in-app notification list today.
-- Schedules are modelled weekly (day-of-week + time); "upcoming" projects them onto the next calendar dates server-side.
-- Seed accounts are for local/testing only and must be removed/rotated before production.
+- Notifications are email/SMS via the notification-service (Gmail SMTP); the in-app notification list is available to all roles.
+- Timetables are modelled weekly (day-of-week + time); "upcoming" projects them onto the next calendar dates server-side.
+- Seed accounts (1 principal, 2 teachers, 4 students, 1 parent — all password `Admin@1234`) are for local/testing only and must be removed/rotated before production.

@@ -2,56 +2,71 @@
 
 ## 1. Overview
 
-The `attendance-service` records daily attendance for both students (per class) and teachers, and owns a teacher-driven **attendance-correction workflow** reviewed by the Principal. It also maintains a lightweight `CLASS_SESSION` record per `(class, date)` so attendance rows can be tied to a session and a course.
+The Attendance Service records and manages daily attendance for students and
+teachers in the Art Academy platform. It supports single and bulk marking of
+student attendance, teacher attendance, a Principal-reviewed correction
+workflow, and per-student attendance statistics. Class sessions are materialised
+on demand so that every attendance record is anchored to a concrete
+`(class, date)` session. State changes are broadcast to the rest of the platform
+over Kafka (`attendance-recorded`, `attendance-updated`) where they are consumed
+by the reporting and notification services.
 
-- **Student attendance** — strict-create for single marks (no duplicate `(student, class, date)`), plus a bulk upsert used when a teacher submits a whole class at once.
-- **Teacher attendance** — upsert on `(teacher, date)`.
-- **Corrections** — a teacher submits a correction request against an existing student record; the Principal approves (which mutates the record) or rejects it.
+Key capabilities:
 
-It publishes `AttendanceRecordedEvent` (new marks) and `AttendanceUpdatedEvent` (status changes) so the reporting and notification services can react asynchronously.
-
----
+- Mark one student, bulk-upsert a whole class session, and update individual records.
+- Query a student's history (optionally by date range), a class roster for a date, and computed stats.
+- Record teacher attendance as an upsert keyed by teacher + date.
+- Submit attendance-correction requests (TEACHER/PRINCIPAL) and approve/reject them (PRINCIPAL only).
+- Auto-create a `ClassSession` the first time attendance is marked for a `(class, date)` pair.
 
 ## 2. Module Coordinates
 
-| Property | Value |
-|----------|-------|
-| ArtifactId | `attendance-service` |
+| Attribute | Value |
+|-----------|-------|
+| Service name | `attendance-service` |
 | Package root | `com.artacademy.attendance` |
-| Server port | **8084** local/dev · **8084** Docker container (host-mapped `8084:8084`) |
-| Database | `attendance_db` (PostgreSQL on `localhost:15432` local, `postgres:5432` Docker) |
-
----
+| HTTP port | `8084` |
+| Database | `attendance_db` (PostgreSQL) |
+| Runtime | Spring Boot 3.3.4, Java 21 |
+| Config source | Spring Cloud Config (`optional:configserver:http://localhost:8888`) |
+| Security | Stateless JWT (`JwtAuthenticationFilter` from `common-library`), method + URL role rules |
+| Messaging | Apache Kafka (producer only) |
+| Migrations | Flyway — `V1__init_attendance_schema.sql`, profile-gated `V2__seed_dev_data.sql` |
 
 ## 3. Component Structure
 
+Package tree (from actual source under `src/main/java`):
+
 ```
 com.artacademy.attendance
-├── AttendanceServiceApplication.java
+├── AttendanceServiceApplication.java         # @SpringBootApplication entry point
 ├── config
-│   ├── SecurityConfig.java
-│   └── KafkaProducerConfig.java
+│   ├── KafkaProducerConfig.java              # String key + JSON value producer, idempotent, acks=all
+│   └── SecurityConfig.java                   # JWT filter chain + role-based URL rules
 ├── controller
-│   ├── StudentAttendanceController.java
-│   ├── TeacherAttendanceController.java
-│   └── AttendanceCorrectionController.java
+│   ├── StudentAttendanceController.java       # /attendance/students
+│   ├── TeacherAttendanceController.java        # /attendance/teachers
+│   └── AttendanceCorrectionController.java     # /attendance/corrections
 ├── domain
-│   ├── AttendanceStatus.java        (enum)
-│   ├── ClassSessionStatus.java      (enum)
-│   ├── CorrectionStatus.java        (enum)
-│   ├── StudentAttendance.java
-│   ├── TeacherAttendance.java
-│   ├── ClassSession.java
-│   └── AttendanceCorrection.java
+│   ├── StudentAttendance.java                # STUDENT_ATTENDANCE entity
+│   ├── TeacherAttendance.java                # TEACHER_ATTENDANCE entity
+│   ├── ClassSession.java                     # CLASS_SESSION entity
+│   ├── AttendanceCorrection.java             # ATTENDANCE_CORRECTION entity
+│   ├── AttendanceStatus.java                 # PRESENT / ABSENT / LEAVE / HALF_DAY
+│   ├── ClassSessionStatus.java               # SCHEDULED / HELD / CANCELLED
+│   └── CorrectionStatus.java                 # PENDING / APPROVED / REJECTED
 ├── dto
-│   ├── StudentAttendanceRequest.java / StudentAttendanceResponse.java
+│   ├── StudentAttendanceRequest.java
+│   ├── StudentAttendanceResponse.java
 │   ├── StudentAttendanceStatsResponse.java
-│   ├── TeacherAttendanceRequest.java / TeacherAttendanceResponse.java
-│   ├── AttendanceCorrectionRequest.java / AttendanceCorrectionResponse.java
-│   └── AttendanceCorrectionReviewRequest.java
+│   ├── TeacherAttendanceRequest.java
+│   ├── TeacherAttendanceResponse.java
+│   ├── AttendanceCorrectionRequest.java
+│   ├── AttendanceCorrectionReviewRequest.java
+│   └── AttendanceCorrectionResponse.java
 ├── mapper
-│   ├── StudentAttendanceMapper.java  (MapStruct)
-│   └── TeacherAttendanceMapper.java  (MapStruct)
+│   ├── StudentAttendanceMapper.java
+│   └── TeacherAttendanceMapper.java
 ├── repository
 │   ├── StudentAttendanceRepository.java
 │   ├── TeacherAttendanceRepository.java
@@ -64,286 +79,370 @@ com.artacademy.attendance
     └── AttendanceCorrectionService.java
 ```
 
----
+All controllers return the shared `com.artacademy.common.dto.ApiResponse<T>`
+envelope. Errors are raised via `com.artacademy.common.exception.ApiException`
+(`conflict`, `notFound`).
 
 ## 4. Domain Model
 
-### 4.1 Enums
+### 4.1 Entities
 
-```
-AttendanceStatus    : PRESENT, ABSENT, LEAVE, HALF_DAY
-ClassSessionStatus  : SCHEDULED, HELD, CANCELLED
-CorrectionStatus    : PENDING, APPROVED, REJECTED
-```
+**StudentAttendance** (`STUDENT_ATTENDANCE`)
 
-### 4.2 `StudentAttendance` (table `STUDENT_ATTENDANCE`)
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | UUID | PK, generated |
+| `studentId` | UUID | not null |
+| `classId` | UUID | not null |
+| `courseId` | UUID | nullable; back-filled from the session when null |
+| `sessionId` | UUID | FK → `CLASS_SESSION.ID` |
+| `attendanceDate` | LocalDate | not null |
+| `status` | `AttendanceStatus` | not null, string enum |
+| `remarks` | String (TEXT) | nullable |
 
-```
-UUID             id
-UUID             studentId        (not null; logical FK → user-service, not DB-enforced)
-UUID             classId          (not null; logical FK → course-enrollment-service)
-UUID             courseId         (nullable; stamped from the class session when unknown)
-UUID             sessionId        (nullable; FK → CLASS_SESSION.id)
-LocalDate        attendanceDate   (not null)
-AttendanceStatus status           (STRING, not null, max 20)
-String           remarks          (TEXT)
+Unique constraint: `(studentId, classId, attendanceDate)`.
 
-UNIQUE (studentId, classId, attendanceDate)
-```
+**TeacherAttendance** (`TEACHER_ATTENDANCE`)
 
-### 4.3 `TeacherAttendance` (table `TEACHER_ATTENDANCE`)
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | UUID | PK, generated |
+| `teacherId` | UUID | not null |
+| `attendanceDate` | LocalDate | not null |
+| `status` | `AttendanceStatus` | not null, string enum |
+| `remarks` | String (TEXT) | nullable |
 
-```
-UUID             id
-UUID             teacherId        (not null)
-LocalDate        attendanceDate   (not null)
-AttendanceStatus status           (STRING, not null, max 20)
-String           remarks          (TEXT)
+Unique constraint: `(teacherId, attendanceDate)`.
 
-UNIQUE (teacherId, attendanceDate)
-```
+**ClassSession** (`CLASS_SESSION`)
 
-### 4.4 `ClassSession` (table `CLASS_SESSION`)
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | UUID | PK, generated |
+| `classId` | UUID | not null |
+| `courseId` | UUID | nullable |
+| `sessionDate` | LocalDate | not null |
+| `startTime` | LocalTime | nullable |
+| `endTime` | LocalTime | nullable |
+| `status` | `ClassSessionStatus` | not null; defaults to `SCHEDULED` |
 
-One row per `(class, date)`, resolved-or-created the first time attendance is marked for that class on that day.
+Unique constraint: `(classId, sessionDate)`.
 
-```
-UUID                id
-UUID                classId      (not null)
-UUID                courseId     (nullable)
-LocalDate           sessionDate  (not null)
-LocalTime           startTime    (nullable)
-LocalTime           endTime      (nullable)
-ClassSessionStatus  status       (STRING, not null, max 20, default SCHEDULED)
+**AttendanceCorrection** (`ATTENDANCE_CORRECTION`)
 
-UNIQUE (classId, sessionDate)
-```
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | UUID | PK, generated |
+| `studentAttendanceId` | UUID | not null; target record |
+| `studentId` | UUID | not null (copied from target) |
+| `classId` | UUID | not null (copied from target) |
+| `attendanceDate` | LocalDate | not null (copied from target) |
+| `requestedStatus` | `AttendanceStatus` | not null |
+| `reason` | String (TEXT) | nullable |
+| `requestedByTeacherId` | UUID | not null |
+| `status` | `CorrectionStatus` | not null; defaults to `PENDING` |
+| `reviewedByPrincipalId` | UUID | nullable; set on review |
+| `reviewNote` | String (TEXT) | nullable |
+| `createdAt` | Instant | not null; stamped in `@PrePersist` |
+| `reviewedAt` | Instant | nullable; set on review |
 
-### 4.5 `AttendanceCorrection` (table `ATTENDANCE_CORRECTION`)
+### 4.2 Enums
 
-```
-UUID             id
-UUID             studentAttendanceId    (not null; the record being corrected)
-UUID             studentId              (not null; copied from target)
-UUID             classId                (not null; copied from target)
-LocalDate        attendanceDate         (not null; copied from target)
-AttendanceStatus requestedStatus        (STRING, not null, max 20)
-String           reason                 (TEXT, nullable)
-UUID             requestedByTeacherId   (not null)
-CorrectionStatus status                 (STRING, not null, max 20, default PENDING)
-UUID             reviewedByPrincipalId  (nullable; set on approve/reject)
-String           reviewNote             (TEXT, nullable)
-Instant          createdAt              (@PrePersist)
-Instant          reviewedAt             (nullable; set on approve/reject)
-```
-
----
+| Enum | Values |
+|------|--------|
+| `AttendanceStatus` | `PRESENT`, `ABSENT`, `LEAVE`, `HALF_DAY` |
+| `ClassSessionStatus` | `SCHEDULED`, `HELD`, `CANCELLED` |
+| `CorrectionStatus` | `PENDING`, `APPROVED`, `REJECTED` |
 
 ## 5. Database Schema
 
-Managed by Flyway. Final state after V4 (V5 seeds data only):
+Flyway migration `V1__init_attendance_schema.sql`:
 
 ```sql
-CREATE TABLE TEACHER_ATTENDANCE (
-    ID              UUID         PRIMARY KEY,
-    TEACHER_ID      UUID         NOT NULL,
-    ATTENDANCE_DATE DATE         NOT NULL,
-    STATUS          VARCHAR(20)  NOT NULL,
-    REMARKS         TEXT,
-    CONSTRAINT uq_teacher_attendance_teacher_date UNIQUE (TEACHER_ID, ATTENDANCE_DATE)
-);
-CREATE INDEX idx_teacher_attendance_date ON TEACHER_ATTENDANCE (ATTENDANCE_DATE);
-
-CREATE TABLE STUDENT_ATTENDANCE (
-    ID              UUID         PRIMARY KEY,
-    STUDENT_ID      UUID         NOT NULL,
-    CLASS_ID        UUID         NOT NULL,
-    ATTENDANCE_DATE DATE         NOT NULL,
-    STATUS          VARCHAR(20)  NOT NULL,
-    REMARKS         TEXT,
-    SESSION_ID      UUID,        -- added in V3
-    COURSE_ID       UUID,        -- added in V3
-    CONSTRAINT uq_student_attendance_student_class_date
-        UNIQUE (STUDENT_ID, CLASS_ID, ATTENDANCE_DATE),
-    CONSTRAINT fk_student_attendance_session
-        FOREIGN KEY (SESSION_ID) REFERENCES CLASS_SESSION (ID)
-);
-CREATE INDEX idx_student_attendance_student_date ON STUDENT_ATTENDANCE (STUDENT_ID, ATTENDANCE_DATE);
-CREATE INDEX idx_student_attendance_class_date   ON STUDENT_ATTENDANCE (CLASS_ID, ATTENDANCE_DATE);
+-- Attendance service schema (attendance_db).
 
 CREATE TABLE CLASS_SESSION (
-    ID           UUID         PRIMARY KEY,
-    CLASS_ID     UUID         NOT NULL,
+    ID           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    CLASS_ID     UUID NOT NULL,
     COURSE_ID    UUID,
-    SESSION_DATE DATE         NOT NULL,
+    SESSION_DATE DATE NOT NULL,
     START_TIME   TIME,
     END_TIME     TIME,
-    STATUS       VARCHAR(20)  NOT NULL DEFAULT 'SCHEDULED',
+    STATUS       VARCHAR(20) NOT NULL,
     CONSTRAINT uq_class_session_class_date UNIQUE (CLASS_ID, SESSION_DATE)
 );
-CREATE INDEX idx_class_session_class_date ON CLASS_SESSION (CLASS_ID, SESSION_DATE);
+
+CREATE INDEX idx_class_session_class_id ON CLASS_SESSION (CLASS_ID);
+
+CREATE TABLE STUDENT_ATTENDANCE (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ID      UUID NOT NULL,
+    CLASS_ID        UUID NOT NULL,
+    COURSE_ID       UUID,
+    SESSION_ID      UUID,
+    ATTENDANCE_DATE DATE NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    REMARKS         TEXT,
+    CONSTRAINT uq_student_attendance UNIQUE (STUDENT_ID, CLASS_ID, ATTENDANCE_DATE),
+    CONSTRAINT fk_student_attendance_session FOREIGN KEY (SESSION_ID) REFERENCES CLASS_SESSION (ID)
+);
+
+CREATE INDEX idx_student_attendance_student_date ON STUDENT_ATTENDANCE (STUDENT_ID, ATTENDANCE_DATE);
+CREATE INDEX idx_student_attendance_class_date ON STUDENT_ATTENDANCE (CLASS_ID, ATTENDANCE_DATE);
+
+CREATE TABLE TEACHER_ATTENDANCE (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TEACHER_ID      UUID NOT NULL,
+    ATTENDANCE_DATE DATE NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    REMARKS         TEXT,
+    CONSTRAINT uq_teacher_attendance UNIQUE (TEACHER_ID, ATTENDANCE_DATE)
+);
+
+CREATE INDEX idx_teacher_attendance_date ON TEACHER_ATTENDANCE (ATTENDANCE_DATE);
 
 CREATE TABLE ATTENDANCE_CORRECTION (
-    ID                       UUID         PRIMARY KEY,
-    STUDENT_ATTENDANCE_ID    UUID         NOT NULL,
-    STUDENT_ID               UUID         NOT NULL,
-    CLASS_ID                 UUID         NOT NULL,
-    ATTENDANCE_DATE          DATE         NOT NULL,
-    REQUESTED_STATUS         VARCHAR(20)  NOT NULL,
-    REASON                   TEXT,
-    REQUESTED_BY_TEACHER_ID  UUID         NOT NULL,
-    STATUS                   VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+    ID                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ATTENDANCE_ID  UUID NOT NULL,
+    STUDENT_ID             UUID NOT NULL,
+    CLASS_ID               UUID NOT NULL,
+    ATTENDANCE_DATE        DATE NOT NULL,
+    REQUESTED_STATUS       VARCHAR(20) NOT NULL,
+    REASON                 TEXT,
+    REQUESTED_BY_TEACHER_ID UUID NOT NULL,
+    STATUS                 VARCHAR(20) NOT NULL,
     REVIEWED_BY_PRINCIPAL_ID UUID,
-    REVIEW_NOTE              TEXT,
-    CREATED_AT               TIMESTAMP    NOT NULL,
-    REVIEWED_AT              TIMESTAMP
+    REVIEW_NOTE            TEXT,
+    CREATED_AT             TIMESTAMP WITH TIME ZONE NOT NULL,
+    REVIEWED_AT            TIMESTAMP WITH TIME ZONE
 );
-CREATE INDEX idx_attendance_correction_status  ON ATTENDANCE_CORRECTION (STATUS);
-CREATE INDEX idx_attendance_correction_teacher ON ATTENDANCE_CORRECTION (REQUESTED_BY_TEACHER_ID);
+
+CREATE INDEX idx_correction_status ON ATTENDANCE_CORRECTION (STATUS);
+CREATE INDEX idx_correction_teacher ON ATTENDANCE_CORRECTION (REQUESTED_BY_TEACHER_ID);
 ```
 
-`ddl-auto: validate` — the schema must match the JPA entities exactly.
-
----
+Note: `ATTENDANCE_CORRECTION` stores `STUDENT_ATTENDANCE_ID` as a plain column
+(no DB-level FK to `STUDENT_ATTENDANCE`); the linkage is enforced at the service
+layer, which loads the target record before creating a correction.
 
 ## 6. REST API
 
-All responses use the shared `ApiResponse<T>` envelope.
+All routes are relative to the service base (`http://localhost:8084` direct, or
+via the API gateway at `http://localhost:8080`). All responses use the
+`ApiResponse<T>` envelope. Roles are enforced in `SecurityConfig`.
 
-### 6.1 Student Attendance — base `/attendance/students`
+### 6.1 Student attendance — `/attendance/students`
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/attendance/students` | TEACHER, PRINCIPAL | Mark one student's attendance (`201`; `409` on duplicate) |
-| `POST` | `/attendance/students/bulk` | TEACHER, PRINCIPAL | Bulk upsert a list of records for a class session (`200`) |
-| `PUT` | `/attendance/students/{id}` | TEACHER, PRINCIPAL | Update a record's status/remarks |
-| `GET` | `/attendance/students/{studentId}` | STUDENT, TEACHER, PRINCIPAL | Records for a student; optional `from`/`to` ISO-date range |
-| `GET` | `/attendance/students/{studentId}/stats` | STUDENT, TEACHER, PRINCIPAL | Aggregate stats; optional `classId` scope |
-| `GET` | `/attendance/students/class/{classId}/date` | STUDENT, TEACHER, PRINCIPAL | Records for a class on a specific `date` (required) |
+| Method | Path | Roles | Description | Success |
+|--------|------|-------|-------------|---------|
+| POST | `/attendance/students` | TEACHER, PRINCIPAL | Mark one student; rejects duplicate `(student, class, date)` | 201 |
+| POST | `/attendance/students/bulk` | TEACHER, PRINCIPAL | Bulk upsert for a class session | 200 |
+| PUT | `/attendance/students/{id}` | TEACHER, PRINCIPAL | Update status/remarks of a record | 200 |
+| GET | `/attendance/students/{studentId}` | STUDENT, TEACHER, PRINCIPAL | History; optional `from`/`to` (ISO date) range | 200 |
+| GET | `/attendance/students/{studentId}/stats` | STUDENT, TEACHER, PRINCIPAL | Stats; optional `classId` scope | 200 |
+| GET | `/attendance/students/class/{classId}/date?date=YYYY-MM-DD` | STUDENT, TEACHER, PRINCIPAL | Class roster for a date | 200 |
 
-#### `POST /attendance/students` — Request Body
+Mark-one request body:
 
 ```json
 {
-  "studentId": "<UUID>",
-  "classId": "<UUID>",
-  "courseId": "<UUID>",
-  "attendanceDate": "2026-09-02",
+  "studentId": "00000000-0000-0000-0003-000000000001",
+  "classId": "00000000-0000-0000-0d01-000000000001",
+  "courseId": "00000000-0000-0000-0c01-000000000001",
+  "attendanceDate": "2026-09-09",
   "status": "PRESENT",
-  "remarks": ""
+  "remarks": null
 }
 ```
 
-**Business rule:** if a record already exists for `(studentId, classId, attendanceDate)`, respond `409 Conflict`. Use `/bulk` or `PUT /{id}` to change an existing record.
+Bulk-mark request body (array of the same shape):
 
-#### `GET /attendance/students/{studentId}/stats` — Response `data`
+```json
+[
+  {
+    "studentId": "00000000-0000-0000-0003-000000000001",
+    "classId": "00000000-0000-0000-0d01-000000000001",
+    "courseId": "00000000-0000-0000-0c01-000000000001",
+    "attendanceDate": "2026-09-09",
+    "status": "PRESENT"
+  },
+  {
+    "studentId": "00000000-0000-0000-0003-000000000002",
+    "classId": "00000000-0000-0000-0d01-000000000001",
+    "courseId": "00000000-0000-0000-0c01-000000000001",
+    "attendanceDate": "2026-09-09",
+    "status": "ABSENT",
+    "remarks": "Sick"
+  }
+]
+```
+
+`StudentAttendanceResponse`: `id, studentId, classId, courseId, sessionId,
+attendanceDate, status, remarks`.
+`StudentAttendanceStatsResponse`: `studentId, totalDays, presentDays,
+absentDays, leaveDays, halfDays, attendancePercentage`.
+
+### 6.2 Teacher attendance — `/attendance/teachers`
+
+| Method | Path | Roles | Description | Success |
+|--------|------|-------|-------------|---------|
+| POST | `/attendance/teachers` | TEACHER, PRINCIPAL | Upsert attendance for teacher + date | 201 |
+| GET | `/attendance/teachers/{teacherId}` | TEACHER, PRINCIPAL | History; optional `from`/`to` (ISO date) range | 200 |
+
+Teacher-attendance request body:
 
 ```json
 {
-  "studentId": "<UUID>",
-  "totalDays": 10,
-  "presentDays": 8,
-  "absentDays": 1,
-  "leaveDays": 0,
-  "halfDays": 1,
-  "attendancePercentage": 85.0
+  "teacherId": "00000000-0000-0000-0002-000000000001",
+  "attendanceDate": "2026-09-09",
+  "status": "PRESENT",
+  "remarks": null
 }
 ```
 
-Percentage = `round(((present + half*0.5) / total) * 1000) / 10` (one decimal place; `0.0` when no records).
+### 6.3 Corrections — `/attendance/corrections`
 
-### 6.2 Teacher Attendance — base `/attendance/teachers`
+| Method | Path | Roles | Description | Success |
+|--------|------|-------|-------------|---------|
+| POST | `/attendance/corrections` | TEACHER, PRINCIPAL | Submit a correction request (starts `PENDING`) | 201 |
+| GET | `/attendance/corrections?status=PENDING` | TEACHER, PRINCIPAL | List, optional `status` filter | 200 |
+| GET | `/attendance/corrections/teacher/{teacherId}` | TEACHER, PRINCIPAL | List by requesting teacher | 200 |
+| PATCH | `/attendance/corrections/{id}/approve` | PRINCIPAL | Approve → apply requested status + publish event | 200 |
+| PATCH | `/attendance/corrections/{id}/reject` | PRINCIPAL | Reject → mark `REJECTED` only | 200 |
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/attendance/teachers` | TEACHER, PRINCIPAL | Mark or update teacher attendance (upsert; `201`) |
-| `GET` | `/attendance/teachers/{teacherId}` | TEACHER, PRINCIPAL | Records for a teacher; optional `from`/`to` range |
+Correction submit request body:
 
-**Upsert semantics:** if a record exists for `(teacherId, attendanceDate)` it is updated in place; otherwise a new one is created.
+```json
+{
+  "studentAttendanceId": "00000000-0000-0000-1202-000000000002",
+  "requestedStatus": "PRESENT",
+  "reason": "Student was actually present; marked absent in error",
+  "requestedByTeacherId": "00000000-0000-0000-0002-000000000001"
+}
+```
 
-### 6.3 Attendance Corrections — base `/attendance/corrections`
+Correction review request body (approve/reject):
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/attendance/corrections` | TEACHER, PRINCIPAL | Submit a correction request (`201`) |
-| `GET` | `/attendance/corrections` | TEACHER, PRINCIPAL | List requests; optional `status` filter |
-| `GET` | `/attendance/corrections/teacher/{teacherId}` | TEACHER, PRINCIPAL | List requests submitted by a teacher |
-| `PATCH` | `/attendance/corrections/{id}/approve` | PRINCIPAL | Approve (mutates the target record) |
-| `PATCH` | `/attendance/corrections/{id}/reject` | PRINCIPAL | Reject (no record mutation) |
+```json
+{
+  "reviewedByPrincipalId": "00000000-0000-0000-0001-000000000001",
+  "reviewNote": "Verified against sign-in sheet"
+}
+```
 
-`POST` body is `AttendanceCorrectionRequest` (`studentAttendanceId`, `requestedStatus`, `reason`, `requestedByTeacherId`). Approve/reject bodies are `AttendanceCorrectionReviewRequest` (`reviewedByPrincipalId`, `reviewNote`).
-
----
+`AttendanceCorrectionResponse`: `id, studentAttendanceId, studentId, classId,
+attendanceDate, requestedStatus, reason, requestedByTeacherId, status,
+reviewedByPrincipalId, reviewNote, createdAt, reviewedAt`.
 
 ## 7. Service Logic
 
-### `StudentAttendanceService`
+### 7.1 Class-session auto-creation
 
-| Method | Logic |
-|--------|-------|
-| `markAttendance(request)` | `409` if `(studentId, classId, attendanceDate)` exists; else `insertRecord` + publish `ATTENDANCE_RECORDED` |
-| `markAttendanceBulk(requests)` | Per item: if the record exists, update status/remarks + publish `ATTENDANCE_UPDATED`; otherwise insert + publish `ATTENDANCE_RECORDED` |
-| `updateAttendance(id, request)` | `404` if missing; update status (and remarks if provided); publish `ATTENDANCE_UPDATED` |
-| `getByStudent(id, from, to)` | All records for the student, date-range-filtered when both `from` and `to` are given |
-| `getByClassAndDate(classId, date)` | Records for a class on a date |
-| `getStats(studentId, classId)` | Counts by status; percentage as in §6.1 |
-| `applyCorrection(attendanceId, newStatus)` | Set the record's status; publish `ATTENDANCE_UPDATED` (called by the approval workflow) |
+`ClassSessionService.resolveOrCreate(classId, courseId, date)` looks up the
+session by `(classId, sessionDate)`. If none exists, it builds a new
+`ClassSession` (status defaults to `SCHEDULED`) and persists it. `courseId` is
+only stamped when a session is created. Every single-record insert
+(`StudentAttendanceService.insertRecord`) calls this and stamps the returned
+`sessionId` onto the attendance row, back-filling `courseId` from the session
+when the request omitted it.
 
-`insertRecord` calls `ClassSessionService.resolveOrCreate(classId, courseId, date)`, stamps `sessionId`, and back-fills `courseId` from the session when the request omitted it.
+### 7.2 Mark / bulk / update semantics
 
-### `TeacherAttendanceService`
+- **markAttendance** — checks `existsByStudentIdAndClassIdAndAttendanceDate`; on
+  a duplicate it throws `ApiException.conflict`. Otherwise it inserts and
+  publishes `attendance-recorded`.
+- **markAttendanceBulk** — per item, an upsert: if a record for
+  `(student, class, date)` exists it updates status + remarks and publishes
+  `attendance-updated`; otherwise it inserts and publishes `attendance-recorded`.
+  Safe to re-submit.
+- **updateAttendance** — loads by id (404 if missing), updates status (and
+  remarks when non-null), publishes `attendance-updated`.
+- **Teacher upsert** — `TeacherAttendanceService.markAttendance` finds by
+  `(teacherId, date)`; updates in place or creates new, then always publishes
+  `attendance-recorded` (type `TEACHER`).
 
-Upsert on `(teacherId, attendanceDate)`; `getByTeacher(teacherId, from, to)` with optional date range.
+### 7.3 Stats math (half-day = 0.5)
 
-### `ClassSessionService`
+`getStats` gathers records for the student (scoped to `classId` when given) and
+computes:
 
-`resolveOrCreate(classId, courseId, date)` — return the existing `CLASS_SESSION` for `(classId, date)` or create a new one (status `SCHEDULED`); `courseId` is stamped only when a new session is created.
+```
+total   = count(records)
+present = count(status == PRESENT)
+absent  = count(status == ABSENT)
+leave   = count(status == LEAVE)
+half    = count(status == HALF_DAY)
+attendancePercentage = total == 0 ? 0.0
+    : round( ((present + half * 0.5) / total) * 1000 ) / 10.0
+```
 
-### `AttendanceCorrectionService`
+`HALF_DAY` contributes 0.5 to the numerator; the percentage is rounded to one
+decimal place. An empty history yields `0.0`.
 
-| Method | Logic |
-|--------|-------|
-| `submit(request)` | Load target `StudentAttendance` (`404` if missing); copy `studentId`/`classId`/`attendanceDate`; persist `PENDING` correction |
-| `listByStatus(status)` | All corrections, filtered by status when provided |
-| `listByTeacher(teacherId)` | Corrections submitted by a teacher |
-| `approve(id, review)` | Require `PENDING` (`409` otherwise); `applyCorrection` on the target record; set `APPROVED` + reviewer/note/`reviewedAt` |
-| `reject(id, review)` | Require `PENDING` (`409` otherwise); set `REJECTED` + reviewer/note/`reviewedAt`; **no** record mutation |
+### 7.4 Correction approve / reject flow
 
----
+- **submit** — loads the target `StudentAttendance` (404 if missing), copies
+  `studentId/classId/attendanceDate` onto a new `AttendanceCorrection` with
+  status `PENDING`, and persists it.
+- **approve** (PRINCIPAL) — loads the correction; requires it be `PENDING`
+  (else `conflict`). Calls `StudentAttendanceService.applyCorrection`, which
+  mutates the underlying record's `status` to `requestedStatus` and publishes
+  `attendance-updated`. Then sets the correction to `APPROVED`, records
+  `reviewedByPrincipalId`, `reviewNote`, and `reviewedAt`.
+- **reject** (PRINCIPAL) — loads the correction; requires it be `PENDING`. Sets
+  status `REJECTED`, records reviewer fields and `reviewedAt`. The underlying
+  attendance record is **not** modified and **no** event is published.
 
 ## 8. Kafka Events Published
 
-Topic names use **hyphens** (see `common-library/events/KafkaTopics.java`).
+Producer config: String key (subject id), JSON value, `acks=all`, idempotent,
+3 retries. Topic constants live in
+`common-library/.../events/KafkaTopics.java`.
 
-| Topic | Event | When |
-|-------|-------|------|
-| `attendance-recorded` | `AttendanceRecordedEvent` | A new student record is created (single mark or new bulk row) |
-| `attendance-updated` | `AttendanceUpdatedEvent` | A student record's status changes (bulk update, `PUT`, or approved correction) |
+| Topic | Event class | Published when | Payload fields |
+|-------|-------------|----------------|----------------|
+| `attendance-recorded` | `AttendanceRecordedEvent` | Student marked (new insert); teacher upsert (always) | `attendanceType` (STUDENT/TEACHER), `subjectId`, `status`, `attendanceDate`, `courseId`, `courseName`, `occurredAt` |
+| `attendance-updated` | `AttendanceUpdatedEvent` | Student record updated (bulk upsert of existing, single update, or correction approval) | `attendanceType`, `subjectId`, `oldStatus`, `newStatus`, `attendanceDate`, `courseId`, `courseName`, `occurredAt` |
 
-Teacher attendance does **not** publish events. Events are keyed by `studentId`.
+The Kafka message key is the subject id (student or teacher) as a string.
+Downstream consumers: **reporting-service** (attendance rollups) and
+**notification-service** (absence alerts).
 
-**`AttendanceRecordedEvent`:** `attendanceType="STUDENT"`, `subjectId=studentId`, `status`, `attendanceDate` (ISO string), `courseId` (nullable), `occurredAt`. `courseName` is part of the event contract but is **not** populated by this service.
+Example `attendance-recorded` payload:
 
-**`AttendanceUpdatedEvent`:** `attendanceType="STUDENT"`, `subjectId=studentId`, `oldStatus`, `newStatus`, `attendanceDate`, `courseId` (nullable), `occurredAt`.
+```json
+{
+  "attendanceType": "STUDENT",
+  "subjectId": "00000000-0000-0000-0003-000000000001",
+  "status": "PRESENT",
+  "attendanceDate": "2026-09-09",
+  "courseId": "00000000-0000-0000-0c01-000000000001",
+  "courseName": null,
+  "occurredAt": "2026-09-09T10:15:00Z"
+}
+```
 
-**Consumers:**
-- `reporting-service` — upserts `AttendanceSummary` aggregate rows (both events).
-- `notification-service` — absence alert when `attendanceType=STUDENT` and `status=ABSENT` (on `attendance-recorded`).
+Example `attendance-updated` payload (from a correction approval):
 
----
+```json
+{
+  "attendanceType": "STUDENT",
+  "subjectId": "00000000-0000-0000-0003-000000000002",
+  "oldStatus": "ABSENT",
+  "newStatus": "PRESENT",
+  "attendanceDate": "2026-09-07",
+  "courseId": "00000000-0000-0000-0c01-000000000001",
+  "courseName": null,
+  "occurredAt": "2026-09-09T11:00:00Z"
+}
+```
 
-## 9. Security Configuration
+## 9. Migrations
 
-CSRF disabled; sessions `STATELESS`; method security enabled; `JwtAuthenticationFilter` (common-library) before `UsernamePasswordAuthenticationFilter`. Public: `/actuator/**`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`. Rules mirror §6 (student/teacher writes → TEACHER/PRINCIPAL; correction review → PRINCIPAL; student reads → STUDENT/TEACHER/PRINCIPAL).
+| Version | File | Scope | Contents |
+|---------|------|-------|----------|
+| V1 | `src/main/resources/db/migration/V1__init_attendance_schema.sql` | Always | Creates the four tables, unique constraints, FK, and indexes (clean-slate baseline). |
+| V2 | `src/main/resources/db/seed/V2__seed_dev_data.sql` | docker/dev profile only | Idempotent seed: 2 class sessions, 4 student-attendance rows, 2 teacher-attendance rows for the seeded classes/students on recent dates (`ON CONFLICT ... DO NOTHING`). |
 
----
-
-## 10. Migration History
-
-| Version | Description |
-|---------|-------------|
-| V1 | Initial schema (BIGSERIAL IDs, B-tree indexes) |
-| V2 | Drop/recreate with UUID primary keys; unique constraints + indexes retained |
-| V3 | Add `CLASS_SESSION` (+ index); add `SESSION_ID` / `COURSE_ID` to `STUDENT_ATTENDANCE` (+ FK to session) |
-| V4 | Add `ATTENDANCE_CORRECTION` (+ status & teacher indexes) |
-| V5 | Seed sample student/teacher attendance with fixed UUIDs matching the other services' seeds (idempotent `ON CONFLICT DO NOTHING`); local/testing only |
+The seed lives on a separate migration location that is only registered under
+the docker/dev profile, keeping production start-ups schema-only.

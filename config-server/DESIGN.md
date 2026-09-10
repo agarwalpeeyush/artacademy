@@ -2,7 +2,21 @@
 
 ## 1. Overview
 
-The `config-server` is a Spring Cloud Config Server that externalises all environment-specific properties for every microservice into a single, central location. Services import their configuration at startup from this server, keeping `application.yml` files inside the service JARs minimal.
+The Config Server is the centralized configuration source for the Art Academy
+microservices platform. It is a Spring Cloud Config Server (Spring Boot 3.3.4,
+Java 21) running in the `native` profile, which serves configuration from files
+bundled on its own classpath rather than from a Git backend.
+
+Every business service (auth, user, course-enrollment, attendance, timetable,
+payment, notification, reporting) fetches its `server.port`, datasource, JPA and
+Flyway settings from this server at startup via `spring.config.import`. Shared
+cross-cutting defaults (Eureka client, Kafka, JWT secret, actuator exposure) are
+defined once in a shared `application.yml` document that applies to all clients.
+
+A key design element is **profile-gated seed loading**: the six seeded services
+carry a second YAML document activated only under the `docker` profile that
+appends `classpath:db/seed` to their Flyway locations, so development seed data
+is loaded only in the Docker environment and never against a default boot.
 
 ---
 
@@ -12,113 +26,117 @@ The `config-server` is a Spring Cloud Config Server that externalises all enviro
 |----------|-------|
 | ArtifactId | `config-server` |
 | Package root | `com.artacademy.configserver` |
+| Application class | `ConfigServerApplication` (`@SpringBootApplication`, `@EnableConfigServer`) |
 | Server port | **8888** |
+| Active profile | `native` |
+| Backend | Native — classpath, `spring.cloud.config.server.native.search-locations: classpath:/config` |
+| Spring Boot | 3.3.4 |
+| Java | 21 |
 
 ---
 
-## 3. Application Class
+## 3. Component Structure
+
+The module is intentionally thin: a single annotated bootstrap class plus a
+directory of served configuration documents.
 
 ```
-ConfigServerApplication.java
-  @SpringBootApplication
-  @EnableConfigServer
+config-server/
+├── src/main/java/com/artacademy/configserver/
+│   └── ConfigServerApplication.java      # @SpringBootApplication + @EnableConfigServer
+└── src/main/resources/
+    ├── application.yml                    # the server's own config (port 8888, native backend)
+    └── config/                            # configuration SERVED to clients
+        ├── application.yml                # shared defaults for ALL services
+        ├── auth-service.yml               # port 8081, auth_db          (seeded)
+        ├── user-service.yml               # port 8082, user_db          (seeded)
+        ├── course-enrollment-service.yml  # port 8083, academic_db      (seeded)
+        ├── attendance-service.yml         # port 8084, attendance_db    (seeded)
+        ├── timetable-service.yml          # port 8085, timetable_db     (seeded)
+        ├── payment-service.yml            # port 8086, payment_db       (seeded)
+        ├── notification-service.yml       # port 8087, notification_db  (schema-only)
+        └── reporting-service.yml          # port 8088, reporting_db     (schema-only)
 ```
 
-`@EnableConfigServer` activates the `/[application]/[profile]` HTTP endpoints that serve property sources.
+`ConfigServerApplication.java`:
 
----
-
-## 4. Configuration Layout
-
-```
-config-server/src/main/resources/
-├── application.yml                          # Config Server's own bootstrap
-└── config/
-    ├── application.yml                      # Shared properties served to ALL services
-    ├── auth-service.yml                     # auth-service specific overrides
-    ├── user-service.yml                     # user-service specific overrides
-    ├── course-enrollment-service.yml        # course-enrollment-service specific overrides
-    ├── attendance-service.yml               # attendance-service specific overrides
-    ├── scheduling-service.yml               # scheduling-service specific overrides
-    ├── payment-service.yml                  # payment-service specific overrides
-    ├── notification-service.yml             # notification-service specific overrides
-    └── reporting-service.yml                # reporting-service specific overrides
+```java
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+}
 ```
 
-The `spring.cloud.config.server.native.searchLocations` property points at `classpath:/config/` so the server uses the bundled files (native profile). In production this would point at a Git repository.
+`@EnableConfigServer` activates the `/{application}/{profile}` HTTP endpoints
+that serve merged property sources.
 
-Spring Cloud Config merges properties in order: `application.yml` (shared base) is loaded first, then `{service-name}.yml` (per-service overrides) is applied on top. This means each service's `server.port` and `datasource.url` come from its own file, while JWT, Kafka, and Eureka config come from the shared file.
+The server's own `application.yml`:
 
----
-
-## 5. Properties Served
-
-### 5.1 Shared — `config/application.yml`
-
-Served to every service as the base layer.
-
-#### JWT
 ```yaml
-app:
-  jwt:
-    secret: YXJ0YWNhZGVteS1zdXBlci1zZWNyZXQtand0...  # base64 encoded HS256 key
-    expiration-ms: 900000        # 15 minutes
-    refresh-expiration-ms: 604800000  # 7 days
-```
+server:
+  port: 8888
 
-#### Kafka
-```yaml
 spring:
-  kafka:
-    bootstrap-servers: localhost:19092   # Docker host-mapped port
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    consumer:
-      group-id: artacademy
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "com.artacademy.*"
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: classpath:/config
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,refresh
 ```
 
-#### Eureka Client
-```yaml
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka/
-  instance:
-    prefer-ip-address: true
-```
+> Note: there is **no** `api-gateway.yml` under `config/`. The API Gateway is not
+> a config client of this server.
 
-### 5.2 Per-Service — `config/{service-name}.yml`
+---
 
-Each service has its own file that sets `server.port` and `datasource.url`. PostgreSQL is accessed via `localhost:15432` (Docker host-mapped port; container-internal is `5432`).
+## 4. Served Configuration
 
-| Service | `server.port` | `datasource.url` (local/dev) |
-|---------|---------------|-------------------------------|
-| auth-service | 8081 | `jdbc:postgresql://localhost:15432/auth_db` |
-| user-service | 8082 | `jdbc:postgresql://localhost:15432/user_db` |
-| course-enrollment-service | 8083 | `jdbc:postgresql://localhost:15432/academic_db` |
-| attendance-service | 8084 | `jdbc:postgresql://localhost:15432/attendance_db` |
-| scheduling-service | 8085 | `jdbc:postgresql://localhost:15432/schedule_db` |
-| payment-service | 8086 | `jdbc:postgresql://localhost:15432/payment_db` |
-| notification-service | 8087 | `jdbc:postgresql://localhost:15432/notification_db` |
-| reporting-service | 8088 | `jdbc:postgresql://localhost:15432/reporting_db` |
+Each per-service document defines `server.port`, `spring.application.name`, a
+PostgreSQL datasource (`jdbc:postgresql://localhost:15432/<db>`, user
+`artacademy` / password `artacademy123`), `jpa.hibernate.ddl-auto: validate`,
+and `flyway.locations: classpath:db/migration`. Hibernate is set to `validate`
+so schema authority stays with Flyway migrations, never Hibernate DDL. The
+`15432` port is the Docker host-mapped port for PostgreSQL (container-internal
+is `5432`).
 
-All per-service files also set:
-```yaml
-spring:
-  jpa:
-    hibernate:
-      ddl-auto: validate
-  flyway:
-    locations: classpath:db/migration
-```
+| Service | Port | Database | Notable settings |
+|---------|------|----------|------------------|
+| auth-service | 8081 | `auth_db` | ddl-auto=validate; flyway `classpath:db/migration`; Kafka consumer group `auth-service-group`; **seeded** |
+| user-service | 8082 | `user_db` | ddl-auto=validate; flyway `classpath:db/migration`; **seeded** |
+| course-enrollment-service | 8083 | `academic_db` | ddl-auto=validate; flyway `classpath:db/migration`; **seeded** |
+| attendance-service | 8084 | `attendance_db` | ddl-auto=validate; flyway `classpath:db/migration`; **seeded** |
+| timetable-service | 8085 | `timetable_db` | ddl-auto=validate; flyway `classpath:db/migration`; **seeded** |
+| payment-service | 8086 | `payment_db` | ddl-auto=validate; flyway `classpath:db/migration`; **seeded** |
+| notification-service | 8087 | `notification_db` | ddl-auto=validate; flyway `classpath:db/migration`; SMTP mail (Gmail) config; **schema-only** |
+| reporting-service | 8088 | `reporting_db` | ddl-auto=validate; flyway `classpath:db/migration`; Kafka consumer group `reporting-service-group`; **schema-only** |
 
-#### Mail (notification-service only — in `notification-service.yml`)
+Shared defaults in `config/application.yml` (merged as the base layer under
+every client's own file):
+
+- `app.jwt.secret` (base64 HS256 key), `expiration-ms` (900000 = 15 min), `refresh-expiration-ms` (604800000 = 7 days)
+- Eureka client: `defaultZone: http://localhost:8761/eureka/`, `prefer-ip-address: true`
+- Kafka: `bootstrap-servers: localhost:19092`, JSON (de)serializers, group `artacademy`, trusted packages `com.artacademy.*`
+- Actuator exposure: `health,info,metrics`
+
+Spring Cloud Config merges in order: `application.yml` (shared base) first, then
+`{service-name}.yml` on top. So each service's `server.port` and datasource come
+from its own file, while JWT, Kafka, and Eureka come from the shared file.
+
+notification-service additionally receives mail config:
+
 ```yaml
 spring:
   mail:
@@ -131,28 +149,60 @@ spring:
       mail.smtp.starttls.enable: true
 ```
 
-### 5.3 Docker Override
+---
 
-When running in Docker Compose, the following environment variables override Config Server values at the service level:
+## 5. Profile-Gated Seed Loading
 
-| Env var | Value | Overrides |
-|---------|-------|-----------|
-| `SERVER_PORT` | e.g. `8081` | `server.port` |
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/auth_db` | `spring.datasource.url` |
-| `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | `spring.kafka.bootstrap-servers` |
-| `EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE` | `http://service-registry:8761/eureka/` | eureka defaultZone |
-| `SPRING_CLOUD_CONFIG_URI` | `http://config-server:8888` | config server URL |
+The six seeded services (auth, user, course-enrollment, attendance, timetable,
+payment) each contain a second YAML document, separated by `---`, activated only
+under the `docker` profile. That document overrides `flyway.locations` to append
+`classpath:db/seed`, so dev seed migrations run **only** in the Docker
+environment.
 
-Note that inside Docker the PostgreSQL host is `postgres:5432` (container name + internal port) and Kafka is `kafka:9092` — the `localhost:15432` / `localhost:19092` values in the Config Server files are for running services directly on the host machine outside Docker.
+Exact snippet (from `auth-service.yml`; identical shape in the other five
+seeded services):
+
+```yaml
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://localhost:15432/auth_db
+    username: artacademy
+    password: artacademy123
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+```
+
+- **Default profile** → `flyway.locations: classpath:db/migration` (schema only).
+- **`docker` profile** → `flyway.locations: classpath:db/migration,classpath:db/seed` (schema + seed).
+
+`notification-service.yml` and `reporting-service.yml` are **schema-only**: they
+have no `docker`-profile document, so their Flyway locations remain
+`classpath:db/migration` regardless of profile.
 
 ---
 
-## 6. Client Configuration Pattern
+## 6. How Services Consume Config
 
-Every business service bootstrap:
+Client services do not carry local datasource/port config. They declare the
+config server as an imported property source in their own `application.yml`:
 
 ```yaml
-# src/main/resources/application.yml  (inside the service JAR)
 spring:
   application:
     name: auth-service        # determines which properties are fetched
@@ -160,21 +210,27 @@ spring:
     import: optional:configserver:http://localhost:8888
 ```
 
-`optional:` prefix means the service still starts if the Config Server is unreachable (using defaults).
+At startup the client resolves its name (`spring.application.name`), asks the
+config server for `<name>` + the shared `application` defaults, and applies the
+active profile (e.g. `docker`) to select the correct document set. The
+`optional:` prefix lets a service still boot if the config server is
+unreachable. Once configured, each service registers with Eureka at
+`http://localhost:8761/eureka/` using the shared Eureka client settings served
+by this server.
 
 ---
 
-## 7. Dependencies
+## 7. Startup Dependencies
 
-```xml
-<dependency>spring-cloud-config-server</dependency>
-<dependency>spring-boot-starter-actuator</dependency>
-```
+1. **PostgreSQL** (`localhost:15432`) — required by every client service once it
+   receives its datasource config; not required by the config server itself.
+2. **Config Server** (`localhost:8888`) — must be up before client services so
+   they can import their configuration. (Import is `optional:`, so a client can
+   still boot on its bundled fallback if the server is down.)
+3. **Eureka / Service Registry** (`localhost:8761`) — clients register after
+   configuration; the config server registers as a Eureka client too via the
+   shared defaults.
+4. **Kafka** (`localhost:19092` shared default) — needed by event-driven clients
+   at runtime, not by the config server.
 
----
-
-## 8. Startup Order
-
-Config Server must start after Service Registry (to register itself) but before any business service that imports configuration from it.
-
-**Order: Service Registry → Config Server → Business Services**
+**Recommended order: Service Registry → Config Server → Business Services.**

@@ -8,7 +8,7 @@ Enterprise-grade Art Academy and Tuition Center Management Platform built with M
 - **[PRD.md](PRD.md)** — Product requirements: functional features by role and domain
 - **[TESTING.md](TESTING.md)** — UI test scenarios per role and feature (uses the seeded accounts below)
 - **[TODO.md](TODO.md)** — Remaining backlog
-- Each service folder also contains its own `DESIGN.md` (e.g. `auth-service/DESIGN.md`, `payment-service/DESIGN.md`)
+- Each service folder also contains its own `DESIGN.md`, `PRD.md`, and `testing.md` with endpoint-level detail (e.g. `auth-service/DESIGN.md`, `payment-service/PRD.md`)
 
 ---
 
@@ -38,7 +38,7 @@ Enterprise-grade Art Academy and Tuition Center Management Platform built with M
 | user-service | 8082 | user_db |
 | course-enrollment-service | 8083 | academic_db |
 | attendance-service | 8084 | attendance_db |
-| scheduling-service | 8085 | schedule_db |
+| timetable-service | 8085 | timetable_db |
 | payment-service | 8086 | payment_db |
 | notification-service | 8087 | notification_db |
 | reporting-service | 8088 | reporting_db |
@@ -201,20 +201,20 @@ mvn spring-boot:run
 cd auth-service
 mvn spring-boot:run
 ```
-Flyway will automatically create and seed the `auth_db` schema on first start.
+Flyway creates the `auth_db` schema (`V1`) on first start. Demo data (`V2`) loads only under the `docker`/`dev` profile — a plain `mvn spring-boot:run` (default profile) creates schema only. To seed locally, run with `-Dspring-boot.run.profiles=docker`.
 
 **5. Remaining services** (order does not matter from here)
 ```bash
 cd user-service && mvn spring-boot:run
 cd course-enrollment-service && mvn spring-boot:run
 cd attendance-service && mvn spring-boot:run
-cd scheduling-service && mvn spring-boot:run
+cd timetable-service && mvn spring-boot:run
 cd payment-service && mvn spring-boot:run
 cd notification-service && mvn spring-boot:run
 cd reporting-service && mvn spring-boot:run
 ```
 
-Each service runs Flyway migrations automatically on startup to create its own schema.
+Each service runs Flyway migrations automatically on startup to create its own schema (`V1`). Demo seed data (`V2`, under `db/seed`) is applied only when the service runs with the `docker`/`dev` profile.
 
 ### Step 4 — Start the React frontend
 
@@ -232,26 +232,31 @@ The frontend proxies API calls to the gateway at http://localhost:8080 via the `
 
 ## Seeded Test Accounts & Sample Data
 
-On first start, Flyway seeds each database with roles **and** a ready-to-use set of sample
-data so the whole application can be exercised end to end without any manual SQL. Seeding is
-**idempotent** (`ON CONFLICT DO NOTHING`) — restarts never duplicate rows, and any account you
-create later is preserved.
+Demo data is loaded by a profile-gated Flyway migration (`V2__seed_dev_data.sql`, in each seeded
+service's `db/seed` location) that runs **only under the `docker`/`dev` profile**. Docker Compose
+sets `SPRING_PROFILES_ACTIVE=docker`, so containers seed automatically. A **default-profile start
+(no `docker`/`dev`) creates schema only — no demo data.** Seeding is **idempotent**
+(`ON CONFLICT DO NOTHING`) — restarts never duplicate rows, and any account you create later is
+preserved.
 
-**All seeded accounts share the password `Admin@1234`.** Log in at http://localhost:3000.
+**All seeded accounts share the password `Admin@1234`** (emails follow `<username>@artacademy.test`).
+Log in at http://localhost:3000.
 
 | Username | Role | Notes |
 |----------|------|-------|
 | `principal` | PRINCIPAL | Full administrative access |
-| `teacher1` | TEACHER | Teaches *Painting A* (Mon/Wed 09:00–11:00, Studio 1) |
-| `teacher2` | TEACHER | Teaches *Sculpture A* (Tue/Thu 15:00–17:00, Studio 2) |
-| `student1` | STUDENT | Enrolled in Painting **and** Sculpture; fees fully PAID |
-| `student2` | STUDENT | Enrolled in Painting; fees UNPAID (appears in defaulters) |
-| `student3` | STUDENT | Enrolled in Sculpture |
-| `parent1` | PARENT | Linked to `student1` |
+| `teacher1` | TEACHER | Aisha Khan, EMP-001 — teaches *Painting - Batch A* (Mon/Wed 10:00–11:30, Studio 1) |
+| `teacher2` | TEACHER | Rahul Verma, EMP-002 — teaches *Sculpture - Batch A* (Tue/Thu 14:00–15:30, Studio 2) |
+| `student1` | STUDENT | Meera Nair — Painting **and** Sculpture; Aug 2026 fees PAID, Sep 2026 UNPAID |
+| `student2` | STUDENT | Arjun Sharma — Painting; Sep 2026 fees UNPAID (appears in defaulters) |
+| `student3` | STUDENT | Diya Patel — Sculpture |
+| `student4` | STUDENT | Kabir Singh — Painting |
+| `parent1` | PARENT | Sunita Nair — linked to `student1` |
 
-The seed also creates: 2 courses, 2 classes, 4 enrollments, 2 rooms, 4 published weekly
-schedules, recent student/teacher attendance rows, and an August 2026 fee cycle (one PAID, one
-UNPAID) with a matching payment and receipt.
+The seed also creates: 2 courses (*Painting* PAINT-101 ₹2500/mo, *Sculpture* SCULP-101 ₹3000/mo),
+2 classes, 5 enrollments, 2 rooms, 4 **PUBLISHED** weekly timetable slots, recent
+student/teacher attendance rows, and Aug + Sep 2026 fee cycles (one PAID, the rest UNPAID) with a
+matching payment and receipt.
 
 > **Security note:** these are demo credentials for local/testing use only. Change or remove the
 > seed migrations before any non-development deployment.
@@ -271,7 +276,7 @@ Swagger UI is available on each service while it is running:
 | user-service | http://localhost:8082/swagger-ui.html |
 | course-enrollment-service | http://localhost:8083/swagger-ui.html |
 | attendance-service | http://localhost:8084/swagger-ui.html |
-| scheduling-service | http://localhost:8085/swagger-ui.html |
+| timetable-service | http://localhost:8085/swagger-ui.html |
 | payment-service | http://localhost:8086/swagger-ui.html |
 | notification-service | http://localhost:8087/swagger-ui.html |
 | reporting-service | http://localhost:8088/swagger-ui.html |
@@ -439,8 +444,8 @@ artacademy/
 ├── auth-service/                    Authentication, JWT, roles
 ├── user-service/                    Teachers, students, availability
 ├── course-enrollment-service/       Courses, classes, enrollments
-├── attendance-service/              Teacher & student attendance
-├── scheduling-service/              Timetable, rooms, conflict validation
+├── attendance-service/              Teacher & student attendance, corrections
+├── timetable-service/               Rooms, weekly timetable, draft/publish, room availability
 ├── payment-service/                 Fee cycles, payments, allocations
 ├── notification-service/            Email/SMS, Kafka event consumer
 ├── reporting-service/               Materialized summaries, analytics
