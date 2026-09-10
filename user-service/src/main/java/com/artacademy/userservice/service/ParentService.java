@@ -37,6 +37,7 @@ public class ParentService {
     private final StudentRepository studentRepository;
     private final ParentMapper parentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final EmailUniquenessValidator emailUniquenessValidator;
 
     @Transactional(readOnly = true)
     public Page<ParentResponse> getAllParents(Pageable pageable) {
@@ -85,6 +86,9 @@ public class ParentService {
                 .orElseThrow(() -> ApiException.notFound("Student not found with id: " + request.getStudentId()));
 
         boolean firstAccount = !parentRepository.existsByLoginId(request.getLoginId());
+        if (firstAccount) {
+            emailUniquenessValidator.assertEmailAvailable(request.getEmail());
+        }
         Parent saved = parentRepository.save(parentMapper.toEntity(request));
 
         if (firstAccount) {

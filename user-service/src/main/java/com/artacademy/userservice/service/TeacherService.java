@@ -46,6 +46,7 @@ public class TeacherService {
     private final TeacherAvailabilityExceptionRepository availabilityExceptionRepository;
     private final TeacherMapper teacherMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final EmailUniquenessValidator emailUniquenessValidator;
 
     @Transactional(readOnly = true)
     public Page<TeacherResponse> getAllTeachers(Pageable pageable) {
@@ -82,6 +83,7 @@ public class TeacherService {
         if (teacherRepository.existsByEmployeeCode(request.getEmployeeCode())) {
             throw ApiException.conflict("Teacher with employee code '" + request.getEmployeeCode() + "' already exists");
         }
+        emailUniquenessValidator.assertEmailAvailable(request.getEmail());
         Teacher saved = teacherRepository.save(teacherMapper.toEntity(request));
         List<String> roles = new ArrayList<>(List.of("TEACHER"));
         if (request.getAdditionalRoles() != null) {

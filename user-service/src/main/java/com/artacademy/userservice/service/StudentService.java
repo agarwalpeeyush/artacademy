@@ -36,6 +36,7 @@ public class StudentService {
     private final UserRepository userRepository;
     private final StudentMapper studentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final EmailUniquenessValidator emailUniquenessValidator;
 
     @Transactional(readOnly = true)
     public Page<StudentResponse> getAllStudents(Pageable pageable) {
@@ -74,6 +75,7 @@ public class StudentService {
         if (userRepository.existsByLoginId(request.getLoginId())) {
             throw ApiException.conflict("Login ID '" + request.getLoginId() + "' is already taken");
         }
+        emailUniquenessValidator.assertEmailAvailable(request.getEmail());
         Student saved = studentRepository.save(studentMapper.toEntity(request));
         List<String> roles = new ArrayList<>(List.of("STUDENT"));
         if (request.getAdditionalRoles() != null) {

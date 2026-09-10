@@ -18,4 +18,6 @@ public interface ParentRepository extends JpaRepository<Parent, UUID> {
     List<Parent> findAllByLoginId(String loginId);
 
     List<Parent> findByStudentId(UUID studentId);
+
+    boolean existsByEmail(String email);
 }
