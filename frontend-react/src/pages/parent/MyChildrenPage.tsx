@@ -1,19 +1,20 @@
 import React, { useEffect } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Chip, Divider,
+  Box, Grid, Card, CardContent, Typography, Divider,
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchMyChildren } from '../../store/slices/parentSlice';
+import { fetchMyChildren, fetchMyProfile } from '../../store/slices/parentSlice';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 const MyChildrenPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { children, loading } = useSelector((state: RootState) => state.parents);
+  const { children, profile, loading } = useSelector((state: RootState) => state.parents);
 
   useEffect(() => {
     dispatch(fetchMyChildren());
+    dispatch(fetchMyProfile());
   }, [dispatch]);
 
   return (
@@ -34,17 +35,14 @@ const MyChildrenPage: React.FC = () => {
             <Grid item xs={12} sm={6} md={4} key={c.id}>
               <Card>
                 <CardContent>
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                    <Typography variant="h6">{c.studentName || '(unnamed student)'}</Typography>
-                    <Chip label={c.status} color="success" size="small" />
-                  </Box>
+                  <Typography variant="h6" mb={1}>{c.name || '(unnamed student)'}</Typography>
                   <Divider sx={{ mb: 1.5 }} />
                   <Typography variant="body2" color="text.secondary">Relationship</Typography>
-                  <Typography variant="body1" mb={1}>{c.relationship || '-'}</Typography>
+                  <Typography variant="body1" mb={1}>{profile?.relationship || '-'}</Typography>
                   <Typography variant="body2" color="text.secondary">Contact Phone</Typography>
-                  <Typography variant="body1" mb={1}>{c.phone || '-'}</Typography>
+                  <Typography variant="body1" mb={1}>{profile?.phone || '-'}</Typography>
                   <Typography variant="body2" color="text.secondary">Contact Email</Typography>
-                  <Typography variant="body1">{c.email || '-'}</Typography>
+                  <Typography variant="body1">{profile?.email || '-'}</Typography>
                 </CardContent>
               </Card>
             </Grid>

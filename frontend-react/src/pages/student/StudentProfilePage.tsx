@@ -15,7 +15,6 @@ type EditableFields = Pick<
   Student,
   'firstName' | 'lastName' | 'email' | 'address'
   | 'fatherName' | 'fatherPhone' | 'motherName' | 'motherPhone'
-  | 'guardianName' | 'guardianPhone'
 >;
 
 const StudentProfilePage: React.FC = () => {
@@ -59,8 +58,6 @@ const StudentProfilePage: React.FC = () => {
       fatherPhone: profile.fatherPhone ?? '',
       motherName: profile.motherName ?? '',
       motherPhone: profile.motherPhone ?? '',
-      guardianName: profile.guardianName ?? '',
-      guardianPhone: profile.guardianPhone ?? '',
     });
     setEditing(true);
   };
@@ -201,7 +198,7 @@ const StudentProfilePage: React.FC = () => {
                 </Grid>
               </Grid>
 
-              <Typography variant="h6" mt={3} gutterBottom>Guardian Information</Typography>
+              <Typography variant="h6" mt={3} gutterBottom>Parent Information</Typography>
               <Divider sx={{ mb: 2 }} />
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
@@ -223,16 +220,6 @@ const StudentProfilePage: React.FC = () => {
                   {editing
                     ? <EditField label="Mother Phone" field="motherPhone" />
                     : <ProfileField label="Mother Phone" value={profile?.motherPhone} />}
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  {editing
-                    ? <EditField label="Guardian Name" field="guardianName" />
-                    : <ProfileField label="Guardian Name" value={profile?.guardianName} />}
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  {editing
-                    ? <EditField label="Guardian Phone" field="guardianPhone" />
-                    : <ProfileField label="Guardian Phone" value={profile?.guardianPhone} />}
                 </Grid>
               </Grid>
             </CardContent>

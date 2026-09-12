@@ -5,7 +5,6 @@ import com.artacademy.common.events.TimetableGeneratedEvent;
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.timetable.domain.Room;
 import com.artacademy.timetable.domain.Timetable;
-import com.artacademy.timetable.domain.TimetableStatus;
 import com.artacademy.timetable.dto.GenerateTimetableRequest;
 import com.artacademy.timetable.dto.RoomAvailabilityResponse;
 import com.artacademy.timetable.dto.TimetableConflictResponse;
@@ -58,14 +57,14 @@ public class TimetableService {
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getByTeacher(UUID teacherId) {
-        return timetableRepository.findByTeacherIdAndStatus(teacherId, TimetableStatus.PUBLISHED).stream()
+        return timetableRepository.findByTeacherId(teacherId).stream()
                 .map(timetableMapper::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getByClass(UUID classId) {
-        return timetableRepository.findByClassIdAndStatus(classId, TimetableStatus.PUBLISHED).stream()
+        return timetableRepository.findByClassId(classId).stream()
                 .map(timetableMapper::toResponse)
                 .toList();
     }
@@ -75,13 +74,14 @@ public class TimetableService {
         if (classIds == null || classIds.isEmpty()) {
             return List.of();
         }
-        return timetableRepository.findByClassIdInAndStatus(classIds, TimetableStatus.PUBLISHED).stream()
+        return timetableRepository.findByClassIdIn(classIds).stream()
                 .map(timetableMapper::toResponse)
                 .toList();
     }
 
     @Transactional
     public TimetableResponse createTimetable(TimetableRequest request) {
+        validateSlotWindow(request.getStartTime(), request.getEndTime());
         Room room = roomService.findRoomById(request.getRoomId());
         validateTeacherConflict(request.getTeacherId(), request.getDayOfWeek(), request.getStartTime(),
                 request.getEndTime(), null);
@@ -95,7 +95,6 @@ public class TimetableService {
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .dayOfWeek(request.getDayOfWeek())
-                .status(TimetableStatus.DRAFT)
                 .build();
 
         timetable = timetableRepository.save(timetable);
@@ -107,6 +106,7 @@ public class TimetableService {
 
     @Transactional
     public TimetableResponse updateTimetable(UUID id, TimetableRequest request) {
+        validateSlotWindow(request.getStartTime(), request.getEndTime());
         Timetable existing = findTimetableById(id);
         Room room = roomService.findRoomById(request.getRoomId());
 
@@ -140,11 +140,22 @@ public class TimetableService {
     @Transactional
     public List<TimetableResponse> generateTimetables(GenerateTimetableRequest request) {
         List<TimetableResponse> results = new ArrayList<>();
-        // Start assigning from 08:00 and move forward for each slot on the preferred day
-        LocalTime slotStart = LocalTime.of(8, 0);
+        // Pack sessions from 08:00 forward, with an independent cursor per weekday so that
+        // items on different days each start at DAY_START rather than continuing from the
+        // running total of previously placed items.
+        java.util.Map<DayOfWeek, LocalTime> slotStartByDay = new java.util.EnumMap<>(DayOfWeek.class);
 
         for (GenerateTimetableRequest.TimetableItem item : request.getItems()) {
+            DayOfWeek day = item.getPreferredDayOfWeek();
+            LocalTime slotStart = slotStartByDay.getOrDefault(day, DAY_START);
             LocalTime slotEnd = slotStart.plusMinutes(item.getDurationMinutes());
+
+            if (slotEnd.isAfter(DAY_END) || !slotEnd.isAfter(slotStart)) {
+                throw ApiException.badRequest(
+                        "Cannot fit class " + item.getClassId() + " on " + day +
+                        ": slot " + slotStart + "-" + slotEnd + " exceeds the working-day window "
+                        + DAY_START + "-" + DAY_END);
+            }
 
             // Find a room with sufficient capacity (capacity >= 1 used as a proxy; actual
             // student count is not available here, so we pick the first available room)
@@ -156,7 +167,7 @@ public class TimetableService {
             Room assignedRoom = null;
             for (Room candidate : candidateRooms) {
                 List<Timetable> roomConflicts = timetableRepository.findConflictingRoomTimetables(
-                        candidate.getId(), item.getPreferredDayOfWeek(), slotStart, slotEnd);
+                        candidate.getId(), day, slotStart, slotEnd);
                 if (roomConflicts.isEmpty()) {
                     assignedRoom = candidate;
                     break;
@@ -166,15 +177,15 @@ public class TimetableService {
             if (assignedRoom == null) {
                 throw ApiException.conflict(
                         "No available room found for class " + item.getClassId() +
-                        " on " + item.getPreferredDayOfWeek() + " at " + slotStart);
+                        " on " + day + " at " + slotStart);
             }
 
             List<Timetable> teacherConflicts = timetableRepository.findConflictingTeacherTimetables(
-                    item.getTeacherId(), item.getPreferredDayOfWeek(), slotStart, slotEnd);
+                    item.getTeacherId(), day, slotStart, slotEnd);
             if (!teacherConflicts.isEmpty()) {
                 throw ApiException.conflict(
                         "Teacher " + item.getTeacherId() + " has a conflicting timetable on " +
-                        item.getPreferredDayOfWeek() + " at " + slotStart);
+                        day + " at " + slotStart);
             }
 
             Timetable timetable = Timetable.builder()
@@ -183,39 +194,18 @@ public class TimetableService {
                     .room(assignedRoom)
                     .startTime(slotStart)
                     .endTime(slotEnd)
-                    .dayOfWeek(item.getPreferredDayOfWeek())
-                    .status(TimetableStatus.DRAFT)
+                    .dayOfWeek(day)
                     .build();
 
             timetable = timetableRepository.save(timetable);
             publishTimetableGeneratedEvent(timetable);
             results.add(timetableMapper.toResponse(timetable));
 
-            // Advance slot start to end of this slot for the next item
-            slotStart = slotEnd;
+            // Advance this day's cursor to the end of the placed slot for the next item on the same day.
+            slotStartByDay.put(day, slotEnd);
         }
 
         return results;
-    }
-
-    // -------------------------------------------------------------------------
-    // Publish / unpublish workflow
-    // -------------------------------------------------------------------------
-
-    @Transactional
-    public TimetableResponse publish(UUID id) {
-        Timetable timetable = findTimetableById(id);
-        timetable.setStatus(TimetableStatus.PUBLISHED);
-        timetable.setPublishedAt(Instant.now());
-        return timetableMapper.toResponse(timetableRepository.save(timetable));
-    }
-
-    @Transactional
-    public TimetableResponse unpublish(UUID id) {
-        Timetable timetable = findTimetableById(id);
-        timetable.setStatus(TimetableStatus.DRAFT);
-        timetable.setPublishedAt(null);
-        return timetableMapper.toResponse(timetableRepository.save(timetable));
     }
 
     // -------------------------------------------------------------------------
@@ -226,7 +216,7 @@ public class TimetableService {
     public RoomAvailabilityResponse getRoomAvailability(UUID roomId, DayOfWeek day) {
         Room room = roomService.findRoomById(roomId);
         List<Timetable> dayTimetables = timetableRepository
-                .findByRoomIdAndDayOfWeekAndStatus(roomId, day, TimetableStatus.PUBLISHED).stream()
+                .findByRoomIdAndDayOfWeek(roomId, day).stream()
                 .sorted(Comparator.comparing(Timetable::getStartTime))
                 .toList();
 
@@ -338,11 +328,11 @@ public class TimetableService {
         if (classIds == null || classIds.isEmpty()) {
             return List.of();
         }
-        List<Timetable> published = timetableRepository.findByClassIdInAndStatus(classIds, TimetableStatus.PUBLISHED);
+        List<Timetable> timetables = timetableRepository.findByClassIdIn(classIds);
         LocalDate today = LocalDate.now();
         LocalTime now = LocalTime.now();
 
-        return published.stream()
+        return timetables.stream()
                 .map(s -> {
                     LocalDate next = nextOccurrence(today, now, s.getDayOfWeek(), s.getStartTime());
                     return UpcomingClassResponse.builder()
@@ -390,6 +380,18 @@ public class TimetableService {
     private Timetable findTimetableById(UUID id) {
         return timetableRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Timetable not found with id: " + id));
+    }
+
+    private void validateSlotWindow(LocalTime start, LocalTime end) {
+        if (!start.isBefore(end)) {
+            throw ApiException.badRequest(
+                    "startTime (" + start + ") must be before endTime (" + end + ")");
+        }
+        if (start.isBefore(DAY_START) || end.isAfter(DAY_END)) {
+            throw ApiException.badRequest(
+                    "Session " + start + "-" + end + " must fall within the working-day window "
+                    + DAY_START + "-" + DAY_END);
+        }
     }
 
     /**

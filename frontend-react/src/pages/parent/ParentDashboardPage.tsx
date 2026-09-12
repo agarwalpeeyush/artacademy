@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Chip,
+  Box, Grid, Card, CardContent, Typography,
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchMyChildren } from '../../store/slices/parentSlice';
+import { fetchMyChildren, fetchMyProfile } from '../../store/slices/parentSlice';
 import feeService from '../../services/feeService';
 import attendanceService from '../../services/attendanceService';
 import PageHeader from '../../components/common/PageHeader';
@@ -14,19 +14,20 @@ import { formatCurrency } from '../../utils/formatters';
 const ParentDashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { children, loading } = useSelector((state: RootState) => state.parents);
+  const { children, profile, loading } = useSelector((state: RootState) => state.parents);
   const [outstanding, setOutstanding] = useState(0);
   const [avgAttendance, setAvgAttendance] = useState<number | null>(null);
 
   useEffect(() => {
     dispatch(fetchMyChildren());
+    dispatch(fetchMyProfile());
   }, [dispatch]);
 
   useEffect(() => {
     if (children.length === 0) return;
     Promise.all(
       children.map(c =>
-        feeService.getFeeCycles({ studentId: c.studentId }).catch(() => [])
+        feeService.getFeeCycles({ studentId: c.id }).catch(() => [])
       )
     ).then(results => {
       const total = results.flat().filter(f => f.status !== 'PAID')
@@ -36,7 +37,7 @@ const ParentDashboardPage: React.FC = () => {
 
     Promise.all(
       children.map(c =>
-        attendanceService.getStudentStats(c.studentId)
+        attendanceService.getStudentStats(c.id)
           .then((s: { attendancePercentage?: number }) => s?.attendancePercentage ?? null)
           .catch(() => null)
       )
@@ -103,10 +104,9 @@ const ParentDashboardPage: React.FC = () => {
                   <Box key={c.id} display="flex" alignItems="center" justifyContent="space-between" py={1.5}
                     borderBottom="1px solid" borderColor="divider">
                     <Box>
-                      <Typography variant="body1" fontWeight={500}>{c.studentName || '(unnamed student)'}</Typography>
-                      <Typography variant="caption" color="text.secondary">{c.relationship || 'Parent'}</Typography>
+                      <Typography variant="body1" fontWeight={500}>{c.name || '(unnamed student)'}</Typography>
+                      <Typography variant="caption" color="text.secondary">{profile?.relationship || 'Parent'}</Typography>
                     </Box>
-                    <Chip label={c.status} color="success" size="small" />
                   </Box>
                 ))
               )}

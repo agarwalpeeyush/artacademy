@@ -85,30 +85,6 @@ export const deleteTimetable = createAsyncThunk<string, string>(
   }
 );
 
-export const publishTimetable = createAsyncThunk<Timetable, string>(
-  'timetables/publish',
-  async (id, { rejectWithValue }) => {
-    try {
-      return await timetableService.publish(id);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to publish timetable');
-    }
-  }
-);
-
-export const unpublishTimetable = createAsyncThunk<Timetable, string>(
-  'timetables/unpublish',
-  async (id, { rejectWithValue }) => {
-    try {
-      return await timetableService.unpublish(id);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to unpublish timetable');
-    }
-  }
-);
-
 export const fetchConflicts = createAsyncThunk<TimetableConflict[]>(
   'timetables/fetchConflicts',
   async (_, { rejectWithValue }) => {
@@ -161,12 +137,6 @@ const timetableSlice = createSlice({
       .addCase(createTimetable.fulfilled, (state, action) => { state.list.push(action.payload); })
       .addCase(deleteTimetable.fulfilled, (state, action) => {
         state.list = state.list.filter(s => s.id !== action.payload);
-      })
-      .addCase(publishTimetable.fulfilled, (state, action) => {
-        state.list = state.list.map(s => s.id === action.payload.id ? action.payload : s);
-      })
-      .addCase(unpublishTimetable.fulfilled, (state, action) => {
-        state.list = state.list.map(s => s.id === action.payload.id ? action.payload : s);
       })
       .addCase(fetchConflicts.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchConflicts.fulfilled, (state, action) => { state.loading = false; state.conflicts = action.payload; })

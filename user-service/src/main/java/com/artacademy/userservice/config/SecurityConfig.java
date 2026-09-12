@@ -36,6 +36,12 @@ public class SecurityConfig {
                             "/swagger-ui.html"
                     ).permitAll()
 
+                    // Self-service profile updates – owning role only. Must precede the
+                    // PRINCIPAL wildcards below, otherwise "/teachers/**" captures "/teachers/me".
+                    .requestMatchers(HttpMethod.PUT, "/teachers/me").hasRole("TEACHER")
+                    .requestMatchers(HttpMethod.PUT, "/students/me").hasRole("STUDENT")
+                    .requestMatchers(HttpMethod.PUT, "/parents/me").hasRole("PARENT")
+
                     // Mutating teacher endpoints – PRINCIPAL only
                     .requestMatchers(HttpMethod.POST,   "/teachers/**").hasRole("PRINCIPAL")
                     .requestMatchers(HttpMethod.PUT,    "/teachers/**").hasRole("PRINCIPAL")

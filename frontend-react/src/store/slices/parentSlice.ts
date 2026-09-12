@@ -1,9 +1,9 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { Parent } from '../../types';
+import { Parent, ChildRef } from '../../types';
 import parentService from '../../services/parentService';
 
 interface ParentState {
-  children: Parent[];
+  children: ChildRef[];
   profile: Parent | null;
   loading: boolean;
   error: string | null;
@@ -16,7 +16,7 @@ const initialState: ParentState = {
   error: null,
 };
 
-export const fetchMyChildren = createAsyncThunk<Parent[]>(
+export const fetchMyChildren = createAsyncThunk<ChildRef[]>(
   'parents/fetchMyChildren',
   async (_, { rejectWithValue }) => {
     try {

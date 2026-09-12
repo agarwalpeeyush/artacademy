@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -85,13 +86,14 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<Map<String, Object>>> me(@AuthenticationPrincipal String username) {
         User user = authService.getMe(username);
-        Map<String, Object> profile = Map.of(
-                "id", user.getId(),
-                "username", user.getUsername(),
-                "email", user.getEmail(),
-                "roles", user.getRoles().stream().map(Role::getName).collect(Collectors.toList()),
-                "status", user.getStatus()
-        );
+        // HashMap (not Map.of) because email is nullable for auto-provisioned parent logins,
+        // and Map.of rejects null values with an NPE.
+        Map<String, Object> profile = new HashMap<>();
+        profile.put("id", user.getId());
+        profile.put("username", user.getUsername());
+        profile.put("email", user.getEmail());
+        profile.put("roles", user.getRoles().stream().map(Role::getName).collect(Collectors.toList()));
+        profile.put("status", user.getStatus());
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 

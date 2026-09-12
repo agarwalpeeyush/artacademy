@@ -14,6 +14,10 @@ spring:
   flyway:
     locations: classpath:db/migration
 
+artacademy:
+  user:
+    default-temporary-password: Welcome@123
+
 ---
 spring:
   config:

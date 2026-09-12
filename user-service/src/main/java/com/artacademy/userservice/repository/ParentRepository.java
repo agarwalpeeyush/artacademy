@@ -4,7 +4,6 @@ import com.artacademy.userservice.domain.Parent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,9 +14,6 @@ public interface ParentRepository extends JpaRepository<Parent, UUID> {
 
     boolean existsByLoginId(String loginId);
 
-    List<Parent> findAllByLoginId(String loginId);
-
-    List<Parent> findByStudentId(UUID studentId);
-
-    boolean existsByEmail(String email);
+    /** Dedup lookup: an auto-created parent's identity is the phone number (also its loginId). */
+    Optional<Parent> findByPhone(String phone);
 }

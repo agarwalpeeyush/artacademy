@@ -14,12 +14,11 @@ const norm = (s: any): Student => ({
   fatherPhone: s.fatherPhone ?? '',
   motherName: s.motherName ?? '',
   motherPhone: s.motherPhone ?? '',
-  guardianName: s.guardianName ?? '',
-  guardianPhone: s.guardianPhone ?? '',
   email: s.email ?? '',
   address: s.address ?? '',
   enrollmentDate: s.enrollmentDate ?? '',
   status: s.status ?? 'ACTIVE',
+  parents: Array.isArray(s.parents) ? s.parents : [],
 });
 
 const studentService = {

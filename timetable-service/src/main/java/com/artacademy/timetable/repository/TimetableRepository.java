@@ -1,7 +1,6 @@
 package com.artacademy.timetable.repository;
 
 import com.artacademy.timetable.domain.Timetable;
-import com.artacademy.timetable.domain.TimetableStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,23 +18,9 @@ public interface TimetableRepository extends JpaRepository<Timetable, UUID> {
 
     List<Timetable> findByClassId(UUID classId);
 
-    List<Timetable> findByRoomId(UUID roomId);           // Spring Data traverses room.id
-
     List<Timetable> findByRoomIdAndDayOfWeek(UUID roomId, DayOfWeek dayOfWeek); // room.id + dayOfWeek
 
-    List<Timetable> findByTeacherIdAndDayOfWeek(UUID teacherId, DayOfWeek dayOfWeek);
-
     List<Timetable> findByClassIdIn(List<UUID> classIds);
-
-    List<Timetable> findByStatus(TimetableStatus status);
-
-    List<Timetable> findByTeacherIdAndStatus(UUID teacherId, TimetableStatus status);
-
-    List<Timetable> findByClassIdInAndStatus(List<UUID> classIds, TimetableStatus status);
-
-    List<Timetable> findByClassIdAndStatus(UUID classId, TimetableStatus status);
-
-    List<Timetable> findByRoomIdAndDayOfWeekAndStatus(UUID roomId, DayOfWeek dayOfWeek, TimetableStatus status);
 
     @Query("SELECT s FROM Timetable s WHERE s.teacherId = :teacherId AND s.dayOfWeek = :day " +
            "AND s.startTime < :end AND s.endTime > :start")

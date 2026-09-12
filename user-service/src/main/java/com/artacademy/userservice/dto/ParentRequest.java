@@ -2,7 +2,7 @@ package com.artacademy.userservice.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +28,10 @@ public class ParentRequest {
 
     private String lastName;
 
+    /** Display name held on the parent row (base user name is unused for parents). */
+    private String parentName;
+
+    @Pattern(regexp = "(?i)^(mother|father)?$", message = "Relationship must be MOTHER or FATHER")
     private String relationship;
 
     private String phone;
@@ -39,8 +43,8 @@ public class ParentRequest {
 
     private String occupation;
 
-    @NotNull(message = "Linked student ID is required")
-    private UUID studentId;
+    /** Students to link to this parent. Optional; a parent may be created before any child link. */
+    private List<UUID> childStudentIds;
 
     @NotBlank(message = "Status is required")
     private String status;

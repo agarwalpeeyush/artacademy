@@ -93,7 +93,8 @@ com.artacademy.auth
 UUID       id            // PK — NOT auto-generated; set from the *-created event's / seed UUID
 String     username      // unique, not null, len 100
 String     password      // BCrypt hash, not null
-String     email         // unique, not null, len 200
+String     email         // nullable, non-unique, len 200 (null for phone-only parent logins)
+String     phone         // nullable, len 30 (carried for downstream consumers e.g. notification-service)
 String     status        // len 20, default "ACTIVE"
 Instant    createdAt     // default now()
 Instant    updatedAt     // default now()
@@ -151,6 +152,9 @@ entity mappings.
 
 ```sql
 -- Auth service schema (auth_db). Matches JPA entities under ddl-auto=validate.
+-- EMAIL is nullable and non-unique: auto-created parent logins have no email (their identity
+-- is the phone number, used as USERNAME). PHONE is carried for downstream consumers
+-- (e.g. notification-service). Uniqueness of EMAIL is a service-layer concern.
 
 CREATE TABLE ROLES (
     ID   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -161,7 +165,8 @@ CREATE TABLE USERS (
     ID         UUID PRIMARY KEY,
     USERNAME   VARCHAR(100) NOT NULL UNIQUE,
     PASSWORD   VARCHAR(255) NOT NULL,
-    EMAIL      VARCHAR(200) NOT NULL UNIQUE,
+    EMAIL      VARCHAR(200),
+    PHONE      VARCHAR(30),
     STATUS     VARCHAR(20)  DEFAULT 'ACTIVE',
     CREATED_AT TIMESTAMP WITH TIME ZONE DEFAULT now(),
     UPDATED_AT TIMESTAMP WITH TIME ZONE DEFAULT now()
@@ -206,6 +211,16 @@ CREATE TABLE AUDIT_LOGS (
 
 CREATE INDEX idx_audit_username ON AUDIT_LOGS (USERNAME);
 CREATE INDEX idx_audit_occurred_at ON AUDIT_LOGS (OCCURRED_AT DESC);
+
+-- Roles are required by the Kafka consumer (resolveRoles) in EVERY profile, so they are
+-- seeded here in the base migration rather than in the dev-only data seed.
+INSERT INTO ROLES (ID, NAME) VALUES
+    ('00000000-0000-0000-0005-000000000001', 'ADMIN'),
+    ('00000000-0000-0000-0005-000000000002', 'PRINCIPAL'),
+    ('00000000-0000-0000-0005-000000000003', 'TEACHER'),
+    ('00000000-0000-0000-0005-000000000004', 'STUDENT'),
+    ('00000000-0000-0000-0005-000000000005', 'PARENT')
+ON CONFLICT (NAME) DO NOTHING;
 ```
 
 ---
@@ -285,7 +300,7 @@ Successful `POST /auth/login` response (`ApiResponse` envelope):
 |------|-----------|
 | **Login** (`AuthService.login`) | Reject early if the username is currently locked (403 with seconds remaining). Look up the user; if not found or password mismatch → record a failed attempt, write a `LOGIN_FAILED` audit row, throw 400 "Invalid credentials". If status is not `ACTIVE` → record failure, `LOGIN_FAILED` audit, throw 403 "Account is not active". On success: clear attempts, issue a JWT (username + role names), create a fresh refresh token, write a `LOGIN` audit row, return the token pair + profile. |
 | **Lockout** (`LoginAttemptService`) | In-memory `ConcurrentHashMap` per username. `MAX_ATTEMPTS = 5`; on the 5th failure the account is locked for `LOCK_DURATION_SECONDS = 900` (15 minutes). A successful login clears the counter; the lock auto-clears once the window elapses. State is per-instance and not shared across replicas or restarts. |
-| **Refresh** (`AuthService.refresh` / `RefreshTokenService`) | Look up the refresh token (400 if unknown), verify it has not expired (deletes + 400 if expired), then issue a new access token and a new refresh token. `createRefreshToken` deletes any existing tokens for the user first, so refresh rotates the token. Default refresh lifetime `604800000 ms` (7 days), configurable via `app.jwt.refresh-expiration-ms`. |
+| **Refresh** (`AuthService.refresh` / `RefreshTokenService`) | Look up the refresh token (400 if unknown), verify it has not expired (deletes + 400 if expired), then issue a new access token and a new refresh token. `createRefreshToken` deletes any existing tokens for the user first, so a user has a single active refresh token (per-device tokens / true rotation are not implemented). Default refresh lifetime `604800000 ms` (7 days), configurable via `app.jwt.refresh-expiration-ms`. |
 | **Logout** | Delete all refresh tokens for the user and write a `LOGOUT` audit row. |
 | **Change password** | Verify the current password; on mismatch write `CHANGE_PASSWORD_FAILED` and throw 400. On success re-encode with BCrypt, bump `updatedAt`, write `CHANGE_PASSWORD`. |
 | **Forgot password** (`PasswordResetService.initiateReset`) | Silent for unknown emails (no enumeration). For a known email: delete prior reset tokens, create a new one (random UUID, 1-hour expiry), and publish a `NotificationRequestEvent` (channel `EMAIL`) to `notification-request` carrying the raw token. |
@@ -308,9 +323,16 @@ Successful `POST /auth/login` response (`ApiResponse` envelope):
 
 Consumer group: **`auth-service-group`**. Listener container factory
 `kafkaListenerContainerFactory`; values are deserialized as `LinkedHashMap` then
-mapped via Jackson to the event type. On success the new `User` is persisted **with
-the id carried in the event**, so the auth account shares the same UUID as the source
-record. If a username already exists the message is skipped (idempotent).
+mapped via Jackson to the event type. Each handler first validates that the event
+carries a required identity (non-null id and a non-blank username); a missing identity
+throws `IllegalArgumentException`. On success the new `User` is persisted **with the id
+carried in the event**, so the auth account shares the same UUID as the source record.
+If a username already exists the message is skipped (idempotent).
+
+Errors are handled by a `DefaultErrorHandler` with a `DeadLetterPublishingRecoverer`:
+after 2 retries (no backoff) a failing record is published to `<topic>.DLT` (e.g.
+`student-created.DLT`) so a malformed or unprovisionable event does not block the
+partition.
 
 | Topic             | Event                 | Action                                                                                       |
 |-------------------|-----------------------|----------------------------------------------------------------------------------------------|
@@ -330,27 +352,29 @@ names such as `student-created`, `notification-request`).
 Flyway location `classpath:db/migration` for all profiles; the `docker` profile adds
 `classpath:db/seed`.
 
-- **`db/migration/V1__init_auth_schema.sql`** — schema only (roles, users, join table,
-  refresh tokens, password-reset tokens, audit logs + indexes). See §5.
+- **`db/migration/V1__init_auth_schema.sql`** — schema (roles, users, join table,
+  refresh tokens, password-reset tokens, audit logs + indexes) **plus the 5 role rows**
+  (ADMIN, PRINCIPAL, TEACHER, STUDENT, PARENT), which the Kafka consumer needs in every
+  profile. See §5.
 - **`db/seed/V2__seed_dev_data.sql`** — profile-gated dev seed, loaded only under the
-  `docker` profile. Idempotent (`ON CONFLICT ... DO NOTHING`). Inserts 5 roles
-  (ADMIN, PRINCIPAL, TEACHER, STUDENT, PARENT), 8 users, and their `USER_ROLES`
-  mappings. All seeded users share the BCrypt hash
-  `$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy` (password
-  `Admin@1234`) and emails `<username>@artacademy.test`.
+  `docker` profile. Idempotent (`ON CONFLICT ... DO NOTHING`). Inserts 8 login users and
+  their `USER_ROLES` mappings (roles themselves come from V1). All seeded users share the
+  BCrypt hash `$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy` (password
+  `Admin@1234`). Teacher/parent rows carry a PHONE; students have none. The parent login's
+  **username is its phone number** (`9100000002`), matching the phone-as-identity model.
 
 Seed accounts:
 
-| Username  | UUID                                   | Role      |
-|-----------|----------------------------------------|-----------|
-| principal | `00000000-0000-0000-0001-000000000001` | PRINCIPAL |
-| teacher1  | `00000000-0000-0000-0002-000000000001` | TEACHER   |
-| teacher2  | `00000000-0000-0000-0002-000000000002` | TEACHER   |
-| student1  | `00000000-0000-0000-0003-000000000001` | STUDENT   |
-| student2  | `00000000-0000-0000-0003-000000000002` | STUDENT   |
-| student3  | `00000000-0000-0000-0003-000000000003` | STUDENT   |
-| student4  | `00000000-0000-0000-0003-000000000004` | STUDENT   |
-| parent1   | `00000000-0000-0000-0004-000000000001` | PARENT    |
+| Username     | UUID                                   | Role      |
+|--------------|----------------------------------------|-----------|
+| principal    | `00000000-0000-0000-0001-000000000001` | PRINCIPAL |
+| teacher1     | `00000000-0000-0000-0002-000000000001` | TEACHER   |
+| teacher2     | `00000000-0000-0000-0002-000000000002` | TEACHER   |
+| student1     | `00000000-0000-0000-0003-000000000001` | STUDENT   |
+| student2     | `00000000-0000-0000-0003-000000000002` | STUDENT   |
+| student3     | `00000000-0000-0000-0003-000000000003` | STUDENT   |
+| student4     | `00000000-0000-0000-0003-000000000004` | STUDENT   |
+| `9100000002` | `00000000-0000-0000-0004-000000000001` | PARENT    |
 
 > **Security note:** the seed accounts and their shared password are for local/Docker
 > testing only and must be removed or rotated before any production deployment.

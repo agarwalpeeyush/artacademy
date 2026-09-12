@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -16,11 +17,7 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
 
     List<Enrollment> findByClassId(UUID classId);
 
-    List<Enrollment> findByStudentIdAndStatus(UUID studentId, String status);
-
-    boolean existsByStudentIdAndCourseIdAndStatus(UUID studentId, UUID courseId, String status);
-
-    long countByClassId(UUID classId);
+    Optional<Enrollment> findByStudentIdAndCourseId(UUID studentId, UUID courseId);
 
     long countByClassIdAndStatus(UUID classId, String status);
 }

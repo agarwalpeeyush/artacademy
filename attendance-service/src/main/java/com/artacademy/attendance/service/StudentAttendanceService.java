@@ -1,12 +1,15 @@
 package com.artacademy.attendance.service;
 
 import com.artacademy.attendance.domain.ClassSession;
+import com.artacademy.attendance.domain.ClassSessionStatus;
 import com.artacademy.attendance.domain.StudentAttendance;
+import com.artacademy.attendance.dto.ClassRangeAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceResponse;
 import com.artacademy.attendance.dto.StudentAttendanceStatsResponse;
 import com.artacademy.attendance.domain.AttendanceStatus;
 import com.artacademy.attendance.mapper.StudentAttendanceMapper;
+import com.artacademy.attendance.repository.ClassSessionRepository;
 import com.artacademy.attendance.repository.StudentAttendanceRepository;
 import com.artacademy.common.events.AttendanceRecordedEvent;
 import com.artacademy.common.events.AttendanceUpdatedEvent;
@@ -33,6 +36,7 @@ public class StudentAttendanceService {
     private final StudentAttendanceRepository studentAttendanceRepository;
     private final StudentAttendanceMapper studentAttendanceMapper;
     private final ClassSessionService classSessionService;
+    private final ClassSessionRepository classSessionRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /**
@@ -83,10 +87,64 @@ public class StudentAttendanceService {
     }
 
     /**
+     * Mark attendance for every supplied student on each scheduled session day of a
+     * class within [fromDate, toDate]. Only dates that already have a (non-CANCELLED)
+     * ClassSession for the class are touched — sessions are not created here. Each
+     * student+date pair is upserted: existing records are updated (ATTENDANCE_UPDATED),
+     * missing ones are inserted (ATTENDANCE_RECORDED). Safe to re-submit.
+     */
+    public List<StudentAttendanceResponse> markClassAttendanceForRange(UUID classId,
+                                                                       ClassRangeAttendanceRequest request) {
+        if (request.getFromDate().isAfter(request.getToDate())) {
+            throw ApiException.badRequest(
+                    "fromDate " + request.getFromDate() + " must not be after toDate " + request.getToDate());
+        }
+
+        List<ClassSession> sessions = classSessionRepository
+                .findByClassIdAndSessionDateBetween(classId, request.getFromDate(), request.getToDate())
+                .stream()
+                .filter(s -> s.getStatus() != ClassSessionStatus.CANCELLED)
+                .toList();
+
+        List<StudentAttendanceResponse> results = new java.util.ArrayList<>();
+        for (ClassSession session : sessions) {
+            UUID courseId = request.getCourseId() != null ? request.getCourseId() : session.getCourseId();
+            for (UUID studentId : request.getStudentIds()) {
+                StudentAttendanceRequest attendanceRequest = StudentAttendanceRequest.builder()
+                        .studentId(studentId)
+                        .classId(classId)
+                        .courseId(courseId)
+                        .attendanceDate(session.getSessionDate())
+                        .status(request.getDefaultStatus())
+                        .remarks(request.getRemarks())
+                        .build();
+
+                Optional<StudentAttendance> existing = studentAttendanceRepository
+                        .findByStudentIdAndClassIdAndAttendanceDate(
+                                studentId, classId, session.getSessionDate());
+
+                if (existing.isPresent()) {
+                    StudentAttendance record = existing.get();
+                    AttendanceStatus oldStatus = record.getStatus();
+                    record.setStatus(request.getDefaultStatus());
+                    record.setRemarks(request.getRemarks());
+                    StudentAttendance saved = studentAttendanceRepository.save(record);
+                    publishUpdated(saved, oldStatus);
+                    results.add(studentAttendanceMapper.toResponse(saved));
+                } else {
+                    StudentAttendance saved = insertRecord(attendanceRequest);
+                    publishRecorded(saved);
+                    results.add(studentAttendanceMapper.toResponse(saved));
+                }
+            }
+        }
+        return results;
+    }
+
+    /**
      * Update status/remarks of a single record; publishes ATTENDANCE_UPDATED.
      */
-    public StudentAttendanceResponse updateAttendance(UUID id, StudentAttendanceRequest request) {
-        StudentAttendance record = studentAttendanceRepository.findById(id)
+    public StudentAttendanceResponse updateAttendance(UUID id, StudentAttendanceRequest request) {        StudentAttendance record = studentAttendanceRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Attendance record not found: " + id));
 
         AttendanceStatus oldStatus = record.getStatus();

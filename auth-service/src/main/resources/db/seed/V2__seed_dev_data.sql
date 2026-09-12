@@ -1,23 +1,16 @@
 -- Dev seed for auth_db (docker/dev profile only). Idempotent.
--- All login users share password 'Admin@1234'.
+-- ROLES are seeded in V1 (required in all profiles). This adds dev login users.
+-- All login users share password 'Admin@1234'. The parent login's username is its phone.
 
-INSERT INTO ROLES (ID, NAME) VALUES
-    ('00000000-0000-0000-0005-000000000001', 'ADMIN'),
-    ('00000000-0000-0000-0005-000000000002', 'PRINCIPAL'),
-    ('00000000-0000-0000-0005-000000000003', 'TEACHER'),
-    ('00000000-0000-0000-0005-000000000004', 'STUDENT'),
-    ('00000000-0000-0000-0005-000000000005', 'PARENT')
-ON CONFLICT (NAME) DO NOTHING;
-
-INSERT INTO USERS (ID, USERNAME, PASSWORD, EMAIL, STATUS) VALUES
-    ('00000000-0000-0000-0001-000000000001', 'principal', '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'principal@artacademy.test', 'ACTIVE'),
-    ('00000000-0000-0000-0002-000000000001', 'teacher1',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'teacher1@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0002-000000000002', 'teacher2',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'teacher2@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000001', 'student1',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student1@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000002', 'student2',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student2@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000003', 'student3',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student3@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000004', 'student4',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student4@artacademy.test',  'ACTIVE'),
-    ('00000000-0000-0000-0004-000000000001', 'parent1',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'parent1@artacademy.test',   'ACTIVE')
+INSERT INTO USERS (ID, USERNAME, PASSWORD, EMAIL, PHONE, STATUS) VALUES
+    ('00000000-0000-0000-0001-000000000001', 'principal',  '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'principal@artacademy.test', NULL,         'ACTIVE'),
+    ('00000000-0000-0000-0002-000000000001', 'teacher1',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'teacher1@artacademy.test',  '9000000001', 'ACTIVE'),
+    ('00000000-0000-0000-0002-000000000002', 'teacher2',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'teacher2@artacademy.test',  '9000000002', 'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000001', 'student1',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student1@artacademy.test',  NULL,         'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000002', 'student2',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student2@artacademy.test',  NULL,         'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000003', 'student3',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student3@artacademy.test',  NULL,         'ACTIVE'),
+    ('00000000-0000-0000-0003-000000000004', 'student4',   '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'student4@artacademy.test',  NULL,         'ACTIVE'),
+    ('00000000-0000-0000-0004-000000000001', '9100000002', '$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy', 'parent1@artacademy.test',   '9100000002', 'ACTIVE')
 ON CONFLICT (USERNAME) DO NOTHING;
 
 INSERT INTO USER_ROLES (USER_ID, ROLE_ID) VALUES

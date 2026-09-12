@@ -54,8 +54,8 @@ const courseService = {
   },
 
   getClassesByCourse: async (courseId: string): Promise<CourseClass[]> => {
-    const response = await api.get('/classes');
-    return toArray(unwrap(response)).filter((c: any) => c.courseId === courseId);
+    const response = await api.get(`/classes/course/${courseId}`);
+    return toArray(unwrap(response));
   },
 
   getClassesByTeacher: async (teacherId: string): Promise<CourseClass[]> => {

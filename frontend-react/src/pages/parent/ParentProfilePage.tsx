@@ -193,8 +193,21 @@ const ParentProfilePage: React.FC = () => {
                     ? <EditField label="Address" field="address" />
                     : <ProfileField label="Address" value={profile?.address} />}
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <ProfileField label="Linked Student" value={profile?.studentName} />
+                <Grid item xs={12}>
+                  <ProfileField
+                    label="Linked Students"
+                    value={profile?.children?.map(c => c.name).filter(Boolean).join(', ')}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <ProfileField
+                    label="Other Parent / Guardian"
+                    value={profile?.otherParents
+                      ?.map(p => [p.name, p.relationship && `(${p.relationship})`, p.phone && `— ${p.phone}`]
+                        .filter(Boolean).join(' '))
+                      .filter(Boolean)
+                      .join(', ')}
+                  />
                 </Grid>
               </Grid>
             </CardContent>

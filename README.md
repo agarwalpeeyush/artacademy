@@ -527,6 +527,11 @@ docker volume rm docker_postgres-data
 docker compose up -d postgres
 ```
 
+Full clean start from fresh volumes:
+  docker compose -f docker/docker-compose.yml down -v --remove-orphans
+  docker compose -f docker/docker-compose.yml up -d
+```
+
 ```bash
 docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana
 ```

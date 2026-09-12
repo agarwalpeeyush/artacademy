@@ -1,6 +1,7 @@
 package com.artacademy.userservice.controller;
 
 import com.artacademy.common.dto.ApiResponse;
+import com.artacademy.userservice.dto.ChildRef;
 import com.artacademy.userservice.dto.ParentRequest;
 import com.artacademy.userservice.dto.ParentResponse;
 import com.artacademy.userservice.dto.ParentSelfUpdateRequest;
@@ -37,7 +38,7 @@ public class ParentController {
 
     @GetMapping("/me/children")
     @Operation(summary = "Get the children linked to the authenticated parent")
-    public ResponseEntity<ApiResponse<List<ParentResponse>>> getMyChildren(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<ChildRef>>> getMyChildren(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(
                 parentService.getMyChildren(authentication.getName())));
     }

@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,6 +41,7 @@ public class CourseController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Create a new course (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<CourseResponse>> createCourse(
             @Valid @RequestBody CourseRequest request) {
@@ -48,6 +50,7 @@ public class CourseController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Update an existing course (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<CourseResponse>> updateCourse(
             @PathVariable UUID id,
@@ -56,6 +59,7 @@ public class CourseController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Delete a course (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<Void>> deleteCourse(@PathVariable UUID id) {
         courseService.deleteCourse(id);

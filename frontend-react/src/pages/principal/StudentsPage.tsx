@@ -38,12 +38,11 @@ const schema = yup.object({
   firstName: yup.string().required('First name is required'),
   lastName: yup.string().optional(),
   dob: yup.string().optional(),
+  enrollmentDate: yup.string().optional(),
   fatherName: yup.string().optional(),
   fatherPhone: yup.string().optional(),
   motherName: yup.string().optional(),
   motherPhone: yup.string().optional(),
-  guardianName: yup.string().optional(),
-  guardianPhone: yup.string().optional(),
   email: yup.string().email('Invalid email').optional(),
   address: yup.string().optional(),
   status: yup.string().required('Status is required'),
@@ -69,9 +68,9 @@ const StudentsPage: React.FC = () => {
   useEffect(() => { dispatch(fetchStudents()); }, [dispatch]);
 
   const emptyForm: StudentFormData = {
-    loginId: '', firstName: '', lastName: '', dob: '',
+    loginId: '', firstName: '', lastName: '', dob: '', enrollmentDate: '',
     fatherName: '', fatherPhone: '', motherName: '', motherPhone: '',
-    guardianName: '', guardianPhone: '', email: '', address: '', status: 'ACTIVE',
+    email: '', address: '', status: 'ACTIVE',
   };
 
   const handleAdd = () => {
@@ -87,12 +86,11 @@ const StudentsPage: React.FC = () => {
       firstName: student.firstName,
       lastName: student.lastName || '',
       dob: student.dob || '',
+      enrollmentDate: student.enrollmentDate || '',
       fatherName: student.fatherName || '',
       fatherPhone: student.fatherPhone || '',
       motherName: student.motherName || '',
       motherPhone: student.motherPhone || '',
-      guardianName: student.guardianName || '',
-      guardianPhone: student.guardianPhone || '',
       email: student.email || '',
       address: student.address || '',
       status: student.status,
@@ -130,7 +128,15 @@ const StudentsPage: React.FC = () => {
     { id: 'firstName', label: 'First Name', minWidth: 120 },
     { id: 'lastName', label: 'Last Name', minWidth: 120 },
     { id: 'email', label: 'Email', minWidth: 180 },
-    { id: 'guardianName', label: 'Guardian', minWidth: 140 },
+    {
+      id: 'parents', label: 'Parents', minWidth: 160,
+      sortable: false,
+      format: (_v, row) => {
+        const student = row as unknown as Student;
+        const names = (student.parents ?? []).map(p => p.name).filter(Boolean).join(', ');
+        return names || '—';
+      },
+    },
     { id: 'dob', label: 'Date of Birth', minWidth: 120, format: (v) => v ? formatDate(v as string) : '—' },
     {
       id: 'status', label: 'Status', minWidth: 80,
@@ -210,6 +216,12 @@ const StudentsPage: React.FC = () => {
                   )} />
               </Grid>
               <Grid item xs={12} sm={6}>
+                <Controller name="enrollmentDate" control={control}
+                  render={({ field }) => (
+                    <TextField {...field} label="Enrollment Date" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} />
+                  )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
                 <Controller name="status" control={control}
                   render={({ field }) => (
                     <TextField {...field} label="Status" select fullWidth size="small"
@@ -232,8 +244,6 @@ const StudentsPage: React.FC = () => {
                 { name: 'fatherPhone', label: "Father's Phone" },
                 { name: 'motherName', label: "Mother's Name" },
                 { name: 'motherPhone', label: "Mother's Phone" },
-                { name: 'guardianName', label: 'Guardian Name' },
-                { name: 'guardianPhone', label: 'Guardian Phone' },
               ].map(field => (
                 <Grid item xs={12} sm={6} key={field.name}>
                   <Controller

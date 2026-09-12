@@ -42,8 +42,13 @@ const AssignedStudentsPage: React.FC = () => {
     { id: 'firstName', label: 'First Name', minWidth: 120 },
     { id: 'lastName', label: 'Last Name', minWidth: 120 },
     { id: 'email', label: 'Email', minWidth: 180 },
-    { id: 'phone', label: 'Phone', minWidth: 120 },
-    { id: 'guardianName', label: 'Guardian', minWidth: 140 },
+    {
+      id: 'parents', label: 'Parents', minWidth: 160, sortable: false,
+      format: (_v, row) => {
+        const student = row as unknown as Student;
+        return (student.parents ?? []).map(p => p.name).filter(Boolean).join(', ') || '—';
+      },
+    },
     { id: 'enrollmentDate', label: 'Enrolled', minWidth: 120, format: (v) => formatDate(v as string) },
     { id: 'status', label: 'Status', minWidth: 80, format: (v) => <Chip label={v as string} color={v === 'ACTIVE' ? 'success' : 'default'} size="small" /> },
   ];

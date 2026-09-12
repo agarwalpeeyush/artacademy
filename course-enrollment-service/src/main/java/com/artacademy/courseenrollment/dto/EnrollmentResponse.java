@@ -22,4 +22,5 @@ public class EnrollmentResponse {
     private String className;
     private LocalDate enrollmentDate;
     private String status;
+    private boolean admissionFeePaid;
 }

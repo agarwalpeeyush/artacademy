@@ -42,6 +42,9 @@ public class Enrollment {
     @Column(name = "STATUS", length = 20, nullable = false)
     private String status;
 
+    @Column(name = "ADMISSION_FEE_PAID", nullable = false)
+    private boolean admissionFeePaid;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "COURSE_ID", insertable = false, updatable = false)
     private Course course;

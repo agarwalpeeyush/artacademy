@@ -1,5 +1,5 @@
 import api from './api';
-import { Parent } from '../types';
+import { Parent, ChildRef } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 
@@ -8,13 +8,14 @@ const norm = (p: any): Parent => ({
   loginId: p.loginId ?? '',
   firstName: p.firstName ?? '',
   lastName: p.lastName ?? '',
+  parentName: p.parentName ?? '',
   relationship: p.relationship ?? '',
   phone: p.phone ?? '',
   email: p.email ?? '',
   address: p.address ?? '',
   occupation: p.occupation ?? '',
-  studentId: p.studentId,
-  studentName: p.studentName ?? '',
+  children: Array.isArray(p.children) ? p.children : [],
+  otherParents: Array.isArray(p.otherParents) ? p.otherParents : [],
   status: p.status ?? 'ACTIVE',
 });
 
@@ -41,11 +42,10 @@ const parentService = {
     return norm(unwrap(response));
   },
 
-  getMyChildren: async (): Promise<Parent[]> => {
+  getMyChildren: async (): Promise<ChildRef[]> => {
     const response = await api.get('/parents/me/children');
     const data = unwrap(response);
-    const arr = Array.isArray(data) ? data : data?.content ?? [];
-    return arr.map(norm);
+    return Array.isArray(data) ? data : data?.content ?? [];
   },
 
   create: async (data: Omit<Parent, 'id'>): Promise<Parent> => {

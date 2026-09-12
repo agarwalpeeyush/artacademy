@@ -17,10 +17,10 @@ service was rebuilt clean-slate:
 - **The schedule-version / history model was removed entirely.** The old
   `SCHEDULES` + `SCHEDULE_VERSIONS` + `SCHEDULE_VERSION_ENTRIES` tables and their
   versioning/snapshot workflow no longer exist. There are now only two tables: `ROOMS` and
-  `TIMETABLES`. Versioning is replaced by a simple per-row `DRAFT` / `PUBLISHED` status.
+  `TIMETABLES`.
 
-A timetable row is born as `DRAFT`, is edited freely by the principal, and becomes visible to
-teachers and students only once it is `PUBLISHED`.
+A timetable row is created by the principal and is immediately visible to teachers and
+students — there is no draft/publish lifecycle.
 
 ## 2. Module Coordinates
 
@@ -54,8 +54,7 @@ com.artacademy.timetable
 │   └── RoomController.java             # /rooms
 ├── domain
 │   ├── Timetable.java                  # @Table("TIMETABLES")
-│   ├── Room.java                       # @Table("ROOMS")
-│   └── TimetableStatus.java            # DRAFT | PUBLISHED
+│   └── Room.java                       # @Table("ROOMS")
 ├── dto
 │   ├── TimetableRequest.java
 │   ├── TimetableResponse.java
@@ -89,10 +88,6 @@ com.artacademy.timetable
 | `startTime` | `LocalTime` | `START_TIME` | not null |
 | `endTime` | `LocalTime` | `END_TIME` | not null |
 | `dayOfWeek` | `DayOfWeek` | `DAY_OF_WEEK` | not null, `EnumType.STRING`, length 20 (`MONDAY`…`SUNDAY`) |
-| `status` | `TimetableStatus` | `STATUS` | not null, `EnumType.STRING`, length 20 |
-| `publishedAt` | `Instant` | `PUBLISHED_AT` | nullable; set on publish, cleared on unpublish |
-
-`TimetableStatus` = `DRAFT` | `PUBLISHED`.
 
 ### Room (`ROOMS`)
 
@@ -126,8 +121,6 @@ CREATE TABLE TIMETABLES (
     START_TIME   TIME NOT NULL,
     END_TIME     TIME NOT NULL,
     DAY_OF_WEEK  VARCHAR(20) NOT NULL,
-    STATUS       VARCHAR(20) NOT NULL,
-    PUBLISHED_AT TIMESTAMP WITH TIME ZONE,
     CONSTRAINT fk_timetables_room FOREIGN KEY (ROOM_ID) REFERENCES ROOMS (ID)
 );
 
@@ -135,7 +128,6 @@ CREATE INDEX idx_timetables_teacher_id ON TIMETABLES (TEACHER_ID);
 CREATE INDEX idx_timetables_class_id ON TIMETABLES (CLASS_ID);
 CREATE INDEX idx_timetables_room_id ON TIMETABLES (ROOM_ID);
 CREATE INDEX idx_timetables_day_of_week ON TIMETABLES (DAY_OF_WEEK);
-CREATE INDEX idx_timetables_status ON TIMETABLES (STATUS);
 ```
 
 Notes:
@@ -155,24 +147,20 @@ by `@PreAuthorize("hasRole('PRINCIPAL')")` on the handler.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/timetables` | Any authenticated | Return **all** timetables regardless of status (principal builder view). |
-| GET | `/timetables/{id}` | Any authenticated | Return one timetable by id (any status). |
-| POST | `/timetables` | PRINCIPAL | Create a timetable. Always created as `DRAFT`. Validates teacher/room overlap. Publishes `timetable-generated`. Returns `201`. |
-| POST | `/timetables/generate` | PRINCIPAL | Auto-generate `DRAFT` timetables for a list of class/teacher items (see §7). Returns `201`. |
-| PUT | `/timetables/{id}` | PRINCIPAL | Update slot fields (class/teacher/room/times/day). Re-validates overlap. Publishes `timetable-updated`. Status is left unchanged. |
+| GET | `/timetables` | Any authenticated | Return **all** timetables. |
+| GET | `/timetables/{id}` | Any authenticated | Return one timetable by id. |
+| POST | `/timetables` | PRINCIPAL | Create a timetable. Validates teacher/room overlap. Publishes `timetable-generated`. Returns `201`. |
+| POST | `/timetables/generate` | PRINCIPAL | Auto-generate timetables for a list of class/teacher items (see §7). Returns `201`. |
+| PUT | `/timetables/{id}` | PRINCIPAL | Update slot fields (class/teacher/room/times/day). Re-validates overlap. Publishes `timetable-updated`. |
 | DELETE | `/timetables/{id}` | PRINCIPAL | Delete a timetable. `404` if missing. Returns `204`. |
-| POST | `/timetables/{id}/publish` | PRINCIPAL | Set status `PUBLISHED`, stamp `publishedAt = now`. |
-| POST | `/timetables/{id}/unpublish` | PRINCIPAL | Revert status to `DRAFT`, clear `publishedAt`. |
 | GET | `/timetables/conflicts` | PRINCIPAL | **Disabled.** Always returns `404 Not Found` (screen temporarily disabled — see below). |
 | GET | `/timetables/upcoming?classIds=&limit=` | Any authenticated | Next N session occurrences projected onto calendar dates, ascending (see §7). |
-| GET | `/timetables/teacher/{teacherId}` | Any authenticated | Timetables for a teacher — **`PUBLISHED` only**. |
-| GET | `/timetables/class/{classId}` | Any authenticated | Timetables for a class — **`PUBLISHED` only**. |
-| GET | `/timetables/student/{studentId}?classIds=` | Any authenticated | Timetables across the student's enrolled classes — **`PUBLISHED` only**. Empty `classIds` returns `[]`. |
+| GET | `/timetables/teacher/{teacherId}` | Any authenticated | Timetables for a teacher. |
+| GET | `/timetables/class/{classId}` | Any authenticated | Timetables for a class. |
+| GET | `/timetables/student/{studentId}?classIds=` | Any authenticated | Timetables across the student's enrolled classes. Empty `classIds` returns `[]`. |
 
-**PUBLISHED-only visibility rule.** `GET /timetables` and `GET /timetables/{id}` return every
-row (they are the principal's authoring surface). Every *consumer* view —
-`/teacher/{id}`, `/class/{id}`, `/student/{id}` and `/upcoming` — filters to
-`status = PUBLISHED` only, so `DRAFT` rows are never leaked to teachers or students.
+**Visibility.** Every timetable is visible to any authenticated user as soon as the principal
+creates it; there is no draft state to gate teacher/student views.
 
 **`/conflicts` — actual state.** The endpoint is **mapped but hard-disabled**: the handler is
 annotated `@GetMapping("/conflicts")` + `@PreAuthorize("hasRole('PRINCIPAL')")` but its body is
@@ -200,7 +188,7 @@ conflicts feature as inactive.
 }
 ```
 
-`TimetableResponse` adds `id`, `roomName`, `status` and `publishedAt` to the above.
+`TimetableResponse` adds `id` and `roomName` to the above.
 
 **POST `/timetables/generate` request JSON** (`GenerateTimetableRequest`):
 
@@ -249,24 +237,17 @@ Before saving, both `createTimetable` and `updateTimetable` call `validateTeache
 (`startTime < end AND endTime > start`). On update the current row id is excluded so a row does
 not conflict with itself. A non-empty result throws `409 Conflict` via `ApiException`.
 
-### Publish / unpublish workflow
-- `publish(id)` sets `status = PUBLISHED` and `publishedAt = Instant.now()`.
-- `unpublish(id)` sets `status = DRAFT` and `publishedAt = null`.
-
-Publishing/unpublishing does **not** emit a Kafka event (only create → `timetable-generated`
-and update → `timetable-updated` do).
-
 ### Auto-generation (`generate`)
 FIFO packing from `08:00`. A running `slotStart` cursor begins at `08:00`; for each item the
 slot is `[slotStart, slotStart + durationMinutes)`. The service picks the first room (of those
 with `capacity >= 1`) that has no conflicting booking for that day/slot; if none, it throws
-`400`. It also checks the teacher is free for that slot (else `409`). The row is saved as
-`DRAFT`, a `timetable-generated` event is emitted, and `slotStart` advances to `slotEnd` for
+`400`. It also checks the teacher is free for that slot (else `409`). The row is saved, a
+`timetable-generated` event is emitted, and `slotStart` advances to `slotEnd` for
 the next item. (Note: because all items share one advancing cursor, they are packed
 back-to-back on the time axis, while each item's `preferredDayOfWeek` is honoured.)
 
 ### Room availability gap computation
-`getRoomAvailability(roomId, day)` loads that room's `PUBLISHED` timetables for the weekday,
+`getRoomAvailability(roomId, day)` loads that room's timetables for the weekday,
 sorted by start time. It emits:
 - `occupied[]` — one `Slot` per booking (`startTime`, `endTime`, `timetableId`, `classId`).
 - `free[]` — the gaps within the working-day window **`08:00`–`20:00`** (`DAY_START`/`DAY_END`).
@@ -275,7 +256,7 @@ sorted by start time. It emits:
   remainder up to `20:00` is a final free slot.
 
 ### Upcoming projection
-`getUpcoming(classIds, limit)` loads the `PUBLISHED` timetables for the given classes and maps
+`getUpcoming(classIds, limit)` loads the timetables for the given classes and maps
 each recurring weekly slot to its **next calendar date**:
 - `nextOccurrence` computes days-until-target-weekday as `(target - today + 7) % 7`.
 - If that lands on **today** but the session `startTime` is not after `now`, it rolls forward a
@@ -304,7 +285,7 @@ Flyway, clean-slate, two files:
 
 | Version | File | Location | Applies |
 |---------|------|----------|---------|
-| V1 | `V1__init_timetable_schema.sql` | `db/migration` | Always. Creates `ROOMS`, `TIMETABLES`, the five indexes and the FK. |
+| V1 | `V1__init_timetable_schema.sql` | `db/migration` | Always. Creates `ROOMS`, `TIMETABLES`, the four indexes and the FK. |
 | V2 | `V2__seed_dev_data.sql` | `db/seed` | **Only under the `docker` profile** (`flyway.locations` adds `classpath:db/seed`). Idempotent (`ON CONFLICT (ID) DO NOTHING`). |
 
 Under the default profile only `db/migration` is on the Flyway path, so production/local runs
@@ -313,6 +294,6 @@ is `validate` — Hibernate never mutates the schema.
 
 **V2 seed content:**
 - Rooms: `Studio 1` (capacity 20), `Studio 2` (capacity 15).
-- 4 `PUBLISHED` timetables:
+- 4 timetables:
   - Painting class → Studio 1, teacher1, `MONDAY` and `WEDNESDAY` `10:00–11:30`.
   - Sculpture class → Studio 2, teacher2, `TUESDAY` and `THURSDAY` `14:00–15:30`.

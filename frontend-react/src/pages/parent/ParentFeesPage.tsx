@@ -29,7 +29,7 @@ const ParentFeesPage: React.FC = () => {
 
   useEffect(() => {
     if (!selectedStudent && children.length > 0) {
-      setSelectedStudent(children[0].studentId);
+      setSelectedStudent(children[0].id);
     }
   }, [children, selectedStudent]);
 
@@ -61,7 +61,7 @@ const ParentFeesPage: React.FC = () => {
           <TextField select label="Child" size="small" fullWidth value={selectedStudent}
             onChange={e => setSelectedStudent(e.target.value)}>
             {children.map(c => (
-              <MenuItem key={c.studentId} value={c.studentId}>{c.studentName || c.studentId}</MenuItem>
+              <MenuItem key={c.id} value={c.id}>{c.name || c.id}</MenuItem>
             ))}
           </TextField>
         </Grid>

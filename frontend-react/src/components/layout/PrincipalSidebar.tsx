@@ -22,7 +22,6 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import RoomPreferencesIcon from '@mui/icons-material/RoomPreferences';
-import PublishIcon from '@mui/icons-material/Publish';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import RuleIcon from '@mui/icons-material/Rule';
@@ -43,7 +42,6 @@ const masterDataItems = [
   { label: 'Rooms', icon: <RoomPreferencesIcon />, path: '/principal/rooms' },
   { label: 'Courses', icon: <MenuBookIcon />, path: '/principal/courses' },
   { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
-  { label: 'Publish Timetable', icon: <PublishIcon />, path: '/principal/timetable-publish' },
 ];
 
 const navItems = [

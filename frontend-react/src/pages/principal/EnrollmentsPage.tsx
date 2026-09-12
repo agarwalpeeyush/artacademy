@@ -78,7 +78,7 @@ const EnrollmentsPage: React.FC = () => {
     timetableService.getAll()
       .then((all) => {
         const map = new Map<string, Timetable[]>();
-        all.filter((s) => s.status === 'PUBLISHED').forEach((s) => {
+        all.forEach((s) => {
           const arr = map.get(s.classId) ?? [];
           arr.push(s);
           map.set(s.classId, arr);

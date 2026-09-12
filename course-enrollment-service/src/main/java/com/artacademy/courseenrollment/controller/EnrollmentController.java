@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public class EnrollmentController {
     private final EnrollmentService enrollmentService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Enroll a student in a course/class (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<EnrollmentResponse>> enrollStudent(
             @Valid @RequestBody EnrollmentRequest request) {
@@ -63,6 +65,7 @@ public class EnrollmentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Cancel (delete) an enrollment (PRINCIPAL or TEACHER)")
     public ResponseEntity<ApiResponse<Void>> cancelEnrollment(@PathVariable("id") UUID id) {
         enrollmentService.cancelEnrollment(id);
@@ -70,6 +73,7 @@ public class EnrollmentController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Update an enrollment's status (PRINCIPAL or TEACHER)")
     public ResponseEntity<ApiResponse<EnrollmentResponse>> updateStatus(
             @PathVariable("id") UUID id,

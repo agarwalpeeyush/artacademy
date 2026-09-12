@@ -120,7 +120,7 @@ const StudentDetailPage: React.FC = () => {
             <Info label="Address" value={student?.address} />
             <Info label="Father" value={student?.fatherName ? `${student.fatherName}${student.fatherPhone ? ` (${student.fatherPhone})` : ''}` : '-'} />
             <Info label="Mother" value={student?.motherName ? `${student.motherName}${student.motherPhone ? ` (${student.motherPhone})` : ''}` : '-'} />
-            <Info label="Guardian" value={student?.guardianName ? `${student.guardianName}${student.guardianPhone ? ` (${student.guardianPhone})` : ''}` : '-'} />
+            <Info label="Parents" value={(student?.parents ?? []).map(p => p.name).filter(Boolean).join(', ') || '-'} />
             <Info label="Enrolled On" value={student?.enrollmentDate ? formatDate(student.enrollmentDate) : '-'} />
           </Grid>
         </CardContent>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Grid, Alert, Snackbar, MenuItem, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Paper, Typography, Chip,
+  TableCell, TableContainer, TableHead, TableRow, Paper, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -135,7 +135,6 @@ const TimetablePage: React.FC = () => {
               <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Room</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
               <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -154,9 +153,6 @@ const TimetablePage: React.FC = () => {
                   <TableCell>{s.teacherName || teacherNameById.get(s.teacherId) || '-'}</TableCell>
                   <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
                   <TableCell>{s.roomName || '-'}</TableCell>
-                  <TableCell>
-                    <Chip label={s.status || 'DRAFT'} size="small" color={s.status === 'PUBLISHED' ? 'success' : 'warning'} />
-                  </TableCell>
                   <TableCell align="center">
                     <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(s.id)}>
                       Remove

@@ -40,6 +40,18 @@ export interface Teacher {
   status: string;
 }
 
+export interface ChildRef {
+  id: string;
+  name: string;
+}
+
+export interface ParentRef {
+  id: string;
+  name: string;
+  relationship?: string;
+  phone?: string;
+}
+
 export interface Student {
   id: string;
   loginId?: string;
@@ -50,12 +62,11 @@ export interface Student {
   fatherPhone?: string;
   motherName?: string;
   motherPhone?: string;
-  guardianName?: string;
-  guardianPhone?: string;
   email?: string;
   address?: string;
   enrollmentDate?: string;
   status: string;
+  parents?: ParentRef[];
 }
 
 export interface Parent {
@@ -63,13 +74,15 @@ export interface Parent {
   loginId?: string;
   firstName: string;
   lastName: string;
+  parentName?: string;
   relationship?: string;
   phone?: string;
   email?: string;
   address?: string;
   occupation?: string;
-  studentId: string;
-  studentName?: string;
+  childStudentIds?: string[];
+  children?: ChildRef[];
+  otherParents?: ParentRef[];
   status: string;
 }
 
@@ -211,8 +224,6 @@ export interface Timetable {
   roomId?: string;
   roomName?: string;
   active: boolean;
-  status?: 'DRAFT' | 'PUBLISHED';
-  publishedAt?: string;
 }
 
 export interface RoomAvailabilitySlot {

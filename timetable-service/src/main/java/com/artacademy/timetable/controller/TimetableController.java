@@ -70,26 +70,11 @@ public class TimetableController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{id}/publish")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Publish a single timetable")
-    public ResponseEntity<TimetableResponse> publish(@PathVariable("id") UUID id) {
-        return ResponseEntity.ok(timetableService.publish(id));
-    }
-
-    @PostMapping("/{id}/unpublish")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Unpublish a single timetable (back to draft)")
-    public ResponseEntity<TimetableResponse> unpublish(@PathVariable("id") UUID id) {
-        return ResponseEntity.ok(timetableService.unpublish(id));
-    }
-
     @GetMapping("/conflicts")
     @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "List timetable conflicts (teacher/room double-booking, class overlaps)")
     public ResponseEntity<List<TimetableConflictResponse>> getConflicts() {
-        // Conflicts screen is temporarily disabled.
-        return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(timetableService.getConflicts());
     }
 
     @GetMapping("/upcoming")

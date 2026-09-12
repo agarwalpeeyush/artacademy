@@ -4,9 +4,12 @@ These scenarios exercise the `/auth` API. You can run them against the api-gatew
 `http://localhost:8080` (routes `/auth/**` to this service) or directly against the
 service at `http://localhost:8081`. The examples below use the gateway URL.
 
-All seeded accounts use the password **`Admin@1234`** and emails
-`<username>@artacademy.test` (e.g. `principal`, `teacher1`, `student1`, `parent1`).
-The seed data is loaded only under the `docker` profile.
+All seeded accounts use the password **`Admin@1234`**. Staff/student logins have emails
+`<username>@artacademy.test` (e.g. `principal`, `teacher1`, `student1`). The seeded parent
+logs in with **its phone number as the username** (`9100000002`, email
+`parent1@artacademy.test`) — auto-provisioned parents may have no email at all. The seed
+data (and the 5 roles live in the V1 migration) is loaded only under the `docker` profile;
+reset passwords must be at least 8 characters.
 
 Protected endpoints require an `Authorization: Bearer <accessToken>` header. Obtain a
 token from scenario 1 and export it, e.g.:
@@ -47,3 +50,5 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
 | 23 | View audit logs (PRINCIPAL) | `curl ":8080/auth/audit-logs?size=20" -H "Authorization: Bearer $TOKEN"` | `200`; paged audit entries sorted by `occurredAt` DESC |
 | 24 | Filter audit logs by username | `curl ":8080/auth/audit-logs?username=principal" -H "Authorization: Bearer $TOKEN"` | `200`; only entries for `principal` |
 | 25 | Audit logs as non-PRINCIPAL | Repeat #23 with a `student1` token | `403` forbidden |
+| 26 | Parent logs in by phone | `curl -X POST :8080/auth/login -H 'Content-Type: application/json' -d '{"username":"9100000002","password":"Admin@1234"}'` | `200`; `roles:["PARENT"]`; `/me` may show a null `email` for phone-only parents |
+| 27 | Malformed created-event routed to DLT | Publish a `student-created` event missing `studentId`/`username` | consumer rejects it; after retries the record lands on `student-created.DLT`; no user row created |

@@ -49,7 +49,8 @@ public class JwtUtil {
 
     @SuppressWarnings("unchecked")
     public List<String> extractRoles(String token) {
-        return extractClaim(token, c -> (List<String>) c.get("roles"));
+        List<String> roles = extractClaim(token, c -> (List<String>) c.get("roles"));
+        return roles == null ? List.of() : roles;
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> resolver) {

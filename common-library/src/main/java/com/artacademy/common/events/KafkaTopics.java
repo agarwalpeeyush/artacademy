@@ -6,6 +6,9 @@ public final class KafkaTopics {
     public static final String STUDENT_CREATED = "student-created";
     public static final String TEACHER_CREATED = "teacher-created";
     public static final String PARENT_CREATED = "parent-created";
+    public static final String STUDENT_DELETED = "student-deleted";
+    public static final String TEACHER_DELETED = "teacher-deleted";
+    public static final String PARENT_DELETED = "parent-deleted";
     public static final String ENROLLMENT_CREATED = "enrollment-created";
     public static final String ENROLLMENT_CANCELLED = "enrollment-cancelled";
 

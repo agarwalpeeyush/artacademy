@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -42,7 +43,15 @@ public class ClassController {
         return ResponseEntity.ok(ApiResponse.success(classService.getClassesByTeacher(teacherId)));
     }
 
+    @GetMapping("/course/{courseId}")
+    @Operation(summary = "Get all classes for a course")
+    public ResponseEntity<ApiResponse<List<ClassResponse>>> getClassesByCourse(
+            @PathVariable("courseId") UUID courseId) {
+        return ResponseEntity.ok(ApiResponse.success(classService.getClassesByCourse(courseId)));
+    }
+
     @PostMapping
+    @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Create a new class (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<ClassResponse>> createClass(
             @Valid @RequestBody ClassRequest request) {
@@ -51,6 +60,7 @@ public class ClassController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Update an existing class (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<ClassResponse>> updateClass(
             @PathVariable UUID id,
@@ -59,6 +69,7 @@ public class ClassController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Delete a class (PRINCIPAL only)")
     public ResponseEntity<ApiResponse<Void>> deleteClass(@PathVariable UUID id) {
         classService.deleteClass(id);

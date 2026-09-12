@@ -18,12 +18,6 @@ public class Teacher extends User {
     @Column(name = "EMPLOYEE_CODE", length = 50, unique = true)
     private String employeeCode;
 
-    @Column(name = "EMAIL")
-    private String email;
-
-    @Column(name = "PHONE")
-    private String phone;
-
     @Column(name = "QUALIFICATION")
     private String qualification;
 

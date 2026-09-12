@@ -6,8 +6,11 @@ import com.artacademy.auth.repository.RoleRepository;
 import com.artacademy.auth.repository.UserRepository;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.ParentCreatedEvent;
+import com.artacademy.common.events.ParentDeletedEvent;
 import com.artacademy.common.events.StudentCreatedEvent;
+import com.artacademy.common.events.StudentDeletedEvent;
 import com.artacademy.common.events.TeacherCreatedEvent;
+import com.artacademy.common.events.TeacherDeletedEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -39,6 +43,7 @@ public class UserCreatedEventConsumer {
     public void onStudentCreated(Map<String, Object> payload) {
         try {
             StudentCreatedEvent event = objectMapper.convertValue(payload, StudentCreatedEvent.class);
+            requireIdentity(event.getStudentId(), event.getUsername(), "StudentCreatedEvent");
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
@@ -73,6 +78,7 @@ public class UserCreatedEventConsumer {
     public void onTeacherCreated(Map<String, Object> payload) {
         try {
             TeacherCreatedEvent event = objectMapper.convertValue(payload, TeacherCreatedEvent.class);
+            requireIdentity(event.getTeacherId(), event.getUsername(), "TeacherCreatedEvent");
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
@@ -107,6 +113,7 @@ public class UserCreatedEventConsumer {
     public void onParentCreated(Map<String, Object> payload) {
         try {
             ParentCreatedEvent event = objectMapper.convertValue(payload, ParentCreatedEvent.class);
+            requireIdentity(event.getParentId(), event.getUsername(), "ParentCreatedEvent");
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
@@ -123,6 +130,7 @@ public class UserCreatedEventConsumer {
                     .id(event.getParentId())
                     .username(event.getUsername())
                     .email(event.getEmail())
+                    .phone(event.getPhone())
                     .password(passwordEncoder.encode(event.getTemporaryPassword()))
                     .status("ACTIVE")
                     .roles(roles)
@@ -135,10 +143,79 @@ public class UserCreatedEventConsumer {
         }
     }
 
+    @KafkaListener(topics = KafkaTopics.PARENT_DELETED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
+    @Transactional
+    public void onParentDeleted(Map<String, Object> payload) {
+        try {
+            ParentDeletedEvent event = objectMapper.convertValue(payload, ParentDeletedEvent.class);
+            if (userRepository.existsById(event.getParentId())) {
+                userRepository.deleteById(event.getParentId());
+                log.info("Deleted auth user for parent id={} username={}", event.getParentId(), event.getUsername());
+            } else {
+                log.warn("No auth user found for parent id={} username={}, skipping delete",
+                        event.getParentId(), event.getUsername());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process ParentDeletedEvent: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @KafkaListener(topics = KafkaTopics.STUDENT_DELETED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
+    @Transactional
+    public void onStudentDeleted(Map<String, Object> payload) {
+        try {
+            StudentDeletedEvent event = objectMapper.convertValue(payload, StudentDeletedEvent.class);
+            if (userRepository.existsById(event.getStudentId())) {
+                userRepository.deleteById(event.getStudentId());
+                log.info("Deleted auth user for student id={} username={}", event.getStudentId(), event.getUsername());
+            } else {
+                log.warn("No auth user found for student id={} username={}, skipping delete",
+                        event.getStudentId(), event.getUsername());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process StudentDeletedEvent: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @KafkaListener(topics = KafkaTopics.TEACHER_DELETED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
+    @Transactional
+    public void onTeacherDeleted(Map<String, Object> payload) {
+        try {
+            TeacherDeletedEvent event = objectMapper.convertValue(payload, TeacherDeletedEvent.class);
+            if (userRepository.existsById(event.getTeacherId())) {
+                userRepository.deleteById(event.getTeacherId());
+                log.info("Deleted auth user for teacher id={} username={}", event.getTeacherId(), event.getUsername());
+            } else {
+                log.warn("No auth user found for teacher id={} username={}, skipping delete",
+                        event.getTeacherId(), event.getUsername());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process TeacherDeletedEvent: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
     private Set<Role> resolveRoles(List<String> names) {
         return names.stream()
                 .map(name -> roleRepository.findByName(name)
                         .orElseThrow(() -> new IllegalStateException("Role not found: " + name)))
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * A malformed *CreatedEvent (missing id or username) can never produce a valid auth login and
+     * would only fail deeper in persistence. Reject it up front so it lands in the DLQ with a clear
+     * cause instead of a confusing constraint-violation stack trace.
+     */
+    private void requireIdentity(UUID id, String username, String eventType) {
+        if (id == null || username == null || username.isBlank()) {
+            throw new IllegalArgumentException(
+                    eventType + " missing required identity (id=" + id + ", username=" + username + ")");
+        }
     }
 }

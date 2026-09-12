@@ -20,7 +20,7 @@ public class User {
     @Column(name = "ID")
     private UUID id;
 
-    @Column(name = "LOGIN_ID", unique = true)
+    @Column(name = "LOGIN_ID")
     private String loginId;
 
     @Column(name = "FIRST_NAME", nullable = false)
@@ -28,4 +28,11 @@ public class User {
 
     @Column(name = "LAST_NAME")
     private String lastName;
+
+    @Column(name = "EMAIL")
+    private String email;
+
+    @Column(name = "PHONE_NUMBER")
+    private String phone;
+
 }

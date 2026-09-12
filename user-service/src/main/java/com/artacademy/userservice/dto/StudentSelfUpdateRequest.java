@@ -30,8 +30,4 @@ public class StudentSelfUpdateRequest {
     private String motherName;
 
     private String motherPhone;
-
-    private String guardianName;
-
-    private String guardianPhone;
 }

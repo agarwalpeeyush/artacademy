@@ -1,6 +1,7 @@
 package com.artacademy.userservice.service;
 
 import com.artacademy.common.events.TeacherCreatedEvent;
+import com.artacademy.common.events.TeacherDeletedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.userservice.domain.Teacher;
@@ -20,6 +21,7 @@ import com.artacademy.userservice.repository.TeacherRepository;
 import com.artacademy.userservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -37,8 +39,9 @@ import java.util.UUID;
 @Transactional
 public class TeacherService {
 
-    /** Default initial auth password when the UI does not supply one. LOCAL/TESTING default — rotate before production. */
-    private static final String DEFAULT_TEMPORARY_PASSWORD = "Welcome@123";
+    /** Default initial auth password when the UI does not supply one. Sourced from config-server. */
+    @Value("${artacademy.user.default-temporary-password}")
+    private String defaultTemporaryPassword;
 
     private final TeacherRepository teacherRepository;
     private final UserRepository userRepository;
@@ -70,6 +73,7 @@ public class TeacherService {
                 .orElseThrow(() -> ApiException.notFound("Teacher not found with login ID: " + loginId));
         teacher.setFirstName(request.getFirstName());
         teacher.setLastName(request.getLastName());
+        emailUniquenessValidator.assertEmailAvailable(request.getEmail(), teacher.getId());
         teacher.setEmail(request.getEmail());
         teacher.setPhone(request.getPhone());
         teacher.setQualification(request.getQualification());
@@ -77,7 +81,7 @@ public class TeacherService {
     }
 
     public TeacherResponse createTeacher(TeacherRequest request) {
-        if (request.getLoginId() != null && userRepository.existsByLoginId(request.getLoginId())) {
+        if (userRepository.existsByLoginId(request.getLoginId())) {
             throw ApiException.conflict("Login ID '" + request.getLoginId() + "' is already taken");
         }
         if (teacherRepository.existsByEmployeeCode(request.getEmployeeCode())) {
@@ -106,7 +110,7 @@ public class TeacherService {
     }
 
     private String resolveTemporaryPassword(String requested) {
-        return (requested == null || requested.isBlank()) ? DEFAULT_TEMPORARY_PASSWORD : requested;
+        return (requested == null || requested.isBlank()) ? defaultTemporaryPassword : requested;
     }
 
     public TeacherResponse updateTeacher(UUID id, TeacherRequest request) {
@@ -115,15 +119,24 @@ public class TeacherService {
                 && teacherRepository.existsByEmployeeCode(request.getEmployeeCode())) {
             throw ApiException.conflict("Teacher with employee code '" + request.getEmployeeCode() + "' already exists");
         }
+        emailUniquenessValidator.assertEmailAvailable(request.getEmail(), teacher.getId());
         teacherMapper.updateEntityFromRequest(request, teacher);
         return teacherMapper.toResponse(teacherRepository.save(teacher));
     }
 
     public void deleteTeacher(UUID id) {
         Teacher teacher = findById(id);
+        String loginId = teacher.getLoginId();
         availabilityExceptionRepository.deleteByTeacherId(teacher.getId());
         availabilityRepository.deleteByTeacherId(teacher.getId());
-        teacherRepository.delete(teacher);        log.info("Deleted teacher id={}", id);
+        teacherRepository.delete(teacher);
+        kafkaTemplate.send(KafkaTopics.TEACHER_DELETED, id.toString(),
+                TeacherDeletedEvent.builder()
+                        .teacherId(id)
+                        .username(loginId)
+                        .occurredAt(Instant.now())
+                        .build());
+        log.info("Deleted teacher id={}", id);
     }
 
     @Transactional(readOnly = true)
@@ -135,6 +148,7 @@ public class TeacherService {
 
     public List<TeacherAvailabilityResponse> updateAvailability(UUID teacherId, List<TeacherAvailabilityRequest> requests) {
         Teacher teacher = findById(teacherId);
+        requests.forEach(r -> requireEndAfterStart(r.getStartTime(), r.getEndTime()));
         availabilityRepository.deleteByTeacherId(teacherId);
         List<TeacherAvailability> slots = requests.stream()
                 .map(r -> TeacherAvailability.builder()
@@ -156,6 +170,12 @@ public class TeacherService {
 
     public TeacherAvailabilityExceptionResponse addException(UUID teacherId, TeacherAvailabilityExceptionRequest request) {
         Teacher teacher = findById(teacherId);
+        if (!request.isUnavailableAllDay()) {
+            if (request.getStartTime() == null || request.getEndTime() == null) {
+                throw ApiException.badRequest("Start and end time are required unless the exception is all day");
+            }
+            requireEndAfterStart(request.getStartTime(), request.getEndTime());
+        }
         TeacherAvailabilityException exception = TeacherAvailabilityException.builder()
                 .teacher(teacher)
                 .date(request.getDate())
@@ -179,6 +199,12 @@ public class TeacherService {
     private Teacher findById(UUID id) {
         return teacherRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Teacher not found with id: " + id));
+    }
+
+    private void requireEndAfterStart(java.time.LocalTime start, java.time.LocalTime end) {
+        if (start == null || end == null || !end.isAfter(start)) {
+            throw ApiException.badRequest("End time must be after start time");
+        }
     }
 
     private TeacherAvailabilityExceptionResponse toExceptionResponse(TeacherAvailabilityException e) {

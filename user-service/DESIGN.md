@@ -4,9 +4,9 @@
 
 The **User Service** owns the master data for every human actor in the Art Academy
 platform: **students**, **teachers**, and **parents**. It is the system of record
-for profiles (names, contact details, qualifications, guardian information),
+for profiles (names, contact details, qualifications, parent/occupation information),
 teacher **weekly availability** and one-off **availability exceptions**, and the
-parent-to-student links.
+parent-to-student links (a many-to-many relation via the `PARENT_STUDENTS` join table).
 
 The service is deliberately separated from the **auth-service**, which owns login
 credentials and roles. When a profile is created here, the User Service **publishes
@@ -109,54 +109,57 @@ column is not exposed as a mapped field on the `User` entity — JPA manages it.
 | Field | Column | Type | Notes |
 |-------|--------|------|-------|
 | `id` | `ID` | UUID | PK, `@GeneratedValue(UUID)` |
-| `loginId` | `LOGIN_ID` | String | unique; equals the auth username |
+| `loginId` | `LOGIN_ID` | String | equals the auth username; uniqueness enforced at the service layer (no DB constraint) |
 | `firstName` | `FIRST_NAME` | String | `NOT NULL` |
 | `lastName` | `LAST_NAME` | String | nullable |
+| `email` | `EMAIL` | String | nullable; not unique |
+| `phone` | `PHONE_NUMBER` | String | nullable |
 
 The discriminator `USER_TYPE` is stored in `USERS` but is not a mapped Java field.
+**Contact fields (`email`, `phone`) live on the base `User`/`USERS` table and are
+shared by all subtypes** — they are no longer duplicated on the child tables.
 
 ### `Student` (table `STUDENTS`, discriminator `STUDENT`)
 
 | Field | Column | Type |
 |-------|--------|------|
 | `dob` | `DATE_OF_BIRTH` | LocalDate |
-| `fatherName` | `FATHER_NAME` | String |
-| `fatherPhone` | `FATHER_PHONE` | String |
-| `motherName` | `MOTHER_NAME` | String |
-| `motherPhone` | `MOTHER_PHONE` | String |
-| `guardianName` | `GUARDIAN_NAME` | String |
-| `guardianPhone` | `GUARDIAN_PHONE` | String |
-| `email` | `EMAIL` | String |
 | `address` | `ADDRESS` | TEXT |
 | `enrollmentDate` | `ENROLLMENT_DATE` | LocalDate |
 | `status` | `STATUS` | String (`NOT NULL`) |
+
+The old father/mother/guardian name+phone columns and the student-level `EMAIL`
+column are **gone**. A student's contact email/phone now come from the base `USERS`
+row. `Student` also holds `@ManyToMany(mappedBy = "children") Set<Parent> parents`,
+the inverse side of the parent↔student link.
 
 ### `Teacher` (table `TEACHERS`, discriminator `TEACHER`)
 
 | Field | Column | Type | Notes |
 |-------|--------|------|-------|
 | `employeeCode` | `EMPLOYEE_CODE` | String(50) | unique |
-| `email` | `EMAIL` | String |
-| `phone` | `PHONE` | String |
 | `qualification` | `QUALIFICATION` | String |
 | `joiningDate` | `JOINING_DATE` | LocalDate |
 | `status` | `STATUS` | String (`NOT NULL`) |
+
+(`email`/`phone` are inherited from the base `USERS` row.)
 
 ### `Parent` (table `PARENTS`, discriminator `PARENT`)
 
 | Field | Column | Type | Notes |
 |-------|--------|------|-------|
-| `relationship` | `RELATIONSHIP` | String |
-| `phone` | `PHONE` | String |
-| `email` | `EMAIL` | String |
+| `parentName` | `PARENT_NAME` | String |
+| `relationship` | `RELATIONSHIP` | enum (`Relationship` `MOTHER`/`FATHER`, STRING) |
 | `address` | `ADDRESS` | TEXT |
 | `occupation` | `OCCUPATION` | String |
-| `studentId` | `STUDENT_ID` | UUID | FK → `STUDENTS.ID` |
 | `status` | `STATUS` | String (`NOT NULL`) |
 
-A single parent login (`loginId`) may have **multiple `PARENTS` rows**, one per
-linked child (each row shares the same `loginId` but a different `id` and
-`studentId`). This models a parent with several children.
+There is **no** `STUDENT_ID` or `EMAIL` column on `PARENTS`. Children are modelled
+as a `@ManyToMany Set<Student> children` via the `@JoinTable PARENT_STUDENTS`
+(`joinColumns = PARENT_ID`, `inverseJoinColumns = STUDENT_ID`). A single parent is
+one row keyed by their UUID; the many-to-many join table carries zero or more child
+links. A parent's `loginId` (and auth username) **is their phone number**, so
+parents are deduped by phone.
 
 ### `TeacherAvailability` (table `TEACHER_AVAILABILITY`)
 
@@ -191,13 +194,17 @@ Actual `V1__init_user_schema.sql`:
 
 ```sql
 -- User service schema (user_db). JOINED inheritance: USERS base + STUDENTS/TEACHERS/PARENTS.
+-- Uniqueness of LOGIN_ID / EMAIL / PHONE is enforced at the service layer
+-- (no DB unique constraint), matching auth_db where a parent's identity is a phone.
 
 CREATE TABLE USERS (
-    ID         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    USER_TYPE  VARCHAR(31) NOT NULL,
-    LOGIN_ID   VARCHAR(255) UNIQUE,
-    FIRST_NAME VARCHAR(255) NOT NULL,
-    LAST_NAME  VARCHAR(255)
+    ID           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    USER_TYPE    VARCHAR(31) NOT NULL,
+    LOGIN_ID     VARCHAR(255),
+    FIRST_NAME   VARCHAR(255) NOT NULL,
+    LAST_NAME    VARCHAR(255),
+    EMAIL        VARCHAR(255),
+    PHONE_NUMBER VARCHAR(255)
 );
 
 CREATE INDEX idx_users_login_id ON USERS (LOGIN_ID);
@@ -205,13 +212,6 @@ CREATE INDEX idx_users_login_id ON USERS (LOGIN_ID);
 CREATE TABLE STUDENTS (
     ID              UUID PRIMARY KEY,
     DATE_OF_BIRTH   DATE,
-    FATHER_NAME     VARCHAR(255),
-    FATHER_PHONE    VARCHAR(255),
-    MOTHER_NAME     VARCHAR(255),
-    MOTHER_PHONE    VARCHAR(255),
-    GUARDIAN_NAME   VARCHAR(255),
-    GUARDIAN_PHONE  VARCHAR(255),
-    EMAIL           VARCHAR(255),
     ADDRESS         TEXT,
     ENROLLMENT_DATE DATE,
     STATUS          VARCHAR(255) NOT NULL,
@@ -221,8 +221,6 @@ CREATE TABLE STUDENTS (
 CREATE TABLE TEACHERS (
     ID            UUID PRIMARY KEY,
     EMPLOYEE_CODE VARCHAR(50) UNIQUE,
-    EMAIL         VARCHAR(255),
-    PHONE         VARCHAR(255),
     QUALIFICATION VARCHAR(255),
     JOINING_DATE  DATE,
     STATUS        VARCHAR(255) NOT NULL,
@@ -233,18 +231,23 @@ CREATE INDEX idx_teachers_employee_code ON TEACHERS (EMPLOYEE_CODE);
 
 CREATE TABLE PARENTS (
     ID           UUID PRIMARY KEY,
+    PARENT_NAME  VARCHAR(255),
     RELATIONSHIP VARCHAR(255),
-    PHONE        VARCHAR(255),
-    EMAIL        VARCHAR(255),
     ADDRESS      TEXT,
     OCCUPATION   VARCHAR(255),
-    STUDENT_ID   UUID,
     STATUS       VARCHAR(255) NOT NULL,
-    CONSTRAINT fk_parents_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE,
-    CONSTRAINT fk_parents_student FOREIGN KEY (STUDENT_ID) REFERENCES STUDENTS (ID)
+    CONSTRAINT fk_parents_user FOREIGN KEY (ID) REFERENCES USERS (ID) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_parents_student_id ON PARENTS (STUDENT_ID);
+CREATE TABLE PARENT_STUDENTS (
+    PARENT_ID  UUID NOT NULL,
+    STUDENT_ID UUID NOT NULL,
+    PRIMARY KEY (PARENT_ID, STUDENT_ID),
+    CONSTRAINT fk_parent_students_parent  FOREIGN KEY (PARENT_ID)  REFERENCES PARENTS (ID)  ON DELETE CASCADE,
+    CONSTRAINT fk_parent_students_student FOREIGN KEY (STUDENT_ID) REFERENCES STUDENTS (ID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_parent_students_student_id ON PARENT_STUDENTS (STUDENT_ID);
 
 CREATE TABLE TEACHER_AVAILABILITY (
     ID          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -340,20 +343,17 @@ The full `SecurityConfig` rule set: `POST`/`PUT`/`DELETE` on `/students/**`,
   "firstName": "Ishaan",
   "lastName": "Mehta",
   "dob": "2011-03-14",
-  "fatherName": "Rohit Mehta",
-  "fatherPhone": "9100000010",
-  "motherName": "Kavya Mehta",
-  "motherPhone": "9100000011",
   "email": "student5@artacademy.test",
+  "phone": "9100000010",
   "address": "22 Hill Road, Mumbai",
   "enrollmentDate": "2025-08-01",
   "status": "ACTIVE",
   "additionalRoles": []
 }
 ```
-`temporaryPassword` is optional; if blank/absent the service defaults it to
-`Welcome@123` before publishing the auth event. Required fields: `loginId`,
-`firstName`, `dob`, `status`.
+`temporaryPassword` is optional; if blank/absent the service defaults it to the
+config-server property `artacademy.user.default-temporary-password` before publishing
+the auth event. Required fields: `loginId`, `firstName`, `dob`, `status`.
 
 ### Request JSON — create a teacher (`POST /teachers`)
 
@@ -418,20 +418,23 @@ regardless of what was sent. Only `date` is required.
 
 ```json
 {
-  "loginId": "parent2",
+  "loginId": "9100000010",
   "firstName": "Rohit",
   "lastName": "Mehta",
+  "parentName": "Rohit Mehta",
   "relationship": "FATHER",
   "phone": "9100000010",
   "email": "parent2@artacademy.test",
   "address": "22 Hill Road, Mumbai",
   "occupation": "Engineer",
-  "studentId": "00000000-0000-0000-0003-000000000005",
+  "childStudentIds": ["00000000-0000-0000-0003-000000000005"],
   "status": "ACTIVE"
 }
 ```
-Required fields: `loginId`, `firstName`, `studentId` (must reference an existing
-student), `status`.
+A parent's `loginId` and auth username are their `phone`. Required fields:
+`firstName`, `phone`, `status`. `childStudentIds` is optional (zero or more existing
+students); re-posting the same phone dedupes to the existing parent and just adds the
+new child links.
 
 ## 7. Service Logic
 
@@ -440,32 +443,42 @@ student), `status`.
 - **Self endpoints (`/me`, `/me/children`)** resolve the caller from
   `Authentication.getName()` (the JWT subject = `loginId`) and look the profile up
   by `loginId`. Self-updates use dedicated `*SelfUpdateRequest` DTOs that expose only
-  a safe subset of contact fields (name, email, phone/address, guardian info, etc.)
-  and never touch identity keys such as `employeeCode` or `status`.
+  a safe subset of contact fields (name, email, phone, address, etc.)
+  and never touch identity keys such as `employeeCode` or `status`. A student's
+  `/me` update changes only its own profile and never creates or links parent rows.
 - **Admin endpoints (create/update/delete by `{id}`)** are PRINCIPAL-only and operate
   by UUID. Missing entities raise `ApiException.notFound`; duplicate `loginId` /
   `employeeCode` raise `ApiException.conflict`.
 
 ### Student / Teacher / Parent creation
 
-1. Validate uniqueness — `existsByLoginId` (all users) and, for teachers,
-   `existsByEmployeeCode`.
+1. Validate uniqueness at the service layer — `existsByLoginId` (all users),
+   `EmailUniquenessValidator.assertEmailAvailable` for email, and, for teachers,
+   `existsByEmployeeCode`. On update paths the same checks run while excluding the
+   row being updated.
 2. Map the request to the entity and `save` it (JOINED insert into `USERS` + child).
 3. Build the role list: base role (`STUDENT` / `TEACHER` / `PARENT`) plus any
    distinct `additionalRoles`.
 4. Publish the corresponding `*-created` event carrying the new UUID, username
-   (`loginId`), email, a resolved temporary password, names, and roles.
+   (`loginId`), email, a resolved temporary password (defaulting to the config-server
+   property `artacademy.user.default-temporary-password` when the request omits it),
+   names, and roles.
 
 ### Parent linking & multi-child logic
 
-A parent login can be linked to several students. `createParent` requires an existing
-`studentId`. It publishes `parent-created` **only for the first row** of a given
-`loginId` (`firstAccount = !existsByLoginId(loginId)`); subsequent calls with the same
-`loginId` add another `PARENTS` row (another child link) and log an "added child link"
-message **without** re-publishing an auth event. `getMyChildren`, `getParentByLoginId`,
-and `updateMyProfile` all operate over **all** rows matching the login
-(`findAllByLoginId`). Parent responses are enriched with the linked student's display
-name (`studentName`).
+A parent is a single row keyed by their UUID, linked to zero or more students via
+the `PARENT_STUDENTS` join table. A parent's `loginId` (and auth username) **is their
+phone number**, so parents are deduped by phone (`ParentRepository.findByPhone`).
+`createParent` accepts a set of `childStudentIds`. It publishes `parent-created`
+**only when the parent login is first created** (`firstAccount = !existsByLoginId(...)`,
+i.e. no existing parent for that phone); re-posting the same phone dedupes to the
+existing parent and simply **adds the new child links** without re-publishing an auth
+event. `getMyChildren`, `getParentByLoginId`, and `updateMyProfile` operate over the
+single parent row resolved by `loginId`/`findByPhone` and its `children` collection.
+Parent responses are enriched with each linked student's display name.
+
+A student updating `/me` changes only its own profile; it does **not** create or link
+any parent records.
 
 ### Availability handling
 
@@ -504,10 +517,14 @@ the new person's UUID string**.
 |----------------|------------|-------------|----------------|----------------|
 | `KafkaTopics.STUDENT_CREATED` | `student-created` | `StudentCreatedEvent` | After a student is saved (`POST /students`) | `studentId` (UUID), `username`, `email`, `temporaryPassword`, `firstName`, `lastName`, `roles` (List, defaults `["STUDENT"]`), `occurredAt` |
 | `KafkaTopics.TEACHER_CREATED` | `teacher-created` | `TeacherCreatedEvent` | After a teacher is saved (`POST /teachers`) | `teacherId` (UUID), `username`, `email`, `temporaryPassword`, `employeeCode`, `firstName`, `lastName`, `roles` (defaults `["TEACHER"]`), `occurredAt` |
-| `KafkaTopics.PARENT_CREATED` | `parent-created` | `ParentCreatedEvent` | After the **first** parent row for a login is saved (`POST /parents`) | `parentId` (UUID), `username`, `email`, `temporaryPassword`, `firstName`, `lastName`, `roles` (defaults `["PARENT"]`), `occurredAt` |
+| `KafkaTopics.PARENT_CREATED` | `parent-created` | `ParentCreatedEvent` | After the parent login is **first** created (`POST /parents`); not on subsequent child-link additions | `parentId` (UUID), `username`, `email`, `phone` (the parent's phone, which is also the username), `temporaryPassword`, `firstName`, `lastName`, `roles` (defaults `["PARENT"]`), `occurredAt` |
+| `KafkaTopics.STUDENT_DELETED` | `student-deleted` | `StudentDeletedEvent` | After a student is deleted (`DELETE /students/{id}`) | `studentId` (UUID), `occurredAt` |
+| `KafkaTopics.TEACHER_DELETED` | `teacher-deleted` | `TeacherDeletedEvent` | After a teacher is deleted (`DELETE /teachers/{id}`) | `teacherId` (UUID), `occurredAt` |
+| `KafkaTopics.PARENT_DELETED` | `parent-deleted` | `ParentDeletedEvent` | After a parent is deleted (`DELETE /parents/{id}`) | `parentId` (UUID), `occurredAt` |
 
-The auth-service consumes these events and creates a login **with the same UUID**,
-the given temporary password, and the roles — realizing the shared-UUID contract.
+The auth-service consumes the `*-created` events and creates a login **with the same
+UUID**, the given temporary password, and the roles — realizing the shared-UUID
+contract. The `*-deleted` events let downstream services tear down the matching rows.
 
 ## 9. Migrations
 
@@ -519,18 +536,22 @@ Clean-slate Flyway layout:
   location is added to `spring.flyway.locations` **only under the `docker` profile**
   (see `config-server/config/user-service.yml`), so production runs schema only.
 
-The seed inserts **7 profile rows** whose UUIDs match `auth_db` and whose `loginId`
-equals the username:
+The seed inserts profile rows whose UUIDs match `auth_db`. `USERS` rows carry
+`EMAIL` and `PHONE_NUMBER`: teacher1/teacher2 have phones `9000000001`/`9000000002`,
+students have `NULL` phone, and the parent row's `LOGIN_ID` **is its phone**
+(`9100000002`, so username = phone), name Sunita Nair, email
+`parent1@artacademy.test`, phone `9100000002`.
 
 | Row | UUID (suffix) | Type | loginId | Name | Extra |
 |-----|---------------|------|---------|------|-------|
-| teacher1 | `...0002-...0001` | TEACHER | teacher1 | Aisha Khan | EMP-001 |
-| teacher2 | `...0002-...0002` | TEACHER | teacher2 | Rahul Verma | EMP-002 |
-| student1 | `...0003-...0001` | STUDENT | student1 | Meera Nair | linked to parent1 |
+| teacher1 | `...0002-...0001` | TEACHER | teacher1 | Aisha Khan | EMP-001, phone 9000000001 |
+| teacher2 | `...0002-...0002` | TEACHER | teacher2 | Rahul Verma | EMP-002, phone 9000000002 |
+| student1 | `...0003-...0001` | STUDENT | student1 | Meera Nair | linked to the parent below |
 | student2 | `...0003-...0002` | STUDENT | student2 | Arjun Sharma | |
 | student3 | `...0003-...0003` | STUDENT | student3 | Diya Patel | |
 | student4 | `...0003-...0004` | STUDENT | student4 | Kabir Singh | |
-| parent1 | `...0004-...0001` | PARENT | parent1 | Sunita Nair | → student1 |
+| parent | `...0004-...0001` | PARENT | 9100000002 | Sunita Nair | phone/username 9100000002 → student1 |
 
-Inserts are idempotent (`ON CONFLICT (ID) DO NOTHING`). `ddl-auto` is `validate`, so
-Hibernate never mutates the schema — Flyway is the single source of truth.
+The parent is linked to student1 through the `PARENT_STUDENTS` join table. Inserts are
+idempotent (`ON CONFLICT ... DO NOTHING`). `ddl-auto` is `validate`, so Hibernate never
+mutates the schema — Flyway is the single source of truth.

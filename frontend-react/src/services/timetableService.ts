@@ -17,8 +17,6 @@ const norm = (s: any): Timetable => ({
   dayOfWeek: s.dayOfWeek,
   courseName: s.courseName ?? '',
   active: s.active ?? true,
-  status: s.status,
-  publishedAt: s.publishedAt,
 });
 
 const timetableService = {
@@ -66,19 +64,11 @@ const timetableService = {
     await api.delete(`/timetables/${id}`);
   },
 
-  generateTimetable: async (data: { classId?: string; teacherId?: string }) => {
+  generateTimetable: async (data: {
+    items: { classId: string; teacherId: string; preferredDayOfWeek: string; durationMinutes: number }[];
+  }) => {
     const response = await api.post('/timetables/generate', data);
     return response.data;
-  },
-
-  publish: async (id: string): Promise<Timetable> => {
-    const response = await api.post(`/timetables/${id}/publish`);
-    return norm(unwrap(response));
-  },
-
-  unpublish: async (id: string): Promise<Timetable> => {
-    const response = await api.post(`/timetables/${id}/unpublish`);
-    return norm(unwrap(response));
   },
 
   getConflicts: async (): Promise<TimetableConflict[]> => {

@@ -40,13 +40,6 @@ public class EnrollmentService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public EnrollmentResponse enrollStudent(EnrollmentRequest request) {
-        if (enrollmentRepository.existsByStudentIdAndCourseIdAndStatus(
-                request.getStudentId(), request.getCourseId(), STATUS_ACTIVE)) {
-            throw ApiException.conflict(
-                    "Student id=" + request.getStudentId()
-                    + " is already actively enrolled in course id=" + request.getCourseId());
-        }
-
         CourseClass courseClass = courseClassRepository.findById(request.getClassId())
                 .orElseThrow(() -> ApiException.notFound("Class not found with id: " + request.getClassId()));
 
@@ -57,11 +50,32 @@ public class EnrollmentService {
                     + courseClass.getCapacity());
         }
 
-        Enrollment enrollment = enrollmentMapper.toEntity(request);
-        enrollment.setStatus(STATUS_ACTIVE);
-        if (enrollment.getEnrollmentDate() == null) {
-            enrollment.setEnrollmentDate(LocalDate.now());
-        }
+        // A (studentId, courseId) row may already exist because cancellation is a soft update
+        // (status=CANCELLED) rather than a delete, and the pair is UNIQUE. Reactivate that row
+        // instead of inserting a duplicate that would violate the unique constraint.
+        Enrollment enrollment = enrollmentRepository
+                .findByStudentIdAndCourseId(request.getStudentId(), request.getCourseId())
+                .map(existing -> {
+                    if (STATUS_ACTIVE.equals(existing.getStatus())) {
+                        throw ApiException.conflict(
+                                "Student id=" + request.getStudentId()
+                                + " is already actively enrolled in course id=" + request.getCourseId());
+                    }
+                    existing.setClassId(request.getClassId());
+                    existing.setStatus(STATUS_ACTIVE);
+                    existing.setAdmissionFeePaid(request.isAdmissionFeePaid());
+                    existing.setEnrollmentDate(
+                            request.getEnrollmentDate() != null ? request.getEnrollmentDate() : LocalDate.now());
+                    return existing;
+                })
+                .orElseGet(() -> {
+                    Enrollment fresh = enrollmentMapper.toEntity(request);
+                    fresh.setStatus(STATUS_ACTIVE);
+                    if (fresh.getEnrollmentDate() == null) {
+                        fresh.setEnrollmentDate(LocalDate.now());
+                    }
+                    return fresh;
+                });
 
         Enrollment saved = enrollmentRepository.save(enrollment);
         log.info("Enrolled student id={} in course id={}, class id={}, enrollment id={}",

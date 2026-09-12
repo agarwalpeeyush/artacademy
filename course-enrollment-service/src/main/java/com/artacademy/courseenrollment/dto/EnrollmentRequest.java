@@ -25,4 +25,6 @@ public class EnrollmentRequest {
     private UUID classId;
 
     private LocalDate enrollmentDate;
+
+    private boolean admissionFeePaid;
 }

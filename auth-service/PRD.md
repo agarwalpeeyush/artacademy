@@ -17,7 +17,7 @@ the platform.
 In scope:
 
 - Credential storage (BCrypt) and JWT-based stateless authentication.
-- Login with brute-force lockout, logout, and refresh-token rotation.
+- Login with brute-force lockout, logout, and single-active refresh tokens.
 - Self-service password change and email-driven forgot/reset flow.
 - Role-based authorization (`ADMIN`, `PRINCIPAL`, `TEACHER`, `STUDENT`, `PARENT`).
 - PRINCIPAL administration: list users, view/replace roles, change account status,
@@ -38,7 +38,7 @@ Out of scope:
 | ID     | Feature                 | Role      | Description                                                                                   |
 |--------|-------------------------|-----------|-----------------------------------------------------------------------------------------------|
 | AUTH-1 | Login                   | Public    | Authenticate username/password; return access + refresh tokens and profile.                   |
-| AUTH-2 | Refresh token           | Public    | Exchange a valid refresh token for a new access + refresh token pair (rotates the token).     |
+| AUTH-2 | Refresh token           | Public    | Exchange a valid refresh token for a new access + refresh token pair (replaces the single active token). |
 | AUTH-3 | Forgot password         | Public    | Request a reset token by email; response is uniform whether or not the email is known.        |
 | AUTH-4 | Reset password          | Public    | Set a new password using a valid, unused, unexpired reset token.                              |
 | AUTH-5 | Logout                  | Auth      | Invalidate the caller's refresh token(s).                                                     |
@@ -49,7 +49,7 @@ Out of scope:
 | AUTH-10| Get user roles          | PRINCIPAL | Return the role names assigned to a user.                                                      |
 | AUTH-11| Replace user roles      | PRINCIPAL | Replace the full role set of a user (unknown role names are rejected).                         |
 | AUTH-12| Update user status      | PRINCIPAL | Change a user's account status (e.g. activate/deactivate).                                     |
-| AUTH-13| Provision from events   | System    | Consume `student-created` / `teacher-created` / `parent-created` and create a matching account.|
+| AUTH-13| Provision from events   | System    | Consume `student-created` / `teacher-created` / `parent-created` and create a matching account. Events missing a required identity (id/username) are rejected and routed to the topic's DLT.|
 | AUTH-14| Reset-email dispatch    | System    | Publish a `notification-request` event so notification-service emails the reset token.        |
 
 ---
@@ -67,8 +67,12 @@ Out of scope:
   attempt is recorded as `LOGIN_FAILED`.
 - **No email enumeration.** Forgot-password returns the same success message whether
   or not the email exists; a token is generated only for known emails.
+- **Email is optional.** Auto-provisioned parent logins have no email (their identity
+  is a phone number used as the username); email is nullable and not unique at the DB
+  level, so email-based self-service reset is unavailable to phone-only accounts.
 - **Single active refresh token per user.** Issuing a new refresh token (on login or
-  refresh) deletes the user's existing tokens.
+  refresh) deletes the user's existing tokens. This is a deliberate single-session
+  model; per-device tokens and true rotation/revocation are not yet implemented.
 - **Reset tokens are single-use and time-boxed.** A reset token is valid for 1 hour
   and is marked used after a successful reset.
 - **Role changes are full replacements.** Updating a user's roles replaces the entire

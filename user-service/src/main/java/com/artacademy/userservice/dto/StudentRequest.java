@@ -39,10 +39,6 @@ public class StudentRequest {
 
     private String motherPhone;
 
-    private String guardianName;
-
-    private String guardianPhone;
-
     @Email(message = "Email must be valid")
     private String email;
 

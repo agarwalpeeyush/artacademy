@@ -31,6 +31,7 @@ public class ClassRequest {
 
     private String roomName;
 
+    @NotNull(message = "Capacity is required")
     @Positive(message = "Capacity must be greater than zero")
     private Integer capacity;
 

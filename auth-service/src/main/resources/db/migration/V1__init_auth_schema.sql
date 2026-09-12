@@ -1,4 +1,7 @@
 -- Auth service schema (auth_db). Matches JPA entities under ddl-auto=validate.
+-- EMAIL is nullable and non-unique: auto-created parent logins have no email (their identity
+-- is the phone number, used as USERNAME). PHONE is carried for downstream consumers
+-- (e.g. notification-service). Uniqueness of EMAIL is a service-layer concern.
 
 CREATE TABLE ROLES (
     ID   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -9,7 +12,8 @@ CREATE TABLE USERS (
     ID         UUID PRIMARY KEY,
     USERNAME   VARCHAR(100) NOT NULL UNIQUE,
     PASSWORD   VARCHAR(255) NOT NULL,
-    EMAIL      VARCHAR(200) NOT NULL UNIQUE,
+    EMAIL      VARCHAR(200),
+    PHONE      VARCHAR(30),
     STATUS     VARCHAR(20)  DEFAULT 'ACTIVE',
     CREATED_AT TIMESTAMP WITH TIME ZONE DEFAULT now(),
     UPDATED_AT TIMESTAMP WITH TIME ZONE DEFAULT now()
@@ -54,3 +58,13 @@ CREATE TABLE AUDIT_LOGS (
 
 CREATE INDEX idx_audit_username ON AUDIT_LOGS (USERNAME);
 CREATE INDEX idx_audit_occurred_at ON AUDIT_LOGS (OCCURRED_AT DESC);
+
+-- Roles are required by the Kafka consumer (resolveRoles) in EVERY profile, so they are
+-- seeded here in the base migration rather than in the dev-only data seed.
+INSERT INTO ROLES (ID, NAME) VALUES
+    ('00000000-0000-0000-0005-000000000001', 'ADMIN'),
+    ('00000000-0000-0000-0005-000000000002', 'PRINCIPAL'),
+    ('00000000-0000-0000-0005-000000000003', 'TEACHER'),
+    ('00000000-0000-0000-0005-000000000004', 'STUDENT'),
+    ('00000000-0000-0000-0005-000000000005', 'PARENT')
+ON CONFLICT (NAME) DO NOTHING;

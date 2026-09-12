@@ -1,5 +1,6 @@
 package com.artacademy.attendance.controller;
 
+import com.artacademy.attendance.dto.ClassRangeAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceResponse;
 import com.artacademy.attendance.dto.StudentAttendanceStatsResponse;
@@ -40,6 +41,16 @@ public class StudentAttendanceController {
             @Valid @RequestBody List<StudentAttendanceRequest> requests) {
         List<StudentAttendanceResponse> response =
                 studentAttendanceService.markAttendanceBulk(requests);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping("/class/{classId}/bulk-range")
+    @Operation(summary = "Mark attendance for students across scheduled session days of a class in a date range")
+    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> markClassAttendanceForRange(
+            @PathVariable("classId") UUID classId,
+            @Valid @RequestBody ClassRangeAttendanceRequest request) {
+        List<StudentAttendanceResponse> response =
+                studentAttendanceService.markClassAttendanceForRange(classId, request);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

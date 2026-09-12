@@ -49,10 +49,16 @@ public class ClassService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ClassResponse> getClassesByCourse(UUID courseId) {
+        return courseClassRepository.findByCourseId(courseId)
+                .stream()
+                .map(classMapper::toResponse)
+                .toList();
+    }
+
     public ClassResponse createClass(ClassRequest request) {
-        if (request.getCapacity() == null || request.getCapacity() <= 0) {
-            throw ApiException.badRequest("Capacity must be greater than zero");
-        }
+        validateDates(request);
         CourseClass courseClass = classMapper.toEntity(request);
         CourseClass saved = courseClassRepository.save(courseClass);
         log.info("Created class id={}, name={}", saved.getId(), saved.getClassName());
@@ -60,9 +66,7 @@ public class ClassService {
     }
 
     public ClassResponse updateClass(UUID id, ClassRequest request) {
-        if (request.getCapacity() == null || request.getCapacity() <= 0) {
-            throw ApiException.badRequest("Capacity must be greater than zero");
-        }
+        validateDates(request);
 
         CourseClass courseClass = findClassById(id);
 
@@ -94,5 +98,14 @@ public class ClassService {
     private CourseClass findClassById(UUID id) {
         return courseClassRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Class not found with id: " + id));
+    }
+
+    private void validateDates(ClassRequest request) {
+        if (request.getStartDate() != null && request.getEndDate() != null
+                && request.getEndDate().isBefore(request.getStartDate())) {
+            throw ApiException.badRequest(
+                    "endDate (" + request.getEndDate() + ") must not be before startDate ("
+                    + request.getStartDate() + ")");
+        }
     }
 }
