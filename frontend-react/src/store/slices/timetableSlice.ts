@@ -58,7 +58,7 @@ export const fetchStudentTimetables = createAsyncThunk<Timetable[], string>(
   }
 );
 
-export const createTimetable = createAsyncThunk<Timetable, { classId: string; teacherId: string; roomId: string; startTime: string; endTime: string; dayOfWeek: string }>(
+export const createTimetable = createAsyncThunk<Timetable, { classId: string; teacherId: string; startTime: string; endTime: string; dayOfWeek: string }>(
   'timetables/create',
   async (data, { rejectWithValue }) => {
     try {

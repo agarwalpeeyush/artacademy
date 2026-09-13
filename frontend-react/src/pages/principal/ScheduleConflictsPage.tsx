@@ -13,13 +13,11 @@ import { formatTime, getDayName } from '../../utils/formatters';
 
 const typeLabel: Record<TimetableConflictType, string> = {
   TEACHER_DOUBLE_BOOKED: 'Teacher Double-Booked',
-  ROOM_DOUBLE_BOOKED: 'Room Double-Booked',
   CLASS_OVERLAP: 'Class Overlap',
 };
 
 const typeColor: Record<TimetableConflictType, 'error' | 'warning' | 'info'> = {
   TEACHER_DOUBLE_BOOKED: 'error',
-  ROOM_DOUBLE_BOOKED: 'warning',
   CLASS_OVERLAP: 'info',
 };
 
@@ -35,7 +33,7 @@ const ScheduleConflictsPage: React.FC = () => {
     <Box>
       <PageHeader
         title="Schedule Conflicts"
-        subtitle="Teacher/room double-bookings and class overlaps"
+        subtitle="Teacher double-bookings and class overlaps"
         breadcrumbs={[{ label: 'Principal' }, { label: 'Conflicts' }]}
       />
 

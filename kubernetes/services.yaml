@@ -1,7 +1,7 @@
 ###############################################################################
 # Remaining Application Services
 # Each has: Deployment (2 replicas) + ClusterIP Service
-# Services: user, course-enrollment, attendance, timetable,
+# Services: user, course-enrollment, attendance,
 #           payment, notification, reporting
 ###############################################################################
 
@@ -280,98 +280,6 @@ spec:
   ports:
     - port: 8084
       targetPort: 8084
----
-# ---------------------------------------------------------------------------
-# Scheduling Service
-# ---------------------------------------------------------------------------
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: timetable-service
-  namespace: artacademy
-  labels:
-    app: timetable-service
-    app.kubernetes.io/part-of: artacademy
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: timetable-service
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  template:
-    metadata:
-      labels:
-        app: timetable-service
-    spec:
-      initContainers:
-        - name: wait-for-config
-          image: busybox:1.36
-          command: ["sh", "-c", "until wget -q --spider http://config-server:8888/actuator/health; do sleep 5; done"]
-        - name: wait-for-postgres
-          image: busybox:1.36
-          command: ["sh", "-c", "until nc -z postgres 5432; do sleep 3; done"]
-      containers:
-        - name: timetable-service
-          image: artacademy/timetable-service:latest
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8085
-          envFrom:
-            - configMapRef:
-                name: artacademy-config
-          env:
-            - name: SERVER_PORT
-              value: "8085"
-            - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres:5432/timetable_db"
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: artacademy-secrets
-                  key: POSTGRES_USER
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: artacademy-secrets
-                  key: POSTGRES_PASSWORD
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "384Mi"
-            limits:
-              cpu: "1000m"
-              memory: "768Mi"
-          livenessProbe:
-            httpGet:
-              path: /actuator/health
-              port: 8085
-            initialDelaySeconds: 45
-            periodSeconds: 15
-          readinessProbe:
-            httpGet:
-              path: /actuator/health/readiness
-              port: 8085
-            initialDelaySeconds: 20
-            periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: timetable-service
-  namespace: artacademy
-  labels:
-    app: timetable-service
-spec:
-  type: ClusterIP
-  selector:
-    app: timetable-service
-  ports:
-    - port: 8085
-      targetPort: 8085
 ---
 # ---------------------------------------------------------------------------
 # Payment Service

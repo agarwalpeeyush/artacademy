@@ -1,4 +1,4 @@
-package com.artacademy.timetable.dto;
+package com.artacademy.courseenrollment.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,6 +23,4 @@ public class UpcomingClassResponse {
     private LocalTime endTime;
     private UUID classId;
     private UUID teacherId;
-    private UUID roomId;
-    private String roomName;
 }

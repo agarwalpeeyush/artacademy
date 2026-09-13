@@ -170,9 +170,6 @@ jobs:
           - name: attendance-service
             port: 8084
             dockerfile: docker/Dockerfile.springboot
-          - name: scheduling-service
-            port: 8085
-            dockerfile: docker/Dockerfile.springboot
           - name: payment-service
             port: 8086
             dockerfile: docker/Dockerfile.springboot
@@ -293,7 +290,7 @@ jobs:
         run: |
           kubectl apply -f kubernetes/services.yaml
           for svc in user-service course-enrollment-service attendance-service \
-                     scheduling-service payment-service notification-service reporting-service; do
+                     payment-service notification-service reporting-service; do
             kubectl rollout status deployment/${svc} -n artacademy --timeout=120s
           done
 
@@ -310,7 +307,7 @@ jobs:
           SHA=${{ steps.tag.outputs.sha }}
           SERVICES="service-registry config-server api-gateway auth-service \
                     user-service course-enrollment-service attendance-service \
-                    scheduling-service payment-service notification-service \
+                    payment-service notification-service \
                     reporting-service"
           for svc in $SERVICES; do
             kubectl set image deployment/${svc} ${svc}=${{ env.REGISTRY }}/${{ env.IMAGE_ORG }}/${svc}:${SHA} \

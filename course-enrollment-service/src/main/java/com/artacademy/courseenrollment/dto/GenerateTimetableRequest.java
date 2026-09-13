@@ -1,4 +1,4 @@
-package com.artacademy.timetable.dto;
+package com.artacademy.courseenrollment.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;

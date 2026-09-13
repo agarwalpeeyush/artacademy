@@ -10,8 +10,6 @@ const norm = (s: any): Timetable => ({
   className: s.className ?? '',
   teacherId: s.teacherId,
   teacherName: s.teacherName ?? '',
-  roomId: s.roomId,
-  roomName: s.roomName ?? '',
   startTime: s.startTime,
   endTime: s.endTime,
   dayOfWeek: s.dayOfWeek,
@@ -50,12 +48,12 @@ const timetableService = {
     return toArray(unwrap(response)).map(norm);
   },
 
-  create: async (data: { classId: string; teacherId: string; roomId: string; startTime: string; endTime: string; dayOfWeek: string }): Promise<Timetable> => {
+  create: async (data: { classId: string; teacherId: string; startTime: string; endTime: string; dayOfWeek: string }): Promise<Timetable> => {
     const response = await api.post('/timetables', data);
     return norm(unwrap(response));
   },
 
-  update: async (id: string, data: { classId?: string; teacherId?: string; roomId?: string; startTime?: string; endTime?: string; dayOfWeek?: string }): Promise<Timetable> => {
+  update: async (id: string, data: { classId?: string; teacherId?: string; startTime?: string; endTime?: string; dayOfWeek?: string }): Promise<Timetable> => {
     const response = await api.put(`/timetables/${id}`, data);
     return norm(unwrap(response));
   },

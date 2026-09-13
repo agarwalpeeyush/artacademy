@@ -1,5 +1,6 @@
-package com.artacademy.timetable.dto;
+package com.artacademy.courseenrollment.dto;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,14 +14,20 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TimetableResponse {
+public class TimetableRequest {
 
-    private UUID id;
+    @NotNull(message = "Class ID is required")
     private UUID classId;
+
+    @NotNull(message = "Teacher ID is required")
     private UUID teacherId;
-    private UUID roomId;
-    private String roomName;
+
+    @NotNull(message = "Start time is required")
     private LocalTime startTime;
+
+    @NotNull(message = "End time is required")
     private LocalTime endTime;
+
+    @NotNull(message = "Day of week is required")
     private DayOfWeek dayOfWeek;
 }

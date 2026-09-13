@@ -19,7 +19,6 @@
         <module>user-service</module>
         <module>course-enrollment-service</module>
         <module>attendance-service</module>
-        <module>timetable-service</module>
         <module>payment-service</module>
         <module>notification-service</module>
         <module>reporting-service</module>

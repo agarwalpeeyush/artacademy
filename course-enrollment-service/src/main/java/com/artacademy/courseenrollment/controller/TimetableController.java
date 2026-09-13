@@ -1,11 +1,11 @@
-package com.artacademy.timetable.controller;
+package com.artacademy.courseenrollment.controller;
 
-import com.artacademy.timetable.dto.GenerateTimetableRequest;
-import com.artacademy.timetable.dto.TimetableConflictResponse;
-import com.artacademy.timetable.dto.TimetableRequest;
-import com.artacademy.timetable.dto.TimetableResponse;
-import com.artacademy.timetable.dto.UpcomingClassResponse;
-import com.artacademy.timetable.service.TimetableService;
+import com.artacademy.courseenrollment.dto.GenerateTimetableRequest;
+import com.artacademy.courseenrollment.dto.TimetableConflictResponse;
+import com.artacademy.courseenrollment.dto.TimetableRequest;
+import com.artacademy.courseenrollment.dto.TimetableResponse;
+import com.artacademy.courseenrollment.dto.UpcomingClassResponse;
+import com.artacademy.courseenrollment.service.TimetableService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -72,7 +72,7 @@ public class TimetableController {
 
     @GetMapping("/conflicts")
     @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "List timetable conflicts (teacher/room double-booking, class overlaps)")
+    @Operation(summary = "List timetable conflicts (teacher double-booking, class overlaps)")
     public ResponseEntity<List<TimetableConflictResponse>> getConflicts() {
         return ResponseEntity.ok(timetableService.getConflicts());
     }

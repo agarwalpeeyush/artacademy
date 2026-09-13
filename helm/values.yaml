@@ -108,18 +108,6 @@ services:
         cpu: "1000m"
         memory: "768Mi"
 
-  timetableService:
-    name: timetable-service
-    replicaCount: 2
-    port: 8085
-    resources:
-      requests:
-        cpu: "250m"
-        memory: "384Mi"
-      limits:
-        cpu: "1000m"
-        memory: "768Mi"
-
   paymentService:
     name: payment-service
     replicaCount: 2
@@ -186,7 +174,6 @@ postgres:
     - user_db
     - academic_db
     - attendance_db
-    - timetable_db
     - payment_db
     - notification_db
     - reporting_db

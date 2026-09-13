@@ -17,9 +17,6 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'academic_db')\gexec
 SELECT 'CREATE DATABASE attendance_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'attendance_db')\gexec
 
-SELECT 'CREATE DATABASE timetable_db'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'timetable_db')\gexec
-
 SELECT 'CREATE DATABASE payment_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payment_db')\gexec
 
@@ -41,9 +38,6 @@ GRANT ALL PRIVILEGES ON DATABASE academic_db TO artacademy;
 
 \c attendance_db
 GRANT ALL PRIVILEGES ON DATABASE attendance_db TO artacademy;
-
-\c timetable_db
-GRANT ALL PRIVILEGES ON DATABASE timetable_db TO artacademy;
 
 \c payment_db
 GRANT ALL PRIVILEGES ON DATABASE payment_db TO artacademy;

@@ -72,7 +72,7 @@ const TeacherDashboardPage: React.FC = () => {
                   <Box key={s.id} display="flex" alignItems="center" justifyContent="space-between" py={1.5} borderBottom="1px solid" borderColor="divider">
                     <Box>
                       <Typography variant="body1" fontWeight={500}>{s.className}</Typography>
-                      <Typography variant="caption" color="text.secondary">{s.courseName} • Room {s.roomName || 'TBD'}</Typography>
+                      <Typography variant="caption" color="text.secondary">{s.courseName}</Typography>
                     </Box>
                     <Chip label={`${formatTime(s.startTime)} – ${formatTime(s.endTime)}`} color="primary" size="small" />
                   </Box>

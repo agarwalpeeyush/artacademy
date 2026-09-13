@@ -1,4 +1,4 @@
-package com.artacademy.timetable.dto;
+package com.artacademy.courseenrollment.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,7 +17,6 @@ public class TimetableConflictResponse {
 
     public enum ConflictType {
         TEACHER_DOUBLE_BOOKED,
-        ROOM_DOUBLE_BOOKED,
         CLASS_OVERLAP
     }
 
@@ -28,7 +27,6 @@ public class TimetableConflictResponse {
     private UUID timetableId;
     private UUID otherTimetableId;
     private UUID teacherId;
-    private UUID roomId;
     private UUID classId;
     private String description;
 }

@@ -14,9 +14,8 @@ import { AppDispatch, RootState } from '../../store/store';
 import { fetchTimetables, createTimetable, deleteTimetable } from '../../store/slices/timetableSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
-import { Timetable, Room, CourseClass } from '../../types';
+import { Timetable, CourseClass } from '../../types';
 import courseService from '../../services/courseService';
-import roomService from '../../services/roomService';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { getDayName, formatTime } from '../../utils/formatters';
@@ -29,7 +28,6 @@ const schema = yup.object({
   daysOfWeek: yup.array(yup.string().required()).min(1, 'Select at least one day').required(),
   startTime: yup.string().required('Start time is required'),
   endTime: yup.string().required('End time is required'),
-  roomId: yup.string().required('Room is required'),
 });
 
 type TimetableFormData = {
@@ -38,7 +36,6 @@ type TimetableFormData = {
   daysOfWeek: string[];
   startTime: string;
   endTime: string;
-  roomId: string;
 };
 
 const TimetablePage: React.FC = () => {
@@ -46,13 +43,12 @@ const TimetablePage: React.FC = () => {
   const { list: timetables, loading } = useSelector((state: RootState) => state.timetables);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [classes, setClasses] = useState<CourseClass[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<TimetableFormData>({
     resolver: yupResolver(schema) as never,
-    defaultValues: { classId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00', roomId: '' },
+    defaultValues: { classId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00' },
   });
 
   useEffect(() => {
@@ -60,7 +56,6 @@ const TimetablePage: React.FC = () => {
     dispatch(fetchTeachers());
     dispatch(fetchCourses());
     courseService.getAllClasses().then(setClasses).catch(() => {});
-    roomService.getAll().then(setRooms).catch(() => {});
   }, [dispatch]);
 
   const handleSubmitForm = async (data: TimetableFormData) => {
@@ -134,7 +129,6 @@ const TimetablePage: React.FC = () => {
               <TableCell sx={{ fontWeight: 700 }}>Class</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Room</TableCell>
               <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -152,7 +146,6 @@ const TimetablePage: React.FC = () => {
                   <TableCell>{s.className || classNameById.get(s.classId) || '-'}</TableCell>
                   <TableCell>{s.teacherName || teacherNameById.get(s.teacherId) || '-'}</TableCell>
                   <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
-                  <TableCell>{s.roomName || '-'}</TableCell>
                   <TableCell align="center">
                     <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(s.id)}>
                       Remove
@@ -163,7 +156,7 @@ const TimetablePage: React.FC = () => {
             })}
             {timetables.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">No timetables found. Add a schedule to get started.</Typography>
                 </TableCell>
               </TableRow>
@@ -204,16 +197,6 @@ const TimetablePage: React.FC = () => {
                     helperText={errors.daysOfWeek?.message as string | undefined}
                   >
                     {DAYS.map(d => <MenuItem key={d} value={d}>{getDayName(d)}</MenuItem>)}
-                  </TextField>
-                )} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Controller name="roomId" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Room" fullWidth size="small" error={!!errors.roomId} helperText={errors.roomId?.message}>
-                    {rooms.length === 0
-                      ? <MenuItem value="" disabled>No rooms available</MenuItem>
-                      : rooms.map(r => <MenuItem key={r.id} value={r.id}>{r.roomName} (cap: {r.capacity})</MenuItem>)
-                    }
                   </TextField>
                 )} />
               </Grid>

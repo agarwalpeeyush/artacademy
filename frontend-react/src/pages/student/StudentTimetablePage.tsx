@@ -46,7 +46,6 @@ const StudentTimetablePage: React.FC = () => {
                 <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Room</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -67,7 +66,6 @@ const StudentTimetablePage: React.FC = () => {
                     <TableCell>{s.courseName || '-'}</TableCell>
                     <TableCell>{s.teacherName}</TableCell>
                     <TableCell><strong>{formatTime(s.startTime)}</strong> – {formatTime(s.endTime)}</TableCell>
-                    <TableCell>{s.roomName || 'TBD'}</TableCell>
                   </TableRow>
                 ));
               })}

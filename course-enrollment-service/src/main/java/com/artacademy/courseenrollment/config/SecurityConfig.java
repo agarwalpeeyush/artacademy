@@ -57,10 +57,16 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT,    "/enrollments/**").hasAnyRole("PRINCIPAL", "TEACHER")
                     .requestMatchers(HttpMethod.DELETE, "/enrollments/**").hasAnyRole("PRINCIPAL", "TEACHER")
 
+                    // Mutating timetable endpoints – PRINCIPAL only
+                    .requestMatchers(HttpMethod.POST,   "/timetables/**").hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT,    "/timetables/**").hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/timetables/**").hasRole("PRINCIPAL")
+
                     // Read endpoints – any authenticated user
                     .requestMatchers(HttpMethod.GET, "/courses/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/classes/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/enrollments/**").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/timetables/**").authenticated()
 
                     .anyRequest().authenticated()
             )

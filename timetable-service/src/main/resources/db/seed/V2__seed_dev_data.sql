@@ -1,2 +1,0 @@
--- Seed for timetable_db.
--- All dev data removed (R17): rooms and timetables are created at runtime. Fresh DB — nothing to seed.

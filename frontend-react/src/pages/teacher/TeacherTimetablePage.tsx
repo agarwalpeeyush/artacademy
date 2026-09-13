@@ -54,7 +54,6 @@ const TeacherTimetablePage: React.FC = () => {
                 <TableCell sx={{ fontWeight: 700 }}>Class</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Room</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -76,7 +75,6 @@ const TeacherTimetablePage: React.FC = () => {
                     <TableCell>
                       <strong>{formatTime(s.startTime)}</strong> – {formatTime(s.endTime)}
                     </TableCell>
-                    <TableCell>{s.roomName || 'TBD'}</TableCell>
                   </TableRow>
                 ));
               })}

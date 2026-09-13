@@ -1,4 +1,4 @@
-package com.artacademy.timetable.domain;
+package com.artacademy.courseenrollment.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -27,10 +27,6 @@ public class Timetable {
 
     @Column(name = "TEACHER_ID", nullable = false)
     private UUID teacherId;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ROOM_ID", nullable = false)
-    private Room room;
 
     @Column(name = "START_TIME", nullable = false)
     private LocalTime startTime;

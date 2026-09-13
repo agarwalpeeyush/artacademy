@@ -237,12 +237,6 @@ export interface AttendanceException {
   attendancePercentage: number;
 }
 
-export interface Room {
-  id: string;
-  roomName: string;
-  capacity: number;
-}
-
 export interface Timetable {
   id: string;
   classId: string;
@@ -254,12 +248,10 @@ export interface Timetable {
   dayOfWeek: string;
   startTime: string;
   endTime: string;
-  roomId?: string;
-  roomName?: string;
   active: boolean;
 }
 
-export type TimetableConflictType = 'TEACHER_DOUBLE_BOOKED' | 'ROOM_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
+export type TimetableConflictType = 'TEACHER_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
 
 export interface TimetableConflict {
   type: TimetableConflictType;
@@ -269,7 +261,6 @@ export interface TimetableConflict {
   timetableId: string;
   otherTimetableId: string;
   teacherId: string;
-  roomId: string;
   classId: string;
   description: string;
 }
@@ -282,8 +273,6 @@ export interface UpcomingClass {
   endTime: string;
   classId: string;
   teacherId: string;
-  roomId?: string;
-  roomName?: string;
   className?: string;
   courseName?: string;
   teacherName?: string;

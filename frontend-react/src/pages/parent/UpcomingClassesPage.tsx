@@ -73,7 +73,6 @@ const UpcomingClassesPage: React.FC = () => {
                 <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Class</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Room</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -84,7 +83,6 @@ const UpcomingClassesPage: React.FC = () => {
                   <TableCell>{formatTime(u.startTime)} – {formatTime(u.endTime)}</TableCell>
                   <TableCell>{u.className || '-'}</TableCell>
                   <TableCell>{u.teacherName || '-'}</TableCell>
-                  <TableCell>{u.roomName || 'TBD'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

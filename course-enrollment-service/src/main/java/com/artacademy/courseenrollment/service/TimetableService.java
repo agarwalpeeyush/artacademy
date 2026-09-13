@@ -1,18 +1,16 @@
-package com.artacademy.timetable.service;
+package com.artacademy.courseenrollment.service;
 
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.TimetableGeneratedEvent;
 import com.artacademy.common.exception.ApiException;
-import com.artacademy.timetable.domain.Room;
-import com.artacademy.timetable.domain.Timetable;
-import com.artacademy.timetable.dto.GenerateTimetableRequest;
-import com.artacademy.timetable.dto.TimetableConflictResponse;
-import com.artacademy.timetable.dto.TimetableRequest;
-import com.artacademy.timetable.dto.TimetableResponse;
-import com.artacademy.timetable.dto.UpcomingClassResponse;
-import com.artacademy.timetable.mapper.TimetableMapper;
-import com.artacademy.timetable.repository.RoomRepository;
-import com.artacademy.timetable.repository.TimetableRepository;
+import com.artacademy.courseenrollment.domain.Timetable;
+import com.artacademy.courseenrollment.dto.GenerateTimetableRequest;
+import com.artacademy.courseenrollment.dto.TimetableConflictResponse;
+import com.artacademy.courseenrollment.dto.TimetableRequest;
+import com.artacademy.courseenrollment.dto.TimetableResponse;
+import com.artacademy.courseenrollment.dto.UpcomingClassResponse;
+import com.artacademy.courseenrollment.mapper.TimetableMapper;
+import com.artacademy.courseenrollment.repository.TimetableRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -34,8 +32,6 @@ import java.util.UUID;
 public class TimetableService {
 
     private final TimetableRepository timetableRepository;
-    private final RoomRepository roomRepository;
-    private final RoomService roomService;
     private final TimetableMapper timetableMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -81,16 +77,12 @@ public class TimetableService {
     @Transactional
     public TimetableResponse createTimetable(TimetableRequest request) {
         validateSlotWindow(request.getStartTime(), request.getEndTime());
-        Room room = roomService.findRoomById(request.getRoomId());
         validateTeacherConflict(request.getTeacherId(), request.getDayOfWeek(), request.getStartTime(),
-                request.getEndTime(), null);
-        validateRoomConflict(room.getId(), request.getDayOfWeek(), request.getStartTime(),
                 request.getEndTime(), null);
 
         Timetable timetable = Timetable.builder()
                 .classId(request.getClassId())
                 .teacherId(request.getTeacherId())
-                .room(room)
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .dayOfWeek(request.getDayOfWeek())
@@ -107,16 +99,12 @@ public class TimetableService {
     public TimetableResponse updateTimetable(UUID id, TimetableRequest request) {
         validateSlotWindow(request.getStartTime(), request.getEndTime());
         Timetable existing = findTimetableById(id);
-        Room room = roomService.findRoomById(request.getRoomId());
 
         validateTeacherConflict(request.getTeacherId(), request.getDayOfWeek(), request.getStartTime(),
-                request.getEndTime(), id);
-        validateRoomConflict(room.getId(), request.getDayOfWeek(), request.getStartTime(),
                 request.getEndTime(), id);
 
         existing.setClassId(request.getClassId());
         existing.setTeacherId(request.getTeacherId());
-        existing.setRoom(room);
         existing.setStartTime(request.getStartTime());
         existing.setEndTime(request.getEndTime());
         existing.setDayOfWeek(request.getDayOfWeek());
@@ -156,29 +144,6 @@ public class TimetableService {
                         + DAY_START + "-" + DAY_END);
             }
 
-            // Find a room with sufficient capacity (capacity >= 1 used as a proxy; actual
-            // student count is not available here, so we pick the first available room)
-            List<Room> candidateRooms = roomRepository.findByCapacityGreaterThanEqual(1);
-            if (candidateRooms.isEmpty()) {
-                throw ApiException.badRequest("No rooms available for the timetable");
-            }
-
-            Room assignedRoom = null;
-            for (Room candidate : candidateRooms) {
-                List<Timetable> roomConflicts = timetableRepository.findConflictingRoomTimetables(
-                        candidate.getId(), day, slotStart, slotEnd);
-                if (roomConflicts.isEmpty()) {
-                    assignedRoom = candidate;
-                    break;
-                }
-            }
-
-            if (assignedRoom == null) {
-                throw ApiException.conflict(
-                        "No available room found for class " + item.getClassId() +
-                        " on " + day + " at " + slotStart);
-            }
-
             List<Timetable> teacherConflicts = timetableRepository.findConflictingTeacherTimetables(
                     item.getTeacherId(), day, slotStart, slotEnd);
             if (!teacherConflicts.isEmpty()) {
@@ -190,7 +155,6 @@ public class TimetableService {
             Timetable timetable = Timetable.builder()
                     .classId(item.getClassId())
                     .teacherId(item.getTeacherId())
-                    .room(assignedRoom)
                     .startTime(slotStart)
                     .endTime(slotEnd)
                     .dayOfWeek(day)
@@ -234,11 +198,6 @@ public class TimetableService {
                             a, b, overlapStart, overlapEnd,
                             "Teacher " + a.getTeacherId() + " double-booked"));
                 }
-                if (a.getRoom().getId().equals(b.getRoom().getId())) {
-                    conflicts.add(buildConflict(TimetableConflictResponse.ConflictType.ROOM_DOUBLE_BOOKED,
-                            a, b, overlapStart, overlapEnd,
-                            "Room " + a.getRoom().getRoomName() + " double-booked"));
-                }
                 if (a.getClassId().equals(b.getClassId())) {
                     conflicts.add(buildConflict(TimetableConflictResponse.ConflictType.CLASS_OVERLAP,
                             a, b, overlapStart, overlapEnd,
@@ -260,7 +219,6 @@ public class TimetableService {
                 .timetableId(a.getId())
                 .otherTimetableId(b.getId())
                 .teacherId(a.getTeacherId())
-                .roomId(a.getRoom().getId())
                 .classId(a.getClassId())
                 .description(description)
                 .build();
@@ -290,8 +248,6 @@ public class TimetableService {
                             .endTime(s.getEndTime())
                             .classId(s.getClassId())
                             .teacherId(s.getTeacherId())
-                            .roomId(s.getRoom().getId())
-                            .roomName(s.getRoom().getRoomName())
                             .build();
                 })
                 .sorted(Comparator.comparing(UpcomingClassResponse::getDate)
@@ -346,7 +302,7 @@ public class TimetableService {
      * Pass {@code excludeId} as the current timetable's id when updating (so self-overlap
      * is not counted); pass {@code null} when creating.
      */
-    private void validateTeacherConflict(UUID teacherId, java.time.DayOfWeek day,
+    private void validateTeacherConflict(UUID teacherId, DayOfWeek day,
                                           LocalTime start, LocalTime end, UUID excludeId) {
         List<Timetable> conflicts = timetableRepository.findConflictingTeacherTimetables(
                 teacherId, day, start, end);
@@ -360,29 +316,11 @@ public class TimetableService {
         }
     }
 
-    /**
-     * Validates that the given room has no overlapping timetable on the same day.
-     */
-    private void validateRoomConflict(UUID roomId, java.time.DayOfWeek day,
-                                       LocalTime start, LocalTime end, UUID excludeId) {
-        List<Timetable> conflicts = timetableRepository.findConflictingRoomTimetables(
-                roomId, day, start, end);
-        List<Timetable> filtered = conflicts.stream()
-                .filter(s -> excludeId == null || !s.getId().equals(excludeId))
-                .toList();
-        if (!filtered.isEmpty()) {
-            throw ApiException.conflict(
-                    "Room " + roomId + " is already booked on " + day +
-                    " during " + start + " - " + end);
-        }
-    }
-
     private void publishTimetableGeneratedEvent(Timetable timetable) {
         TimetableGeneratedEvent event = TimetableGeneratedEvent.builder()
                 .timetableId(timetable.getId())
                 .classId(timetable.getClassId())
                 .teacherId(timetable.getTeacherId())
-                .roomId(timetable.getRoom().getId())
                 .dayOfWeek(timetable.getDayOfWeek().name())
                 .startTime(timetable.getStartTime().toString())
                 .endTime(timetable.getEndTime().toString())
@@ -397,7 +335,6 @@ public class TimetableService {
                 .timetableId(timetable.getId())
                 .classId(timetable.getClassId())
                 .teacherId(timetable.getTeacherId())
-                .roomId(timetable.getRoom().getId())
                 .dayOfWeek(timetable.getDayOfWeek().name())
                 .startTime(timetable.getStartTime().toString())
                 .endTime(timetable.getEndTime().toString())

@@ -20,7 +20,6 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ClassIcon from '@mui/icons-material/Class';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
-import RoomPreferencesIcon from '@mui/icons-material/RoomPreferences';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import RuleIcon from '@mui/icons-material/Rule';
@@ -41,7 +40,6 @@ import PaletteIcon from '@mui/icons-material/Palette';
 const masterDataItems = [
   { label: 'Students', icon: <SchoolIcon />, path: '/principal/students' },
   { label: 'Teachers', icon: <PeopleIcon />, path: '/principal/teachers' },
-  { label: 'Rooms', icon: <RoomPreferencesIcon />, path: '/principal/rooms' },
   { label: 'Courses', icon: <MenuBookIcon />, path: '/principal/courses' },
   { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
   { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },

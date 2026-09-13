@@ -2,31 +2,6 @@
 
 Enterprise-grade Art Academy and Tuition Center Management Platform built with Microservices Architecture.
 
-## Documentation
-
-- **[DESIGN.md](DESIGN.md)** — Platform overview, service inventory, data model, Kafka event flow, route & role summary
-- **[PRD.md](PRD.md)** — Product requirements: functional features by role and domain
-- **[TESTING.md](TESTING.md)** — UI test scenarios per role and feature (uses the seeded accounts below)
-- **[TODO.md](TODO.md)** — Remaining backlog
-- Each service folder also contains its own `DESIGN.md`, `PRD.md`, and `testing.md` with endpoint-level detail (e.g. `auth-service/DESIGN.md`, `payment-service/PRD.md`)
-
----
-
-## Technology Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Java 21, Spring Boot 3.3, Spring Cloud 2023.0 |
-| Database | PostgreSQL 16 |
-| Messaging | Apache Kafka 7.6 |
-| Caching | Redis 7 |
-| Frontend | React 18, TypeScript, Material UI v5, Redux Toolkit |
-| Gateway | Spring Cloud Gateway |
-| Registry | Netflix Eureka |
-| Config | Spring Cloud Config Server |
-| Containers | Docker, Docker Compose |
-| Orchestration | Kubernetes, Helm |
-
 ## Services
 
 | Service | Port | Database |
@@ -38,34 +13,10 @@ Enterprise-grade Art Academy and Tuition Center Management Platform built with M
 | user-service | 8082 | user_db |
 | course-enrollment-service | 8083 | academic_db |
 | attendance-service | 8084 | attendance_db |
-| timetable-service | 8085 | timetable_db |
 | payment-service | 8086 | payment_db |
 | notification-service | 8087 | notification_db |
 | reporting-service | 8088 | reporting_db |
 | frontend-react | 3000 | — |
-
----
-
-## Prerequisites
-
-Install the following before proceeding:
-
-- [Java 21](https://adoptium.net/) (Eclipse Temurin recommended)
-- [Maven 3.9+](https://maven.apache.org/download.cgi)
-- [Node.js 20+](https://nodejs.org/)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose)
-- [Git](https://git-scm.com/)
-
-Verify versions:
-
-```bash
-java -version
-mvn -version
-node -version
-npm -version
-docker -version
-docker compose version
-```
 
 ---
 
@@ -81,7 +32,7 @@ From the project root:
 mvn clean package -DskipTests
 ```
 
-This compiles all 11 Spring Boot services and places their JARs in each module's `target/` directory.
+This compiles all 10 Spring Boot services and places their JARs in each module's `target/` directory.
 
 ### Step 2 — Build the React frontend
 
@@ -101,12 +52,12 @@ docker compose up -d
 
 Docker Compose will start the following in dependency order:
 
-1. PostgreSQL (creates all 8 databases automatically via `init-databases.sql`)
+1. PostgreSQL (creates all 7 databases automatically via `init-databases.sql`)
 2. Zookeeper + Kafka
 3. Redis
 4. service-registry
 5. config-server
-6. api-gateway + all 8 microservices
+6. api-gateway + all 7 microservices
 7. frontend (served via Nginx)
 
 ### Step 4 — Verify services are up
@@ -208,7 +159,6 @@ Flyway creates the `auth_db` schema (`V1`) on first start. Demo data (`V2`) load
 cd user-service && mvn spring-boot:run
 cd course-enrollment-service && mvn spring-boot:run
 cd attendance-service && mvn spring-boot:run
-cd timetable-service && mvn spring-boot:run
 cd payment-service && mvn spring-boot:run
 cd notification-service && mvn spring-boot:run
 cd reporting-service && mvn spring-boot:run
@@ -242,25 +192,6 @@ preserved.
 **All seeded accounts share the password `Admin@1234`** (emails follow `<username>@artacademy.test`).
 Log in at http://localhost:3000.
 
-| Username | Role | Notes |
-|----------|------|-------|
-| `principal` | PRINCIPAL | Full administrative access |
-| `teacher1` | TEACHER | Aisha Khan, EMP-001 — teaches *Painting - Batch A* (Mon/Wed 10:00–11:30, Studio 1) |
-| `teacher2` | TEACHER | Rahul Verma, EMP-002 — teaches *Sculpture - Batch A* (Tue/Thu 14:00–15:30, Studio 2) |
-| `student1` | STUDENT | Meera Nair — Painting **and** Sculpture; Aug 2026 fees PAID, Sep 2026 UNPAID |
-| `student2` | STUDENT | Arjun Sharma — Painting; Sep 2026 fees UNPAID (appears in defaulters) |
-| `student3` | STUDENT | Diya Patel — Sculpture |
-| `student4` | STUDENT | Kabir Singh — Painting |
-| `parent1` | PARENT | Sunita Nair — linked to `student1` |
-
-The seed also creates: 2 courses (*Painting* PAINT-101 ₹2500/mo, *Sculpture* SCULP-101 ₹3000/mo),
-2 classes, 5 enrollments, 2 rooms, 4 **PUBLISHED** weekly timetable slots, recent
-student/teacher attendance rows, and Aug + Sep 2026 fee cycles (one PAID, the rest UNPAID) with a
-matching payment and receipt.
-
-> **Security note:** these are demo credentials for local/testing use only. Change or remove the
-> seed migrations before any non-development deployment.
-
 The known BCrypt hash used for the seeded password `Admin@1234` is
 `$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy`.
 
@@ -276,7 +207,6 @@ Swagger UI is available on each service while it is running:
 | user-service | http://localhost:8082/swagger-ui.html |
 | course-enrollment-service | http://localhost:8083/swagger-ui.html |
 | attendance-service | http://localhost:8084/swagger-ui.html |
-| timetable-service | http://localhost:8085/swagger-ui.html |
 | payment-service | http://localhost:8086/swagger-ui.html |
 | notification-service | http://localhost:8087/swagger-ui.html |
 | reporting-service | http://localhost:8088/swagger-ui.html |
@@ -326,139 +256,6 @@ docker compose up -d --scale user-service=2
 # Check resource usage
 docker stats
 ```
-
----
-
-## Option 3 — Kubernetes (Local with minikube)
-
-### Prerequisites
-
-- [minikube](https://minikube.sigs.k8s.io/docs/start/)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Helm 3](https://helm.sh/docs/intro/install/)
-
-### Step 1 — Start minikube
-
-```bash
-minikube start --memory=8192 --cpus=4
-eval $(minikube docker-env)
-```
-
-### Step 2 — Build Docker images inside minikube
-
-```bash
-mvn clean package -DskipTests
-
-docker build -f docker/Dockerfile.springboot \
-  --build-arg SERVICE_NAME=auth-service \
-  --build-arg SERVICE_PORT=8081 \
-  -t artacademy/auth-service:latest .
-
-# Repeat for each service, changing SERVICE_NAME and SERVICE_PORT
-```
-
-### Step 3 — Deploy with kubectl
-
-```bash
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/secrets.yaml
-kubectl apply -f kubernetes/configmap.yaml
-kubectl apply -f kubernetes/postgres.yaml
-kubectl apply -f kubernetes/kafka.yaml
-kubectl apply -f kubernetes/redis.yaml
-
-# Wait for infrastructure to be ready
-kubectl wait --for=condition=ready pod -l app=postgres -n artacademy --timeout=120s
-
-kubectl apply -f kubernetes/service-registry.yaml
-kubectl apply -f kubernetes/config-server.yaml
-kubectl apply -f kubernetes/api-gateway.yaml
-kubectl apply -f kubernetes/auth-service.yaml
-kubectl apply -f kubernetes/services.yaml
-kubectl apply -f kubernetes/frontend.yaml
-kubectl apply -f kubernetes/ingress.yaml
-```
-
-### Step 4 — Access the application
-
-```bash
-minikube tunnel
-```
-
-Then open http://app.artacademy.local (add to your `/etc/hosts` if needed).
-
-### Deploy with Helm
-
-```bash
-helm install artacademy ./helm \
-  --namespace artacademy \
-  --create-namespace \
-  --set image.tag=latest
-```
-
-Upgrade after changes:
-
-```bash
-helm upgrade artacademy ./helm --set image.tag=latest
-```
-
-Uninstall:
-
-```bash
-helm uninstall artacademy -n artacademy
-```
-
----
-
-## CI/CD Pipeline
-
-The `.github/workflows/ci.yml` pipeline runs on pushes and pull requests to `main` and `develop`.
-
-| Job | Trigger | What it does |
-|---|---|---|
-| `build` | All pushes & PRs | Compiles all Maven modules, runs tests against a PostgreSQL service container |
-| `build-frontend` | All pushes & PRs | `npm ci`, lint, unit tests, production build |
-| `docker-build` | Push only (after both build jobs pass) | Builds and pushes multi-arch (`amd64`/`arm64`) images to Docker Hub for all 12 services |
-| `deploy` | Push to `main` only | Applies Kubernetes manifests and rolls out new image tags |
-
-**Required GitHub secrets for Docker push and deploy:**
-
-| Secret | Description |
-|---|---|
-| `DOCKER_USERNAME` | Docker Hub username |
-| `DOCKER_PASSWORD` | Docker Hub access token |
-| `KUBECONFIG` | Base64-encoded kubeconfig for the target cluster |
-
----
-
-## Project Structure
-
-```
-artacademy/
-├── pom.xml                          Root multi-module Maven POM
-├── common-library/                  Shared: JWT, exceptions, Kafka events, DTOs
-├── service-registry/                Eureka Service Registry
-├── config-server/                   Spring Cloud Config Server
-│   └── src/main/resources/config/   Per-service configuration YAMLs
-├── api-gateway/                     Spring Cloud Gateway (JWT filter, routing)
-├── auth-service/                    Authentication, JWT, roles
-├── user-service/                    Teachers, students, availability
-├── course-enrollment-service/       Courses, classes, enrollments
-├── attendance-service/              Teacher & student attendance, corrections
-├── timetable-service/               Rooms, weekly timetable, draft/publish, room availability
-├── payment-service/                 Fee cycles, payments, allocations
-├── notification-service/            Email/SMS, Kafka event consumer
-├── reporting-service/               Materialized summaries, analytics
-├── frontend-react/                  React + TypeScript + MUI + RTK
-├── docker/
-│   ├── docker-compose.yml
-│   ├── Dockerfile.springboot
-│   └── init-databases.sql
-├── kubernetes/                      K8s manifests
-├── helm/                            Helm chart
-└── .github/workflows/ci.yml         CI/CD pipeline
-```
-
 ---
 
 ## Environment Variables
@@ -544,7 +341,7 @@ docker compose up -d service-registry config-server api-gateway auth-service
 ```
 
 ```bash
-docker compose up -d --no-deps user-service course-enrollment-service attendance-service timetable-service payment-service notification-service reporting-service
+docker compose up -d --no-deps user-service course-enrollment-service attendance-service payment-service notification-service reporting-service
 ```
 
 ```bash
