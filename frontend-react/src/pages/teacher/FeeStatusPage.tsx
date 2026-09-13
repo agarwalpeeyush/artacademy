@@ -11,7 +11,7 @@ import studentService from '../../services/studentService';
 import { Student, FeeCycle } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatMonthYear } from '../../utils/formatters';
+import { formatCurrency, formatMonthYear, cycleKindLabel, cycleKindColor } from '../../utils/formatters';
 
 const FeeStatusPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -99,7 +99,12 @@ const FeeStatusPage: React.FC = () => {
                     </TableCell>
                     <TableCell align="center">
                       {fee ? (
-                        <Chip label={fee.status} color={statusColorMap[fee.status] || 'default'} size="small" />
+                        <>
+                          <Chip label={fee.status} color={statusColorMap[fee.status] || 'default'} size="small" />
+                          {fee.cycleKind && fee.cycleKind !== 'MONTHLY' && (
+                            <Chip label={cycleKindLabel(fee.cycleKind)} color={cycleKindColor(fee.cycleKind)} size="small" variant="outlined" sx={{ ml: 1 }} />
+                          )}
+                        </>
                       ) : (
                         <Chip label="No Data" color="default" size="small" />
                       )}

@@ -7,6 +7,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+/**
+ * Audit-log row written on every direct attendance edit (R16). There is no request/approve/reject
+ * workflow: a teacher (student attendance) or principal (student or teacher attendance) edits the
+ * record directly, and one of these rows is appended capturing the old→new status, who made the
+ * change, their role, and when.
+ */
 @Entity
 @Table(name = "ATTENDANCE_CORRECTION")
 @Getter
@@ -20,11 +26,18 @@ public class AttendanceCorrection {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "STUDENT_ATTENDANCE_ID", nullable = false)
-    private UUID studentAttendanceId;
+    /** STUDENT or TEACHER — which attendance table the edited row lives in. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ATTENDANCE_TYPE", nullable = false, length = 20)
+    private AttendanceRecordType attendanceType;
 
-    @Column(name = "STUDENT_ID", nullable = false)
-    private UUID studentId;
+    /** Primary key of the edited STUDENT_ATTENDANCE or TEACHER_ATTENDANCE row. */
+    @Column(name = "ATTENDANCE_ID", nullable = false)
+    private UUID attendanceId;
+
+    /** The student or teacher the edited row belongs to. */
+    @Column(name = "SUBJECT_ID", nullable = false)
+    private UUID subjectId;
 
     @Column(name = "CLASS_ID", nullable = false)
     private UUID classId;
@@ -33,36 +46,30 @@ public class AttendanceCorrection {
     private LocalDate attendanceDate;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "REQUESTED_STATUS", nullable = false, length = 20)
-    private AttendanceStatus requestedStatus;
+    @Column(name = "OLD_STATUS", nullable = false, length = 20)
+    private AttendanceStatus oldStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "NEW_STATUS", nullable = false, length = 20)
+    private AttendanceStatus newStatus;
 
     @Column(name = "REASON", columnDefinition = "TEXT")
     private String reason;
 
-    @Column(name = "REQUESTED_BY_TEACHER_ID", nullable = false)
-    private UUID requestedByTeacherId;
+    @Column(name = "EDITED_BY_USER_ID", nullable = false)
+    private UUID editedByUserId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "STATUS", nullable = false, length = 20)
-    @Builder.Default
-    private CorrectionStatus status = CorrectionStatus.PENDING;
+    /** Role of the editor at edit time: TEACHER or PRINCIPAL. */
+    @Column(name = "EDITOR_ROLE", nullable = false, length = 20)
+    private String editorRole;
 
-    @Column(name = "REVIEWED_BY_PRINCIPAL_ID")
-    private UUID reviewedByPrincipalId;
-
-    @Column(name = "REVIEW_NOTE", columnDefinition = "TEXT")
-    private String reviewNote;
-
-    @Column(name = "CREATED_AT", nullable = false)
-    private Instant createdAt;
-
-    @Column(name = "REVIEWED_AT")
-    private Instant reviewedAt;
+    @Column(name = "EDITED_AT", nullable = false)
+    private Instant editedAt;
 
     @PrePersist
     void onCreate() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
+        if (editedAt == null) {
+            editedAt = Instant.now();
         }
     }
 }

@@ -9,11 +9,17 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
-  const { isAuthenticated, roles } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, roles, user } = useSelector((state: RootState) => state.auth);
   const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // The bootstrap admin can reach exactly one page: the create-principal form. Any other route
+  // (including the rest of the principal console) redirects there.
+  if (user?.bootstrap && location.pathname !== '/principal/create-principal') {
+    return <Navigate to="/principal/create-principal" replace />;
   }
 
   if (requiredRole && !roles.includes(requiredRole)) {

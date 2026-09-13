@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -27,9 +28,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null && jwtUtil.validateToken(token)) {
             String username = jwtUtil.extractUsername(token);
             List<String> roles = jwtUtil.extractRoles(token);
-            List<SimpleGrantedAuthority> authorities = roles.stream()
+            List<SimpleGrantedAuthority> authorities = new ArrayList<>(roles.stream()
                     .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
-                    .toList();
+                    .toList());
+            if (jwtUtil.isBootstrap(token)) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_BOOTSTRAP"));
+            }
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(username, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(auth);

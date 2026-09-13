@@ -1,6 +1,7 @@
 package com.artacademy.attendance.dto;
 
 import com.artacademy.attendance.domain.AttendanceStatus;
+import com.artacademy.attendance.domain.SessionKind;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,4 +24,5 @@ public class StudentAttendanceResponse {
     private LocalDate attendanceDate;
     private AttendanceStatus status;
     private String remarks;
+    private SessionKind sessionKind;
 }

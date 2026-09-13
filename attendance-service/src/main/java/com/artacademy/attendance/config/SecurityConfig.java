@@ -40,12 +40,11 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/attendance/teachers/**")
                             .hasAnyRole("TEACHER", "PRINCIPAL")
 
-                    // Correction workflow – submit (TEACHER/PRINCIPAL), review (PRINCIPAL)
-                    .requestMatchers(HttpMethod.PATCH, "/attendance/corrections/*/approve")
+                    // Direct attendance edits (R16): students editable by TEACHER/PRINCIPAL,
+                    // teacher attendance editable by PRINCIPAL only; audit trail readable by both.
+                    .requestMatchers(HttpMethod.POST, "/attendance/corrections/teachers")
                             .hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.PATCH, "/attendance/corrections/*/reject")
-                            .hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.POST, "/attendance/corrections/**")
+                    .requestMatchers(HttpMethod.POST, "/attendance/corrections/students")
                             .hasAnyRole("TEACHER", "PRINCIPAL")
                     .requestMatchers(HttpMethod.GET, "/attendance/corrections/**")
                             .hasAnyRole("TEACHER", "PRINCIPAL")

@@ -1,23 +1,32 @@
 package com.artacademy.attendance.service;
 
 import com.artacademy.attendance.domain.AttendanceCorrection;
-import com.artacademy.attendance.domain.CorrectionStatus;
+import com.artacademy.attendance.domain.AttendanceRecordType;
+import com.artacademy.attendance.domain.AttendanceStatus;
 import com.artacademy.attendance.domain.StudentAttendance;
-import com.artacademy.attendance.dto.AttendanceCorrectionRequest;
+import com.artacademy.attendance.domain.TeacherAttendance;
 import com.artacademy.attendance.dto.AttendanceCorrectionResponse;
-import com.artacademy.attendance.dto.AttendanceCorrectionReviewRequest;
+import com.artacademy.attendance.dto.AttendanceEditRequest;
 import com.artacademy.attendance.repository.AttendanceCorrectionRepository;
 import com.artacademy.attendance.repository.StudentAttendanceRepository;
+import com.artacademy.attendance.repository.TeacherAttendanceRepository;
 import com.artacademy.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Direct attendance-edit service (R16). No request/approve/reject workflow: an authorized editor
+ * (teacher for student attendance, principal for student or teacher attendance) applies the new
+ * status immediately, and one audit-log row ({@link AttendanceCorrection}) is appended per changed
+ * record capturing old->new, who, their role, and when. Records whose status is unchanged are
+ * skipped (no event, no audit row).
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -26,113 +35,102 @@ public class AttendanceCorrectionService {
 
     private final AttendanceCorrectionRepository correctionRepository;
     private final StudentAttendanceRepository studentAttendanceRepository;
+    private final TeacherAttendanceRepository teacherAttendanceRepository;
     private final StudentAttendanceService studentAttendanceService;
+    private final TeacherAttendanceService teacherAttendanceService;
 
     /**
-     * Submit a correction request against an existing attendance record.
+     * Apply a batch of direct edits to STUDENT attendance records.
      */
-    public AttendanceCorrectionResponse submit(AttendanceCorrectionRequest request) {
-        StudentAttendance target = studentAttendanceRepository
-                .findById(request.getStudentAttendanceId())
-                .orElseThrow(() -> ApiException.notFound(
-                        "Attendance record not found: " + request.getStudentAttendanceId()));
+    public List<AttendanceCorrectionResponse> editStudentAttendance(AttendanceEditRequest request) {
+        List<AttendanceCorrectionResponse> log = new ArrayList<>();
+        for (AttendanceEditRequest.Edit edit : request.getEdits()) {
+            StudentAttendance record = studentAttendanceRepository.findById(edit.getAttendanceId())
+                    .orElseThrow(() -> ApiException.notFound(
+                            "Student attendance record not found: " + edit.getAttendanceId()));
+            AttendanceStatus oldStatus = record.getStatus();
+            if (oldStatus == edit.getNewStatus()) {
+                continue;
+            }
 
-        AttendanceCorrection correction = AttendanceCorrection.builder()
-                .studentAttendanceId(target.getId())
-                .studentId(target.getStudentId())
-                .classId(target.getClassId())
-                .attendanceDate(target.getAttendanceDate())
-                .requestedStatus(request.getRequestedStatus())
-                .reason(request.getReason())
-                .requestedByTeacherId(request.getRequestedByTeacherId())
-                .status(CorrectionStatus.PENDING)
-                .build();
+            studentAttendanceService.applyCorrection(record.getId(), edit.getNewStatus());
 
-        AttendanceCorrection saved = correctionRepository.save(correction);
-        log.info("Correction request id={} submitted for attendanceId={} by teacherId={}",
-                saved.getId(), target.getId(), request.getRequestedByTeacherId());
-        return toResponse(saved);
+            AttendanceCorrection audit = AttendanceCorrection.builder()
+                    .attendanceType(AttendanceRecordType.STUDENT)
+                    .attendanceId(record.getId())
+                    .subjectId(record.getStudentId())
+                    .classId(record.getClassId())
+                    .attendanceDate(record.getAttendanceDate())
+                    .oldStatus(oldStatus)
+                    .newStatus(edit.getNewStatus())
+                    .reason(request.getReason())
+                    .editedByUserId(request.getEditedByUserId())
+                    .editorRole(request.getEditorRole())
+                    .build();
+            log.add(toResponse(correctionRepository.save(audit)));
+        }
+        return log;
+    }
+
+    /**
+     * Apply a batch of direct edits to TEACHER attendance records (principal only).
+     */
+    public List<AttendanceCorrectionResponse> editTeacherAttendance(AttendanceEditRequest request) {
+        List<AttendanceCorrectionResponse> log = new ArrayList<>();
+        for (AttendanceEditRequest.Edit edit : request.getEdits()) {
+            TeacherAttendance record = teacherAttendanceRepository.findById(edit.getAttendanceId())
+                    .orElseThrow(() -> ApiException.notFound(
+                            "Teacher attendance record not found: " + edit.getAttendanceId()));
+            AttendanceStatus oldStatus = record.getStatus();
+            if (oldStatus == edit.getNewStatus()) {
+                continue;
+            }
+
+            teacherAttendanceService.applyCorrection(record.getId(), edit.getNewStatus());
+
+            AttendanceCorrection audit = AttendanceCorrection.builder()
+                    .attendanceType(AttendanceRecordType.TEACHER)
+                    .attendanceId(record.getId())
+                    .subjectId(record.getTeacherId())
+                    .classId(record.getClassId())
+                    .attendanceDate(record.getAttendanceDate())
+                    .oldStatus(oldStatus)
+                    .newStatus(edit.getNewStatus())
+                    .reason(request.getReason())
+                    .editedByUserId(request.getEditedByUserId())
+                    .editorRole(request.getEditorRole())
+                    .build();
+            log.add(toResponse(correctionRepository.save(audit)));
+        }
+        return log;
     }
 
     @Transactional(readOnly = true)
-    public List<AttendanceCorrectionResponse> listByStatus(CorrectionStatus status) {
-        List<AttendanceCorrection> corrections = (status != null)
-                ? correctionRepository.findByStatus(status)
-                : correctionRepository.findAll();
-        return corrections.stream().map(this::toResponse).toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<AttendanceCorrectionResponse> listByTeacher(UUID teacherId) {
-        return correctionRepository.findByRequestedByTeacherId(teacherId)
+    public List<AttendanceCorrectionResponse> auditForAttendance(UUID attendanceId) {
+        return correctionRepository.findByAttendanceId(attendanceId)
                 .stream().map(this::toResponse).toList();
     }
 
-    /**
-     * Approve a correction: mutate the target record's status and fire
-     * ATTENDANCE_UPDATED, then mark the correction APPROVED.
-     */
-    public AttendanceCorrectionResponse approve(UUID id, AttendanceCorrectionReviewRequest review) {
-        AttendanceCorrection correction = load(id);
-        requirePending(correction);
-
-        studentAttendanceService.applyCorrection(
-                correction.getStudentAttendanceId(), correction.getRequestedStatus());
-
-        correction.setStatus(CorrectionStatus.APPROVED);
-        correction.setReviewedByPrincipalId(review.getReviewedByPrincipalId());
-        correction.setReviewNote(review.getReviewNote());
-        correction.setReviewedAt(Instant.now());
-        AttendanceCorrection saved = correctionRepository.save(correction);
-        log.info("Correction id={} APPROVED by principalId={}", id, review.getReviewedByPrincipalId());
-        return toResponse(saved);
-    }
-
-    /**
-     * Reject a correction: no mutation of the underlying record.
-     */
-    public AttendanceCorrectionResponse reject(UUID id, AttendanceCorrectionReviewRequest review) {
-        AttendanceCorrection correction = load(id);
-        requirePending(correction);
-
-        correction.setStatus(CorrectionStatus.REJECTED);
-        correction.setReviewedByPrincipalId(review.getReviewedByPrincipalId());
-        correction.setReviewNote(review.getReviewNote());
-        correction.setReviewedAt(Instant.now());
-        AttendanceCorrection saved = correctionRepository.save(correction);
-        log.info("Correction id={} REJECTED by principalId={}", id, review.getReviewedByPrincipalId());
-        return toResponse(saved);
-    }
-
-    // -------------------------------------------------------------------------
-
-    private AttendanceCorrection load(UUID id) {
-        return correctionRepository.findById(id)
-                .orElseThrow(() -> ApiException.notFound("Correction request not found: " + id));
-    }
-
-    private void requirePending(AttendanceCorrection correction) {
-        if (correction.getStatus() != CorrectionStatus.PENDING) {
-            throw ApiException.conflict(
-                    "Correction request already " + correction.getStatus());
-        }
+    @Transactional(readOnly = true)
+    public List<AttendanceCorrectionResponse> auditForSubject(UUID subjectId) {
+        return correctionRepository.findBySubjectId(subjectId)
+                .stream().map(this::toResponse).toList();
     }
 
     private AttendanceCorrectionResponse toResponse(AttendanceCorrection c) {
         return AttendanceCorrectionResponse.builder()
                 .id(c.getId())
-                .studentAttendanceId(c.getStudentAttendanceId())
-                .studentId(c.getStudentId())
+                .attendanceType(c.getAttendanceType())
+                .attendanceId(c.getAttendanceId())
+                .subjectId(c.getSubjectId())
                 .classId(c.getClassId())
                 .attendanceDate(c.getAttendanceDate())
-                .requestedStatus(c.getRequestedStatus())
+                .oldStatus(c.getOldStatus())
+                .newStatus(c.getNewStatus())
                 .reason(c.getReason())
-                .requestedByTeacherId(c.getRequestedByTeacherId())
-                .status(c.getStatus())
-                .reviewedByPrincipalId(c.getReviewedByPrincipalId())
-                .reviewNote(c.getReviewNote())
-                .createdAt(c.getCreatedAt())
-                .reviewedAt(c.getReviewedAt())
+                .editedByUserId(c.getEditedByUserId())
+                .editorRole(c.getEditorRole())
+                .editedAt(c.getEditedAt())
                 .build();
     }
 }

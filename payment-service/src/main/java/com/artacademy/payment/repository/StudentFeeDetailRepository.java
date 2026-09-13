@@ -1,5 +1,6 @@
 package com.artacademy.payment.repository;
 
+import com.artacademy.payment.domain.FeeCycleKind;
 import com.artacademy.payment.domain.StudentFeeDetail;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -15,4 +16,9 @@ public interface StudentFeeDetailRepository extends JpaRepository<StudentFeeDeta
     List<StudentFeeDetail> findByStudentId(UUID studentId);
 
     List<StudentFeeDetail> findByEnrollmentId(UUID enrollmentId);
+
+    boolean existsByEnrollmentIdAndFeeCycle_CycleKind(UUID enrollmentId, FeeCycleKind cycleKind);
+
+    boolean existsByEnrollmentIdAndFeeCycle_CycleKindAndFeeCycle_SourceRef(
+            UUID enrollmentId, FeeCycleKind cycleKind, UUID sourceRef);
 }

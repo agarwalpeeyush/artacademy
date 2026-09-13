@@ -14,6 +14,7 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 
 // Principal
 import DashboardPage from './pages/principal/DashboardPage';
+import CreatePrincipalPage from './pages/principal/CreatePrincipalPage';
 import TeachersPage from './pages/principal/TeachersPage';
 import StudentsPage from './pages/principal/StudentsPage';
 import StudentDetailPage from './pages/principal/StudentDetailPage';
@@ -24,10 +25,12 @@ import ClassesPage from './pages/principal/ClassesPage';
 import RoomsPage from './pages/principal/RoomsPage';
 import EnrollmentsPage from './pages/principal/EnrollmentsPage';
 import TimetablePage from './pages/principal/TimetablePage';
-import RoomAvailabilityPage from './pages/principal/RoomAvailabilityPage';
 import AttendanceReportPage from './pages/principal/AttendanceReportPage';
 import AttendanceCorrectionsPage from './pages/principal/AttendanceCorrectionsPage';
 import TeacherAttendancePage from './pages/principal/TeacherAttendancePage';
+import MarkStudentAttendancePage from './pages/principal/MarkStudentAttendancePage';
+import MarkTeacherAttendancePage from './pages/principal/MarkTeacherAttendancePage';
+import ExamsPage from './pages/principal/ExamsPage';
 import RevenuePage from './pages/principal/RevenuePage';
 import DefaultersPage from './pages/principal/DefaultersPage';
 import PrincipalPaymentsPage from './pages/principal/PaymentsPage';
@@ -108,6 +111,7 @@ const App: React.FC = () => {
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="create-principal" element={<CreatePrincipalPage />} />
         <Route path="profile" element={<PrincipalProfilePage />} />
         <Route path="teachers" element={<TeachersPage />} />
         <Route path="teachers/:id" element={<TeacherDetailPage />} />
@@ -119,8 +123,10 @@ const App: React.FC = () => {
         <Route path="rooms" element={<RoomsPage />} />
         <Route path="enrollments" element={<EnrollmentsPage />} />
         <Route path="timetable" element={<TimetablePage />} />
-        <Route path="room-availability" element={<RoomAvailabilityPage />} />
         <Route path="conflicts" element={<Navigate to="/principal/dashboard" replace />} />
+        <Route path="exams" element={<ExamsPage />} />
+        <Route path="mark-student-attendance" element={<MarkStudentAttendancePage />} />
+        <Route path="mark-teacher-attendance" element={<MarkTeacherAttendancePage />} />
         <Route path="attendance" element={<AttendanceReportPage />} />
         <Route path="teacher-attendance" element={<TeacherAttendancePage />} />
         <Route path="attendance-corrections" element={<AttendanceCorrectionsPage />} />

@@ -65,6 +65,7 @@ public class UserCreatedEventConsumer {
                     .roles(roles)
                     .build();
             entityManager.persist(user);
+            deactivateBootstrapIfPrincipal(roleNames);
             log.info("Created auth user for student id={} username={} roles={}", event.getStudentId(), event.getUsername(), roleNames);
         } catch (Exception e) {
             log.error("Failed to process StudentCreatedEvent: {}", e.getMessage(), e);
@@ -100,6 +101,7 @@ public class UserCreatedEventConsumer {
                     .roles(roles)
                     .build();
             entityManager.persist(user);
+            deactivateBootstrapIfPrincipal(roleNames);
             log.info("Created auth user for teacher id={} username={} roles={}", event.getTeacherId(), event.getUsername(), roleNames);
         } catch (Exception e) {
             log.error("Failed to process TeacherCreatedEvent: {}", e.getMessage(), e);
@@ -136,6 +138,7 @@ public class UserCreatedEventConsumer {
                     .roles(roles)
                     .build();
             entityManager.persist(user);
+            deactivateBootstrapIfPrincipal(roleNames);
             log.info("Created auth user for parent id={} username={} roles={}", event.getParentId(), event.getUsername(), roleNames);
         } catch (Exception e) {
             log.error("Failed to process ParentCreatedEvent: {}", e.getMessage(), e);
@@ -205,6 +208,25 @@ public class UserCreatedEventConsumer {
                 .map(name -> roleRepository.findByName(name)
                         .orElseThrow(() -> new IllegalStateException("Role not found: " + name)))
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * Once a real (non-bootstrap) PRINCIPAL is created, the seeded bootstrap dummy admin has served its
+     * purpose and is permanently deactivated. Re-activation is DB-migration-only (break-glass).
+     */
+    private void deactivateBootstrapIfPrincipal(List<String> roleNames) {
+        if (roleNames == null || !roleNames.contains("PRINCIPAL")) {
+            return;
+        }
+        for (User bootstrap : userRepository.findAllByBootstrapTrue()) {
+            if (!"INACTIVE".equals(bootstrap.getStatus())) {
+                bootstrap.setStatus("INACTIVE");
+                bootstrap.setUpdatedAt(java.time.Instant.now());
+                entityManager.merge(bootstrap);
+                log.info("Deactivated bootstrap dummy admin username={} — a real principal now exists",
+                        bootstrap.getUsername());
+            }
+        }
     }
 
     /**

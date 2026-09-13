@@ -14,6 +14,7 @@ const authService = {
       username: data.username ?? credentials.username,
       email: data.email ?? '',
       roles,
+      bootstrap: data.bootstrap ?? false,
     };
   },
 
@@ -33,6 +34,7 @@ const authService = {
       username: data.username ?? '',
       email: data.email ?? '',
       roles,
+      bootstrap: data.bootstrap ?? false,
     };
   },
 

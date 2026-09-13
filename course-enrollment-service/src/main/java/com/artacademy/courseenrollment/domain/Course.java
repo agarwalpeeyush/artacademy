@@ -4,7 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
-import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -27,21 +28,20 @@ public class Course {
     @Column(name = "COURSE_NAME", nullable = false)
     private String courseName;
 
-    @Column(name = "COURSE_TYPE", length = 50)
-    private String courseType;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "COURSE_TYPE_ID")
+    private CourseType courseType;
 
     @Column(name = "DESCRIPTION", columnDefinition = "TEXT")
     private String description;
-
-    @Column(name = "MONTHLY_FEE", precision = 12, scale = 2)
-    private BigDecimal monthlyFee;
-
-    @Column(name = "ADMISSION_FEE", precision = 12, scale = 2)
-    private BigDecimal admissionFee;
 
     @Column(name = "DURATION_MONTHS")
     private Integer durationMonths;
 
     @Column(name = "STATUS", nullable = false)
     private String status;
+
+    @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<CourseFee> fees = new ArrayList<>();
 }

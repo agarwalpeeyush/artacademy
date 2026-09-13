@@ -33,7 +33,7 @@ const schema = yup.object({
 const LoginPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { isAuthenticated, loading, error, roles } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, loading, error, roles, user } = useSelector((state: RootState) => state.auth);
   const [showPassword, setShowPassword] = React.useState(false);
 
   const {
@@ -47,7 +47,9 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      if (roles.includes('ROLE_PRINCIPAL')) {
+      if (user?.bootstrap) {
+        navigate('/principal/create-principal', { replace: true });
+      } else if (roles.includes('ROLE_PRINCIPAL')) {
         navigate('/principal/dashboard', { replace: true });
       } else if (roles.includes('ROLE_TEACHER')) {
         navigate('/teacher/dashboard', { replace: true });
@@ -57,7 +59,7 @@ const LoginPage: React.FC = () => {
         navigate('/student/dashboard', { replace: true });
       }
     }
-  }, [isAuthenticated, roles, navigate]);
+  }, [isAuthenticated, roles, user, navigate]);
 
   useEffect(() => {
     return () => { dispatch(clearError()); };

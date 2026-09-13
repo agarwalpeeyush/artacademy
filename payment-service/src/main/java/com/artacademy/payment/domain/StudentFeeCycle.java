@@ -14,7 +14,7 @@ import java.util.UUID;
     name = "STUDENT_FEE_CYCLES",
     uniqueConstraints = @UniqueConstraint(
         name = "uq_student_fee_cycles_student_month_year",
-        columnNames = {"STUDENT_ID", "BILLING_MONTH", "BILLING_YEAR"}
+        columnNames = {"STUDENT_ID", "BILLING_MONTH", "BILLING_YEAR", "CYCLE_KIND", "SOURCE_REF"}
     )
 )
 @Getter
@@ -36,6 +36,19 @@ public class StudentFeeCycle {
 
     @Column(name = "BILLING_YEAR", nullable = false)
     private Integer billingYear;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "CYCLE_KIND", nullable = false, length = 20)
+    @Builder.Default
+    private FeeCycleKind cycleKind = FeeCycleKind.MONTHLY;
+
+    /**
+     * Distinguishes multiple one-time cycles of the same kind for a student in one billing month
+     * (e.g. two EXAM cycles from different exams). Holds the triggering entity id (examId) for
+     * triggered fees; NULL for MONTHLY/ADMISSION.
+     */
+    @Column(name = "SOURCE_REF")
+    private UUID sourceRef;
 
     @Column(name = "TOTAL_AMOUNT", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;

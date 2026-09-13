@@ -6,7 +6,6 @@ import com.artacademy.common.exception.ApiException;
 import com.artacademy.timetable.domain.Room;
 import com.artacademy.timetable.domain.Timetable;
 import com.artacademy.timetable.dto.GenerateTimetableRequest;
-import com.artacademy.timetable.dto.RoomAvailabilityResponse;
 import com.artacademy.timetable.dto.TimetableConflictResponse;
 import com.artacademy.timetable.dto.TimetableRequest;
 import com.artacademy.timetable.dto.TimetableResponse;
@@ -206,58 +205,6 @@ public class TimetableService {
         }
 
         return results;
-    }
-
-    // -------------------------------------------------------------------------
-    // Room availability
-    // -------------------------------------------------------------------------
-
-    @Transactional(readOnly = true)
-    public RoomAvailabilityResponse getRoomAvailability(UUID roomId, DayOfWeek day) {
-        Room room = roomService.findRoomById(roomId);
-        List<Timetable> dayTimetables = timetableRepository
-                .findByRoomIdAndDayOfWeek(roomId, day).stream()
-                .sorted(Comparator.comparing(Timetable::getStartTime))
-                .toList();
-
-        List<RoomAvailabilityResponse.Slot> occupied = new ArrayList<>();
-        for (Timetable s : dayTimetables) {
-            occupied.add(RoomAvailabilityResponse.Slot.builder()
-                    .startTime(s.getStartTime())
-                    .endTime(s.getEndTime())
-                    .timetableId(s.getId())
-                    .classId(s.getClassId())
-                    .build());
-        }
-
-        List<RoomAvailabilityResponse.Slot> free = new ArrayList<>();
-        LocalTime cursor = DAY_START;
-        for (Timetable s : dayTimetables) {
-            LocalTime start = s.getStartTime().isBefore(DAY_START) ? DAY_START : s.getStartTime();
-            if (start.isAfter(cursor)) {
-                free.add(RoomAvailabilityResponse.Slot.builder()
-                        .startTime(cursor)
-                        .endTime(start)
-                        .build());
-            }
-            if (s.getEndTime().isAfter(cursor)) {
-                cursor = s.getEndTime();
-            }
-        }
-        if (cursor.isBefore(DAY_END)) {
-            free.add(RoomAvailabilityResponse.Slot.builder()
-                    .startTime(cursor)
-                    .endTime(DAY_END)
-                    .build());
-        }
-
-        return RoomAvailabilityResponse.builder()
-                .roomId(room.getId())
-                .roomName(room.getRoomName())
-                .dayOfWeek(day)
-                .occupied(occupied)
-                .free(free)
-                .build();
     }
 
     // -------------------------------------------------------------------------

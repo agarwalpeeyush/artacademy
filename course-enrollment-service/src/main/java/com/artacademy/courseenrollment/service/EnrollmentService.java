@@ -4,12 +4,14 @@ import com.artacademy.common.events.EnrollmentCancelledEvent;
 import com.artacademy.common.events.EnrollmentCreatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
+import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.CourseClass;
 import com.artacademy.courseenrollment.domain.Enrollment;
 import com.artacademy.courseenrollment.dto.EnrollmentRequest;
 import com.artacademy.courseenrollment.dto.EnrollmentResponse;
 import com.artacademy.courseenrollment.mapper.EnrollmentMapper;
 import com.artacademy.courseenrollment.repository.CourseClassRepository;
+import com.artacademy.courseenrollment.repository.CourseRepository;
 import com.artacademy.courseenrollment.repository.EnrollmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,7 @@ public class EnrollmentService {
 
     private final EnrollmentRepository enrollmentRepository;
     private final CourseClassRepository courseClassRepository;
+    private final CourseRepository courseRepository;
     private final EnrollmentMapper enrollmentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -81,11 +84,23 @@ public class EnrollmentService {
         log.info("Enrolled student id={} in course id={}, class id={}, enrollment id={}",
                 saved.getStudentId(), saved.getCourseId(), saved.getClassId(), saved.getId());
 
+        Course course = courseRepository.findById(saved.getCourseId())
+                .orElseThrow(() -> ApiException.notFound("Course not found with id: " + saved.getCourseId()));
+
+        List<EnrollmentCreatedEvent.FeeItem> feeItems = course.getFees().stream()
+                .map(f -> EnrollmentCreatedEvent.FeeItem.builder()
+                        .feeType(f.getFeeType())
+                        .amount(f.getAmount())
+                        .cadence(f.getCadence())
+                        .build())
+                .toList();
+
         EnrollmentCreatedEvent event = EnrollmentCreatedEvent.builder()
                 .enrollmentId(saved.getId())
                 .studentId(saved.getStudentId())
                 .courseId(saved.getCourseId())
                 .classId(saved.getClassId())
+                .fees(feeItems)
                 .occurredAt(Instant.now())
                 .build();
 

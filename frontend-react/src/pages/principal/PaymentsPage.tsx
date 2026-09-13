@@ -14,7 +14,7 @@ import paymentService from '../../services/paymentService';
 import { Student, FeeCycle, Payment } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDateDMY, parseDMYtoISO, todayDMY } from '../../utils/formatters';
+import { formatCurrency, formatDateDMY, parseDMYtoISO, todayDMY, cycleKindLabel, cycleKindColor } from '../../utils/formatters';
 
 const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
   PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', UNPAID: 'default', PENDING: 'default',
@@ -132,7 +132,12 @@ const PaymentsPage: React.FC = () => {
             const display = cycle.displayStatus ?? cycle.status;
             return (
               <TableRow key={cycle.id} hover>
-                <TableCell>{`${cycle.month ?? cycle.billingMonth}/${cycle.year ?? cycle.billingYear}`}</TableCell>
+                <TableCell>
+                  {`${cycle.month ?? cycle.billingMonth}/${cycle.year ?? cycle.billingYear}`}
+                  {cycle.cycleKind && cycle.cycleKind !== 'MONTHLY' && (
+                    <Chip label={cycleKindLabel(cycle.cycleKind)} color={cycleKindColor(cycle.cycleKind)} size="small" variant="outlined" sx={{ ml: 1 }} />
+                  )}
+                </TableCell>
                 <TableCell align="right">{formatCurrency(cycle.totalAmount)}</TableCell>
                 <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(cycle.paidAmount)}</TableCell>
                 <TableCell align="right" sx={{ color: outstanding > 0 ? 'error.main' : 'inherit' }}>{formatCurrency(outstanding)}</TableCell>

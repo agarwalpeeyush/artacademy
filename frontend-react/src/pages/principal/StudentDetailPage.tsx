@@ -117,6 +117,8 @@ const StudentDetailPage: React.FC = () => {
             <Info label="Login ID" value={student?.loginId} />
             <Info label="Date of Birth" value={student?.dob ? formatDate(student.dob) : '-'} />
             <Info label="Email" value={student?.email} />
+            <Info label="School Name" value={student?.schoolName} />
+            <Info label="Class / Grade" value={student?.className} />
             <Info label="Address" value={student?.address} />
             <Info label="Father" value={student?.fatherName ? `${student.fatherName}${student.fatherPhone ? ` (${student.fatherPhone})` : ''}` : '-'} />
             <Info label="Mother" value={student?.motherName ? `${student.motherName}${student.motherPhone ? ` (${student.motherPhone})` : ''}` : '-'} />

@@ -1,32 +1,9 @@
--- Dev seed for user_db (docker/dev profile only). Idempotent.
--- IDs match auth_db users. USER_TYPE is the JOINED-inheritance discriminator.
+-- Bootstrap seed for user_db. Runs in every profile that includes db/seed.
+-- Backing profile for the single auth-service bootstrap dummy admin (see auth-service seed).
+-- ID matches the auth_db bootstrap user. USER_TYPE 'PRINCIPAL' is a base USERS row (no subclass table).
+-- All other users (teachers/students/parents/real principals) are created at runtime by an
+-- authenticated principal, so nothing else is seeded here.
 
 INSERT INTO USERS (ID, USER_TYPE, LOGIN_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE_NUMBER) VALUES
-    ('00000000-0000-0000-0002-000000000001', 'TEACHER', 'teacher1', 'Aisha',  'Khan',   'teacher1@artacademy.test', '9000000001'),
-    ('00000000-0000-0000-0002-000000000002', 'TEACHER', 'teacher2', 'Rahul',  'Verma',  'teacher2@artacademy.test', '9000000002'),
-    ('00000000-0000-0000-0003-000000000001', 'STUDENT', 'student1', 'Meera',  'Nair',   'student1@artacademy.test', NULL),
-    ('00000000-0000-0000-0003-000000000002', 'STUDENT', 'student2', 'Arjun',  'Sharma', 'student2@artacademy.test', NULL),
-    ('00000000-0000-0000-0003-000000000003', 'STUDENT', 'student3', 'Diya',   'Patel',  'student3@artacademy.test', NULL),
-    ('00000000-0000-0000-0003-000000000004', 'STUDENT', 'student4', 'Kabir',  'Singh',  'student4@artacademy.test', NULL),
-    ('00000000-0000-0000-0004-000000000001', 'PARENT',  '9100000002', 'Sunita', 'Nair', 'parent1@artacademy.test', '9100000002')
+    ('00000000-0000-0000-0001-000000000001', 'PRINCIPAL', 'admin', 'Bootstrap', 'Admin', 'admin@artacademy.test', NULL)
 ON CONFLICT (ID) DO NOTHING;
-
-INSERT INTO TEACHERS (ID, EMPLOYEE_CODE, QUALIFICATION, JOINING_DATE, STATUS) VALUES
-    ('00000000-0000-0000-0002-000000000001', 'EMP-001', 'M.F.A Painting',  DATE '2023-06-01', 'ACTIVE'),
-    ('00000000-0000-0000-0002-000000000002', 'EMP-002', 'M.F.A Sculpture', DATE '2024-01-15', 'ACTIVE')
-ON CONFLICT (ID) DO NOTHING;
-
-INSERT INTO STUDENTS (ID, DATE_OF_BIRTH, ADDRESS, ENROLLMENT_DATE, STATUS) VALUES
-    ('00000000-0000-0000-0003-000000000001', DATE '2010-04-12', '12 MG Road, Kochi',       DATE '2025-06-01', 'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000002', DATE '2009-09-30', '48 Park Street, Pune',     DATE '2025-06-01', 'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000003', DATE '2011-01-20', '7 Lake View, Ahmedabad',   DATE '2025-07-01', 'ACTIVE'),
-    ('00000000-0000-0000-0003-000000000004', DATE '2010-11-05', '90 Ring Road, Chandigarh', DATE '2025-07-01', 'ACTIVE')
-ON CONFLICT (ID) DO NOTHING;
-
-INSERT INTO PARENTS (ID, PARENT_NAME, RELATIONSHIP, ADDRESS, OCCUPATION, STATUS) VALUES
-    ('00000000-0000-0000-0004-000000000001', 'Sunita Nair', 'MOTHER', '12 MG Road, Kochi', 'Architect', 'ACTIVE')
-ON CONFLICT (ID) DO NOTHING;
-
-INSERT INTO PARENT_STUDENTS (PARENT_ID, STUDENT_ID) VALUES
-    ('00000000-0000-0000-0004-000000000001', '00000000-0000-0000-0003-000000000001')
-ON CONFLICT (PARENT_ID, STUDENT_ID) DO NOTHING;

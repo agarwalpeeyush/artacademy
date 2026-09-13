@@ -4,6 +4,7 @@ import com.artacademy.attendance.domain.ClassSession;
 import com.artacademy.attendance.domain.ClassSessionStatus;
 import com.artacademy.attendance.domain.StudentAttendance;
 import com.artacademy.attendance.dto.ClassRangeAttendanceRequest;
+import com.artacademy.attendance.dto.CoverUpSessionRequest;
 import com.artacademy.attendance.dto.StudentAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceResponse;
 import com.artacademy.attendance.dto.StudentAttendanceStatsResponse;
@@ -142,6 +143,43 @@ public class StudentAttendanceService {
     }
 
     /**
+     * Create a cover-up (extra) class session and mark attendance for its ad-hoc roster (R18).
+     * Each roster entry becomes a StudentAttendance row tied to the new cover-up session. This does
+     * NOT touch any existing REGULAR-session attendance: the original absence stands as its own row
+     * (I6). No fee is generated — cover-up classes are free.
+     */
+    public List<StudentAttendanceResponse> createCoverUpAndMark(CoverUpSessionRequest request) {
+        ClassSession session = classSessionService.createCoverUp(
+                request.getClassId(),
+                request.getCourseId(),
+                request.getSessionDate(),
+                request.getStartTime(),
+                request.getEndTime(),
+                request.getOriginalSessionId());
+
+        UUID courseId = request.getCourseId() != null ? request.getCourseId() : session.getCourseId();
+
+        List<StudentAttendanceResponse> results = new java.util.ArrayList<>();
+        for (CoverUpSessionRequest.StudentEntry entry : request.getStudents()) {
+            StudentAttendance attendance = StudentAttendance.builder()
+                    .studentId(entry.getStudentId())
+                    .classId(request.getClassId())
+                    .courseId(courseId)
+                    .sessionId(session.getId())
+                    .attendanceDate(request.getSessionDate())
+                    .status(entry.getStatus())
+                    .remarks(entry.getRemarks())
+                    .build();
+            StudentAttendance saved = studentAttendanceRepository.save(attendance);
+            publishRecorded(saved);
+            results.add(studentAttendanceMapper.toResponse(saved));
+        }
+        log.info("Recorded cover-up session id={} classId={} date={} for {} students",
+                session.getId(), request.getClassId(), request.getSessionDate(), results.size());
+        return results;
+    }
+
+    /**
      * Update status/remarks of a single record; publishes ATTENDANCE_UPDATED.
      */
     public StudentAttendanceResponse updateAttendance(UUID id, StudentAttendanceRequest request) {        StudentAttendance record = studentAttendanceRepository.findById(id)
@@ -174,7 +212,8 @@ public class StudentAttendanceService {
         }
         return records.stream()
                 .map(studentAttendanceMapper::toResponse)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toList(), this::enrichSessionKind));
     }
 
     /**
@@ -185,7 +224,8 @@ public class StudentAttendanceService {
         return studentAttendanceRepository.findByClassIdAndAttendanceDate(classId, date)
                 .stream()
                 .map(studentAttendanceMapper::toResponse)
-                .toList();
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toList(), this::enrichSessionKind));
     }
 
     /**
@@ -233,6 +273,33 @@ public class StudentAttendanceService {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Resolve each response's {@link SessionKind} from its ClassSession (which owns the
+     * field — StudentAttendance does not). Sessions are batch-fetched once by id to avoid
+     * N+1. Rows with a null/unknown sessionId default to REGULAR so self-views (I5) can
+     * label cover-up rows without special-casing nulls.
+     */
+    private List<StudentAttendanceResponse> enrichSessionKind(List<StudentAttendanceResponse> responses) {
+        List<UUID> sessionIds = responses.stream()
+                .map(StudentAttendanceResponse::getSessionId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+
+        java.util.Map<UUID, com.artacademy.attendance.domain.SessionKind> kindById =
+                sessionIds.isEmpty()
+                        ? java.util.Map.of()
+                        : classSessionRepository.findAllById(sessionIds).stream()
+                                .collect(java.util.stream.Collectors.toMap(
+                                        ClassSession::getId, ClassSession::getSessionKind));
+
+        for (StudentAttendanceResponse r : responses) {
+            r.setSessionKind(kindById.getOrDefault(
+                    r.getSessionId(), com.artacademy.attendance.domain.SessionKind.REGULAR));
+        }
+        return responses;
+    }
 
     private StudentAttendance insertRecord(StudentAttendanceRequest request) {
         ClassSession session = classSessionService.resolveOrCreate(

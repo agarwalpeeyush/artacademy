@@ -561,4 +561,15 @@ If you'd rather keep Postgres data but still reset Kafka/ZK cleanly (the mismatc
 
 docker compose down --remove-orphans && docker volume rm docker_kafka-data && docker compose up -d postgres redis zookeeper kafka elasticsearch logstash kibana
 ```
+```bash
+clean local deploy (CRA) of frontend-react app
 
+# 1. Remove stale deps, build output, and CRA cache
+rm -rf node_modules build node_modules/.cache
+
+# 2. Fresh, reproducible install (uses package-lock.json exactly)
+npm ci
+
+# 3a. Dev server with hot-reload (http://localhost:3000)
+npm start
+```

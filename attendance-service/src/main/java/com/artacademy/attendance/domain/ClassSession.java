@@ -11,8 +11,8 @@ import java.util.UUID;
 @Table(
     name = "CLASS_SESSION",
     uniqueConstraints = @UniqueConstraint(
-        name = "uq_class_session_class_date",
-        columnNames = {"CLASS_ID", "SESSION_DATE"}
+        name = "uq_class_session_class_date_kind",
+        columnNames = {"CLASS_ID", "SESSION_DATE", "SESSION_KIND"}
     )
 )
 @Getter
@@ -40,6 +40,18 @@ public class ClassSession {
 
     @Column(name = "END_TIME")
     private LocalTime endTime;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "SESSION_KIND", nullable = false, length = 20)
+    @Builder.Default
+    private SessionKind sessionKind = SessionKind.REGULAR;
+
+    /**
+     * For a {@link SessionKind#COVER_UP_CLASS}, optionally links back to the missed REGULAR session.
+     * NULL for regular sessions and for cover-ups that are not tied to a specific missed session.
+     */
+    @Column(name = "ORIGINAL_SESSION_ID")
+    private UUID originalSessionId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "STATUS", nullable = false, length = 20)

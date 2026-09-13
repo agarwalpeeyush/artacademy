@@ -20,7 +20,6 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ClassIcon from '@mui/icons-material/Class';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
-import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import RoomPreferencesIcon from '@mui/icons-material/RoomPreferences';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
@@ -31,9 +30,12 @@ import WarningIcon from '@mui/icons-material/Warning';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import SecurityIcon from '@mui/icons-material/Security';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store/store';
 import PaletteIcon from '@mui/icons-material/Palette';
 
 const masterDataItems = [
@@ -42,13 +44,15 @@ const masterDataItems = [
   { label: 'Rooms', icon: <RoomPreferencesIcon />, path: '/principal/rooms' },
   { label: 'Courses', icon: <MenuBookIcon />, path: '/principal/courses' },
   { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
+  { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },
 ];
 
 const navItems = [
   { label: 'Dashboard', icon: <DashboardIcon />, path: '/principal/dashboard' },
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/principal/enrollments' },
-  { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },
-  { label: 'Room Availability', icon: <MeetingRoomIcon />, path: '/principal/room-availability' },
+  { label: 'Exams', icon: <EventNoteIcon />, path: '/principal/exams' },
+  { label: 'Mark Student Attendance', icon: <HowToRegIcon />, path: '/principal/mark-student-attendance' },
+  { label: 'Mark Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/mark-teacher-attendance' },
   { label: 'Attendance Report', icon: <EventNoteIcon />, path: '/principal/attendance' },
   { label: 'Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/teacher-attendance' },
   { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
@@ -65,6 +69,7 @@ const navItems = [
 const PrincipalSidebar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const user = useSelector((state: RootState) => state.auth.user);
 
   const isMasterDataActive = masterDataItems.some(i => location.pathname.startsWith(i.path));
   const [masterDataOpen, setMasterDataOpen] = React.useState(isMasterDataActive);
@@ -84,6 +89,34 @@ const PrincipalSidebar: React.FC = () => {
       '&:hover': { bgcolor: 'primary.dark' },
     },
   };
+
+  // The bootstrap admin can do exactly one thing — create the first Principal — so its console
+  // shows only that single nav item.
+  if (user?.bootstrap) {
+    return (
+      <Box sx={{ height: '100%', bgcolor: 'background.paper' }}>
+        <Toolbar>
+          <PaletteIcon sx={{ color: 'primary.main', mr: 1 }} />
+          <Typography variant="h6" fontWeight={700} color="primary.main" noWrap>
+            Art Academy
+          </Typography>
+        </Toolbar>
+        <Divider />
+        <Box sx={{ overflow: 'auto', mt: 1 }}>
+          <List dense>
+            <ListItemButton
+              selected={location.pathname === '/principal/create-principal'}
+              onClick={() => navigate('/principal/create-principal')}
+              sx={itemSx}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}><PersonAddIcon /></ListItemIcon>
+              <ListItemText primary="Create Principal" primaryTypographyProps={{ fontSize: 14 }} />
+            </ListItemButton>
+          </List>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ height: '100%', bgcolor: 'background.paper' }}>

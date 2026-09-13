@@ -21,10 +21,24 @@ const normAttendanceReport = (r: any): AttendanceReport => {
   };
 };
 
+const normRevenue = (r: any): RevenueReport => {
+  const totalRevenue = Number(r.totalRevenue ?? r.totalBilled ?? 0);
+  const collectedAmount = Number(r.collectedAmount ?? r.totalCollected ?? 0);
+  return {
+    month: r.month ?? r.billingMonth ?? 0,
+    year: r.year ?? r.billingYear ?? 0,
+    totalRevenue,
+    collectedAmount,
+    pendingAmount: Number(r.pendingAmount ?? r.outstanding ?? (totalRevenue - collectedAmount)),
+    totalStudents: r.totalStudents ?? r.studentCount ?? 0,
+    paidStudents: r.paidStudents ?? 0,
+  };
+};
+
 const reportService = {
   getRevenue: async (_year?: number): Promise<RevenueReport[]> => {
     const response = await api.get('/reports/revenue');
-    return toArray(unwrap(response));
+    return toArray(unwrap(response)).map(normRevenue);
   },
 
   getDefaulters: async (): Promise<DefaulterStudent[]> => {

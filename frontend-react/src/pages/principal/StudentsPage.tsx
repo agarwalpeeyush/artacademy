@@ -45,6 +45,8 @@ const schema = yup.object({
   motherPhone: yup.string().optional(),
   email: yup.string().email('Invalid email').optional(),
   address: yup.string().optional(),
+  schoolName: yup.string().optional(),
+  className: yup.string().optional(),
   status: yup.string().required('Status is required'),
 });
 
@@ -70,7 +72,7 @@ const StudentsPage: React.FC = () => {
   const emptyForm: StudentFormData = {
     loginId: '', firstName: '', lastName: '', dob: '', enrollmentDate: '',
     fatherName: '', fatherPhone: '', motherName: '', motherPhone: '',
-    email: '', address: '', status: 'ACTIVE',
+    email: '', address: '', schoolName: '', className: '', status: 'ACTIVE',
   };
 
   const handleAdd = () => {
@@ -93,6 +95,8 @@ const StudentsPage: React.FC = () => {
       motherPhone: student.motherPhone || '',
       email: student.email || '',
       address: student.address || '',
+      schoolName: student.schoolName || '',
+      className: student.className || '',
       status: student.status,
     });
     setDialogOpen(true);
@@ -237,6 +241,18 @@ const StudentsPage: React.FC = () => {
                   render={({ field }) => (
                     <TextField {...field} label="Email" fullWidth size="small"
                       error={!!errors.email} helperText={errors.email?.message} />
+                  )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="schoolName" control={control}
+                  render={({ field }) => (
+                    <TextField {...field} label="School Name" fullWidth size="small" />
+                  )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="className" control={control}
+                  render={({ field }) => (
+                    <TextField {...field} label="Class / Grade" fullWidth size="small" />
                   )} />
               </Grid>
               {[

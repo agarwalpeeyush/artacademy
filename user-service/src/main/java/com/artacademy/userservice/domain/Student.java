@@ -23,6 +23,12 @@ public class Student extends User {
     @Column(name = "ADDRESS", columnDefinition = "TEXT")
     private String address;
 
+    @Column(name = "SCHOOL_NAME")
+    private String schoolName;
+
+    @Column(name = "CLASS_NAME", length = 100)
+    private String className;
+
     @Column(name = "ENROLLMENT_DATE")
     private LocalDate enrollmentDate;
 

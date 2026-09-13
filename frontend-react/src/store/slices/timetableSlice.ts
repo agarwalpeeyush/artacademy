@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { Timetable, TimetableConflict, RoomAvailability, UpcomingClass } from '../../types';
+import { Timetable, TimetableConflict, UpcomingClass } from '../../types';
 import timetableService from '../../services/timetableService';
 
 interface TimetableState {
@@ -7,7 +7,6 @@ interface TimetableState {
   teacherTimetables: Timetable[];
   studentTimetables: Timetable[];
   conflicts: TimetableConflict[];
-  roomAvailability: RoomAvailability | null;
   upcoming: UpcomingClass[];
   loading: boolean;
   error: string | null;
@@ -18,7 +17,6 @@ const initialState: TimetableState = {
   teacherTimetables: [],
   studentTimetables: [],
   conflicts: [],
-  roomAvailability: null,
   upcoming: [],
   loading: false,
   error: null,
@@ -97,18 +95,6 @@ export const fetchConflicts = createAsyncThunk<TimetableConflict[]>(
   }
 );
 
-export const fetchRoomAvailability = createAsyncThunk<RoomAvailability, { roomId: string; date: string }>(
-  'timetables/fetchRoomAvailability',
-  async ({ roomId, date }, { rejectWithValue }) => {
-    try {
-      return await timetableService.getRoomAvailability(roomId, date);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch room availability');
-    }
-  }
-);
-
 export const fetchUpcomingClasses = createAsyncThunk<UpcomingClass[], { classIds: string[]; limit?: number }>(
   'timetables/fetchUpcoming',
   async ({ classIds, limit }, { rejectWithValue }) => {
@@ -141,9 +127,6 @@ const timetableSlice = createSlice({
       .addCase(fetchConflicts.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchConflicts.fulfilled, (state, action) => { state.loading = false; state.conflicts = action.payload; })
       .addCase(fetchConflicts.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
-      .addCase(fetchRoomAvailability.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchRoomAvailability.fulfilled, (state, action) => { state.loading = false; state.roomAvailability = action.payload; })
-      .addCase(fetchRoomAvailability.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
       .addCase(fetchUpcomingClasses.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchUpcomingClasses.fulfilled, (state, action) => { state.loading = false; state.upcoming = action.payload; })
       .addCase(fetchUpcomingClasses.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; });

@@ -1,6 +1,7 @@
 package com.artacademy.attendance.repository;
 
 import com.artacademy.attendance.domain.ClassSession;
+import com.artacademy.attendance.domain.SessionKind;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,6 +14,9 @@ import java.util.UUID;
 public interface ClassSessionRepository extends JpaRepository<ClassSession, UUID> {
 
     Optional<ClassSession> findByClassIdAndSessionDate(UUID classId, LocalDate sessionDate);
+
+    Optional<ClassSession> findByClassIdAndSessionDateAndSessionKind(
+            UUID classId, LocalDate sessionDate, SessionKind sessionKind);
 
     List<ClassSession> findByClassId(UUID classId);
 

@@ -25,9 +25,14 @@ public class JwtUtil {
     }
 
     public String generateToken(String username, List<String> roles) {
+        return generateToken(username, roles, false);
+    }
+
+    public String generateToken(String username, List<String> roles, boolean bootstrap) {
         return Jwts.builder()
                 .subject(username)
                 .claim("roles", roles)
+                .claim("bootstrap", bootstrap)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(signingKey())
@@ -51,6 +56,11 @@ public class JwtUtil {
     public List<String> extractRoles(String token) {
         List<String> roles = extractClaim(token, c -> (List<String>) c.get("roles"));
         return roles == null ? List.of() : roles;
+    }
+
+    public boolean isBootstrap(String token) {
+        Boolean bootstrap = extractClaim(token, c -> c.get("bootstrap", Boolean.class));
+        return Boolean.TRUE.equals(bootstrap);
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> resolver) {

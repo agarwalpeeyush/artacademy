@@ -9,14 +9,19 @@ CREATE TABLE ROLES (
 );
 
 CREATE TABLE USERS (
-    ID         UUID PRIMARY KEY,
-    USERNAME   VARCHAR(100) NOT NULL UNIQUE,
-    PASSWORD   VARCHAR(255) NOT NULL,
-    EMAIL      VARCHAR(200),
-    PHONE      VARCHAR(30),
-    STATUS     VARCHAR(20)  DEFAULT 'ACTIVE',
-    CREATED_AT TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    UPDATED_AT TIMESTAMP WITH TIME ZONE DEFAULT now()
+    ID                   UUID PRIMARY KEY,
+    USERNAME             VARCHAR(100) NOT NULL UNIQUE,
+    PASSWORD             VARCHAR(255) NOT NULL,
+    EMAIL                VARCHAR(200),
+    PHONE                VARCHAR(30),
+    STATUS               VARCHAR(20)  DEFAULT 'ACTIVE',
+    -- Forces a password reset on first login (used by the bootstrap dummy admin).
+    MUST_CHANGE_PASSWORD BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Marks the seeded bootstrap dummy admin. It self-deactivates once a real PRINCIPAL exists
+    -- and can only be re-activated via a DB migration script (break-glass recovery).
+    IS_BOOTSTRAP         BOOLEAN NOT NULL DEFAULT FALSE,
+    CREATED_AT           TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UPDATED_AT           TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
 CREATE TABLE USER_ROLES (

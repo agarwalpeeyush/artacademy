@@ -1,5 +1,8 @@
 package com.artacademy.courseenrollment.dto;
 
+import com.artacademy.common.fee.FeeCadence;
+import com.artacademy.common.fee.FeeType;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 @Builder
@@ -21,20 +25,37 @@ public class CourseRequest {
     @NotBlank(message = "Course name is required")
     private String courseName;
 
-    @Size(max = 50, message = "Course type must not exceed 50 characters")
-    private String courseType;
+    /** Code of an existing {@code COURSE_TYPE} row. */
+    @Size(max = 50, message = "Course type code must not exceed 50 characters")
+    private String courseTypeCode;
 
     private String description;
-
-    @DecimalMin(value = "0.0", message = "Monthly fee must be non-negative")
-    private BigDecimal monthlyFee;
-
-    @DecimalMin(value = "0.0", message = "Admission fee must be non-negative")
-    private BigDecimal admissionFee;
 
     @Positive(message = "Duration in months must be positive")
     private Integer durationMonths;
 
     @NotBlank(message = "Status is required")
     private String status;
+
+    /** The full fee set for this course (R5). */
+    @Valid
+    @Builder.Default
+    private List<FeeItem> fees = List.of();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FeeItem {
+
+        @NotNull(message = "Fee type is required")
+        private FeeType feeType;
+
+        @NotNull(message = "Fee amount is required")
+        @DecimalMin(value = "0.0", message = "Fee amount must be non-negative")
+        private BigDecimal amount;
+
+        /** Optional — defaults to the fee type's intrinsic cadence when omitted. */
+        private FeeCadence cadence;
+    }
 }

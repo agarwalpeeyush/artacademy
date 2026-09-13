@@ -3,6 +3,7 @@ export interface User {
   username: string;
   email: string;
   roles: string[];
+  bootstrap?: boolean;
 }
 
 export interface AuthState {
@@ -25,6 +26,7 @@ export interface LoginResponse {
   username: string;
   email: string;
   roles: string[];
+  bootstrap?: boolean;
 }
 
 export interface Teacher {
@@ -64,6 +66,8 @@ export interface Student {
   motherPhone?: string;
   email?: string;
   address?: string;
+  schoolName?: string;
+  className?: string;
   enrollmentDate?: string;
   status: string;
   parents?: ParentRef[];
@@ -86,15 +90,43 @@ export interface Parent {
   status: string;
 }
 
+export type FeeType = 'ADMISSION' | 'MONTHLY' | 'EXAM' | 'ONE_TIME_SHORT_TERM';
+export type FeeCadence = 'RECURRING' | 'ONE_TIME';
+
+export interface CourseFeeItem {
+  id?: string;
+  feeType: FeeType;
+  amount: number;
+  cadence?: FeeCadence;
+}
+
 export interface Course {
   id: string;
   courseCode: string;
   courseName: string;
-  courseType?: string;
+  courseTypeCode?: string;
+  courseTypeName?: string;
   description?: string;
-  monthlyFee: number;
-  admissionFee: number;
   durationMonths: number;
+  status: string;
+  fees: CourseFeeItem[];
+}
+
+export interface CourseType {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+
+export interface Exam {
+  id: string;
+  courseId: string;
+  courseName?: string;
+  title?: string;
+  examDate: string;
+  startTime: string;
+  endTime: string;
   status: string;
 }
 
@@ -152,6 +184,7 @@ export interface StudentAttendance {
   attendanceDate?: string;
   status: AttendanceStatus;
   remarks?: string;
+  sessionKind?: 'REGULAR' | 'COVER_UP_CLASS';
 }
 
 export interface AttendanceStats {
@@ -164,22 +197,22 @@ export interface AttendanceStats {
   attendancePercentage: number;
 }
 
-export type CorrectionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type AttendanceRecordType = 'STUDENT' | 'TEACHER';
 
+/** An attendance-edit audit-log entry (R16, direct edit — no approval workflow). */
 export interface AttendanceCorrection {
   id: string;
-  studentAttendanceId: string;
-  studentId: string;
+  attendanceType: AttendanceRecordType;
+  attendanceId: string;
+  subjectId: string;
   classId: string;
   attendanceDate: string;
-  requestedStatus: AttendanceStatus;
+  oldStatus: AttendanceStatus;
+  newStatus: AttendanceStatus;
   reason?: string;
-  requestedByTeacherId: string;
-  status: CorrectionStatus;
-  reviewedByPrincipalId?: string;
-  reviewNote?: string;
-  createdAt?: string;
-  reviewedAt?: string;
+  editedByUserId: string;
+  editorRole: string;
+  editedAt?: string;
 }
 
 export interface CourseAttendanceSummary {
@@ -224,21 +257,6 @@ export interface Timetable {
   roomId?: string;
   roomName?: string;
   active: boolean;
-}
-
-export interface RoomAvailabilitySlot {
-  startTime: string;
-  endTime: string;
-  timetableId?: string;
-  classId?: string;
-}
-
-export interface RoomAvailability {
-  roomId: string;
-  roomName: string;
-  dayOfWeek: string;
-  occupied: RoomAvailabilitySlot[];
-  free: RoomAvailabilitySlot[];
 }
 
 export type TimetableConflictType = 'TEACHER_DOUBLE_BOOKED' | 'ROOM_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
@@ -287,6 +305,7 @@ export interface FeeCycle {
   studentName?: string;
   billingMonth?: number;
   billingYear?: number;
+  cycleKind?: 'MONTHLY' | 'ADMISSION' | 'EXAM' | 'ONE_TIME_SHORT_TERM';
   month?: number;
   year?: number;
   totalAmount: number;

@@ -20,6 +20,7 @@ public class FeeCycleResponse {
     private UUID studentId;
     private Integer billingMonth;
     private Integer billingYear;
+    private String cycleKind;
     private BigDecimal totalAmount;
     private BigDecimal paidAmount;
     private BigDecimal outstandingAmount;

@@ -9,7 +9,7 @@ import { fetchFeeCycles, fetchFeeDetails } from '../../store/slices/feeSlice';
 import { fetchMyChildren } from '../../store/slices/parentSlice';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDate, formatMonthYear } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatMonthYear, cycleKindLabel, cycleKindColor } from '../../utils/formatters';
 import { FeeCycle } from '../../types';
 
 const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
@@ -120,7 +120,12 @@ const ParentFeesPage: React.FC = () => {
                   <TableBody>
                     {feeCycles.map(cycle => (
                       <TableRow key={cycle.id} hover selected={selectedCycle?.id === cycle.id}>
-                        <TableCell>{formatMonthYear(cycle.month ?? 0, cycle.year ?? 0)}</TableCell>
+                        <TableCell>
+                          {formatMonthYear(cycle.month ?? 0, cycle.year ?? 0)}
+                          {cycle.cycleKind && cycle.cycleKind !== 'MONTHLY' && (
+                            <Chip label={cycleKindLabel(cycle.cycleKind)} color={cycleKindColor(cycle.cycleKind)} size="small" variant="outlined" sx={{ ml: 1 }} />
+                          )}
+                        </TableCell>
                         <TableCell align="right">{formatCurrency(cycle.totalAmount)}</TableCell>
                         <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(cycle.paidAmount)}</TableCell>
                         <TableCell align="right" sx={{ color: (cycle.dueAmount ?? 0) > 0 ? 'error.main' : 'inherit', fontWeight: (cycle.dueAmount ?? 0) > 0 ? 600 : 400 }}>

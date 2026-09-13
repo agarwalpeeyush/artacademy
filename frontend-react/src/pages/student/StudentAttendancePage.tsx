@@ -9,13 +9,13 @@ import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDate } from '../../utils/formatters';
-import { format, subDays } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 
 const StudentAttendancePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { studentAttendance, loading } = useSelector((state: RootState) => state.attendance);
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(format(subMonths(new Date(), 3), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   useEffect(() => {
@@ -37,6 +37,12 @@ const StudentAttendancePage: React.FC = () => {
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'date', label: 'Date', minWidth: 120, format: (v) => formatDate(v as string) },
     { id: 'className', label: 'Class', minWidth: 150 },
+    {
+      id: 'sessionKind', label: 'Type', minWidth: 110,
+      format: (v) => (v === 'COVER_UP_CLASS'
+        ? <Chip label="Cover-up" color="info" size="small" variant="outlined" />
+        : <Chip label="Regular" size="small" variant="outlined" />),
+    },
     {
       id: 'status', label: 'Status', minWidth: 100,
       format: (v) => <Chip label={v as string} color={statusColorMap[v as string] || 'default'} size="small" />,

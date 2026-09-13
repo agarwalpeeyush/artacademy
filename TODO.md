@@ -6,8 +6,33 @@ Items required by the project skills spec (`art_academy_skills/*.md`) that are n
 
 ## Known Bugs / Discrepancies
 
+Student should also have an attributes like school name, class name (i refer here school class, not the class object present in this project). 
+
+Pull TimeTable display in the master data. 
+Remove room-availability page. 
+
+Fee can be of 3 types: Admission Fee, Monthly fee, Exam Fee, One Time ShortTerm Course Fee for some courses. 
+Course Type can be broadly defined in 3 categories: Drawing, Academics, Specialized Craft
+Depending upon course type, one or more fee can be applicable: Regular Drawing class has Admission and Monthly fee, academics has Monthly fee, Specialized Craft has One Time ShortTerm Course Fee
+
+Student Attendance has to be per enrolled class meaning a student can be enrolled in multiple classes and attendance has to be marked for each class.
+As principal, I should be able to mark the attendance for students. Create a page for principal to mark the attendance for students.
+Implement Bulk Attendance marking for teachers and students for principal.
+Implement Bulk Attendance marking for students by teacher.
+Input will be list of students or teachers and start and end date. 
+Similarly, teacher attendance has to be marked for each class. Create a page for principal to mark the attendance for teachers per class they are taking.
+Attendance Report for Students should list the student name, class name, course name, teacher name, date, attendance status. (View for principal and teacher). Also student can view his attendance for last 3 months for all the courses he is enrolled.
+Attendance Report for Teachers should list the teacher name, class name, course name, date, attendance status. (View for principal and teacher). Also teacher can view his attendance for last 3 months for all the courses he is taking.
+For Attendance correction:  principal selects the student or teacher and update the attendance for the selected date for the selected class. Bulk operation supported. Similarily teacher can also update the student attendance for the selected class. Bulk operation supported.
+
+remove all seed data from the project. I just need it for one principal role.
+
+
+
 These are actual code behaviors that diverge from the intended design. They are currently
 documented "as-implemented" in the relevant `DESIGN.md` files; fix the code later.
+
+
 
 - [ ] **notification-service: SMS marked SENT without delivery**
   - There is no SMS provider integrated. An `SMS`-channel notification is optimistically set to

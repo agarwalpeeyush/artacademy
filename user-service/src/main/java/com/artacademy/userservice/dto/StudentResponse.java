@@ -22,6 +22,8 @@ public class StudentResponse {
     private LocalDate dob;
     private String email;
     private String address;
+    private String schoolName;
+    private String className;
     private LocalDate enrollmentDate;
     private String status;
     private List<ParentRef> parents;

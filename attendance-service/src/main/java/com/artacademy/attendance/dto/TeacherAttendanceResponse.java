@@ -17,6 +17,8 @@ public class TeacherAttendanceResponse {
 
     private UUID id;
     private UUID teacherId;
+    private UUID classId;
+    private UUID courseId;
     private LocalDate attendanceDate;
     private AttendanceStatus status;
     private String remarks;

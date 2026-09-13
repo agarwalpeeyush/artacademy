@@ -92,6 +92,39 @@ export const getDayName = (dayOfWeek: string): string => {
 };
 
 export const getMonthName = (month: number): string => {
+  if (!month || month < 1 || month > 12) return '';
   const date = new Date(2000, month - 1, 1);
   return format(date, 'MMMM');
 };
+
+const CYCLE_KIND_LABELS: Record<string, string> = {
+  MONTHLY: 'Monthly',
+  ADMISSION: 'Admission',
+  EXAM: 'Exam',
+  ONE_TIME_SHORT_TERM: 'Short Term',
+};
+
+/** Human label for a fee cycle kind, e.g. ONE_TIME_SHORT_TERM -> 'Short Term'. */
+export const cycleKindLabel = (kind: string | null | undefined): string =>
+  kind ? CYCLE_KIND_LABELS[kind] ?? kind : '';
+
+const CYCLE_KIND_COLORS: Record<string, 'info' | 'secondary' | 'warning' | 'default'> = {
+  ADMISSION: 'info',
+  EXAM: 'secondary',
+  ONE_TIME_SHORT_TERM: 'warning',
+};
+
+/** MUI Chip color for a fee cycle kind. MONTHLY has no chip (returns 'default'). */
+export const cycleKindColor = (kind: string | null | undefined): 'info' | 'secondary' | 'warning' | 'default' =>
+  kind ? CYCLE_KIND_COLORS[kind] ?? 'default' : 'default';
+
+const FEE_TYPE_LABELS: Record<string, string> = {
+  ADMISSION: 'Admission Fee',
+  MONTHLY: 'Monthly Fee',
+  EXAM: 'Exam Fee',
+  ONE_TIME_SHORT_TERM: 'Short-Term Fee',
+};
+
+/** Human label for a course fee type. */
+export const feeTypeLabel = (feeType: string | null | undefined): string =>
+  feeType ? FEE_TYPE_LABELS[feeType] ?? feeType : '';

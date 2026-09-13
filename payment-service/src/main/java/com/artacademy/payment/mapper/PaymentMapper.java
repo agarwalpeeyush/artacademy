@@ -13,10 +13,12 @@ import java.util.List;
 public interface PaymentMapper {
 
     @Mapping(target = "status", expression = "java(cycle.getStatus().name())")
+    @Mapping(target = "cycleKind", expression = "java(cycle.getCycleKind() != null ? cycle.getCycleKind().name() : null)")
     @Mapping(target = "details", ignore = true)
     FeeCycleResponse toCycleResponse(StudentFeeCycle cycle);
 
     @Mapping(target = "status", expression = "java(cycle.getStatus().name())")
+    @Mapping(target = "cycleKind", expression = "java(cycle.getCycleKind() != null ? cycle.getCycleKind().name() : null)")
     @Mapping(target = "details", source = "details")
     FeeCycleResponse toCycleResponseWithDetails(StudentFeeCycle cycle);
 

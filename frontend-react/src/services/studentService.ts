@@ -16,6 +16,8 @@ const norm = (s: any): Student => ({
   motherPhone: s.motherPhone ?? '',
   email: s.email ?? '',
   address: s.address ?? '',
+  schoolName: s.schoolName ?? '',
+  className: s.className ?? '',
   enrollmentDate: s.enrollmentDate ?? '',
   status: s.status ?? 'ACTIVE',
   parents: Array.isArray(s.parents) ? s.parents : [],

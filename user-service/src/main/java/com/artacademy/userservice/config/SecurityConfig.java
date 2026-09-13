@@ -5,6 +5,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -12,6 +15,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 
 @Configuration
 @EnableWebSecurity
@@ -20,6 +24,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    // PRINCIPAL but NOT the bootstrap dummy admin. The bootstrap admin holds the PRINCIPAL role but
+    // is scoped to creating the first principal only (a POST /teachers carrying additionalRoles
+    // PRINCIPAL, body-checked in TeacherController) — every other mutation is denied here.
+    private static AuthorizationManager<RequestAuthorizationContext> principalNotBootstrap() {
+        return AuthorizationManagers.allOf(
+                AuthorityAuthorizationManager.hasRole("PRINCIPAL"),
+                AuthorizationManagers.not(AuthorityAuthorizationManager.hasRole("BOOTSTRAP")));
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -42,20 +55,24 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT, "/students/me").hasRole("STUDENT")
                     .requestMatchers(HttpMethod.PUT, "/parents/me").hasRole("PARENT")
 
-                    // Mutating teacher endpoints – PRINCIPAL only
-                    .requestMatchers(HttpMethod.POST,   "/teachers/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.PUT,    "/teachers/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.DELETE, "/teachers/**").hasRole("PRINCIPAL")
+                    // Teacher creation – PRINCIPAL (incl. the bootstrap admin, which may create the
+                    // first principal). The bootstrap-vs-body rule is enforced in TeacherController.
+                    .requestMatchers(HttpMethod.POST, "/teachers").hasRole("PRINCIPAL")
 
-                    // Mutating student endpoints – PRINCIPAL only
-                    .requestMatchers(HttpMethod.POST,   "/students/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.PUT,    "/students/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.DELETE, "/students/**").hasRole("PRINCIPAL")
+                    // All other mutating teacher endpoints – PRINCIPAL, but never the bootstrap admin
+                    .requestMatchers(HttpMethod.POST,   "/teachers/**").access(principalNotBootstrap())
+                    .requestMatchers(HttpMethod.PUT,    "/teachers/**").access(principalNotBootstrap())
+                    .requestMatchers(HttpMethod.DELETE, "/teachers/**").access(principalNotBootstrap())
 
-                    // Mutating parent endpoints – PRINCIPAL only
-                    .requestMatchers(HttpMethod.POST,   "/parents/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.PUT,    "/parents/**").hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.DELETE, "/parents/**").hasRole("PRINCIPAL")
+                    // Mutating student endpoints – PRINCIPAL, but never the bootstrap admin
+                    .requestMatchers(HttpMethod.POST,   "/students/**").access(principalNotBootstrap())
+                    .requestMatchers(HttpMethod.PUT,    "/students/**").access(principalNotBootstrap())
+                    .requestMatchers(HttpMethod.DELETE, "/students/**").access(principalNotBootstrap())
+
+                    // Mutating parent endpoints – PRINCIPAL, but never the bootstrap admin
+                    .requestMatchers(HttpMethod.POST,   "/parents/**").access(principalNotBootstrap())
+                    .requestMatchers(HttpMethod.PUT,    "/parents/**").access(principalNotBootstrap())
+                    .requestMatchers(HttpMethod.DELETE, "/parents/**").access(principalNotBootstrap())
 
                     // Login ID availability check – PRINCIPAL only (used at create time)
                     .requestMatchers(HttpMethod.GET, "/users/login-id/available").hasRole("PRINCIPAL")

@@ -9,6 +9,7 @@ const normCycle = (c: any): FeeCycle => ({
   studentName: c.studentName,
   billingMonth: c.billingMonth,
   billingYear: c.billingYear,
+  cycleKind: c.cycleKind ?? 'MONTHLY',
   month: c.billingMonth ?? c.month,
   year: c.billingYear ?? c.year,
   totalAmount: Number(c.totalAmount ?? 0),

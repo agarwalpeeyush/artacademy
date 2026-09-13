@@ -1,6 +1,7 @@
 package com.artacademy.attendance.controller;
 
 import com.artacademy.attendance.dto.ClassRangeAttendanceRequest;
+import com.artacademy.attendance.dto.CoverUpSessionRequest;
 import com.artacademy.attendance.dto.StudentAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceResponse;
 import com.artacademy.attendance.dto.StudentAttendanceStatsResponse;
@@ -52,6 +53,15 @@ public class StudentAttendanceController {
         List<StudentAttendanceResponse> response =
                 studentAttendanceService.markClassAttendanceForRange(classId, request);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping("/cover-up")
+    @Operation(summary = "Create a cover-up (extra) class session and mark attendance for an ad-hoc roster")
+    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> createCoverUp(
+            @Valid @RequestBody CoverUpSessionRequest request) {
+        List<StudentAttendanceResponse> response =
+                studentAttendanceService.createCoverUpAndMark(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
     @PutMapping("/{id}")

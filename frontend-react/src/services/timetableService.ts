@@ -1,5 +1,5 @@
 import api from './api';
-import { Timetable, RoomAvailability, TimetableConflict, UpcomingClass } from '../types';
+import { Timetable, TimetableConflict, UpcomingClass } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 const toArray = (d: any): any[] => (Array.isArray(d) ? d : d?.content ?? []);
@@ -74,11 +74,6 @@ const timetableService = {
   getConflicts: async (): Promise<TimetableConflict[]> => {
     const response = await api.get('/timetables/conflicts');
     return toArray(unwrap(response)) as TimetableConflict[];
-  },
-
-  getRoomAvailability: async (roomId: string, date: string): Promise<RoomAvailability> => {
-    const response = await api.get(`/rooms/${roomId}/availability?date=${date}`);
-    return unwrap(response) as RoomAvailability;
   },
 
   getUpcoming: async (classIds: string[], limit = 10): Promise<UpcomingClass[]> => {

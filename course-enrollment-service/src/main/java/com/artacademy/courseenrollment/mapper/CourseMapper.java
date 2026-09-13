@@ -1,17 +1,35 @@
 package com.artacademy.courseenrollment.mapper;
 
 import com.artacademy.courseenrollment.domain.Course;
-import com.artacademy.courseenrollment.dto.CourseRequest;
 import com.artacademy.courseenrollment.dto.CourseResponse;
-import org.mapstruct.Mapper;
-import org.mapstruct.MappingTarget;
+import org.springframework.stereotype.Component;
 
-@Mapper(componentModel = "spring")
-public interface CourseMapper {
+import java.util.List;
 
-    Course toEntity(CourseRequest request);
+@Component
+public class CourseMapper {
 
-    CourseResponse toResponse(Course course);
+    public CourseResponse toResponse(Course course) {
+        List<CourseResponse.FeeItem> fees = course.getFees() == null ? List.of()
+                : course.getFees().stream()
+                        .map(f -> CourseResponse.FeeItem.builder()
+                                .id(f.getId())
+                                .feeType(f.getFeeType())
+                                .amount(f.getAmount())
+                                .cadence(f.getCadence())
+                                .build())
+                        .toList();
 
-    void updateEntityFromRequest(CourseRequest request, @MappingTarget Course course);
+        return CourseResponse.builder()
+                .id(course.getId())
+                .courseCode(course.getCourseCode())
+                .courseName(course.getCourseName())
+                .courseTypeCode(course.getCourseType() != null ? course.getCourseType().getCode() : null)
+                .courseTypeName(course.getCourseType() != null ? course.getCourseType().getName() : null)
+                .description(course.getDescription())
+                .durationMonths(course.getDurationMonths())
+                .status(course.getStatus())
+                .fees(fees)
+                .build();
+    }
 }

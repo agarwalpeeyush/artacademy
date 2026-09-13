@@ -7,7 +7,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import attendanceService from '../../services/attendanceService';
-import { Teacher, TeacherAttendance } from '../../types';
+import courseService from '../../services/courseService';
+import { Teacher, TeacherAttendance, CourseClass } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import { format } from 'date-fns';
@@ -22,6 +23,8 @@ const TeacherAttendancePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
+  const [classes, setClasses] = useState<CourseClass[]>([]);
+  const [selectedClass, setSelectedClass] = useState<CourseClass | null>(null);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [status, setStatus] = useState<TeacherStatus>('PRESENT');
   const [remarks, setRemarks] = useState('');
@@ -30,6 +33,7 @@ const TeacherAttendancePage: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchTeachers());
+    courseService.getAllClasses().then(setClasses).catch(() => setClasses([]));
   }, [dispatch]);
 
   const loadRecords = async (teacherId: string) => {
@@ -52,8 +56,15 @@ const TeacherAttendancePage: React.FC = () => {
       setSnackbar({ open: true, message: 'Please select a teacher', severity: 'error' });
       return;
     }
+    if (!selectedClass) {
+      setSnackbar({ open: true, message: 'Please select a class', severity: 'error' });
+      return;
+    }
     try {
-      await attendanceService.markTeacherAttendance({ teacherId: teacher.id, date, status, remarks } as Omit<TeacherAttendance, 'id'>);
+      await attendanceService.markTeacherAttendance({
+        teacherId: teacher.id, classId: selectedClass.id, courseId: selectedClass.courseId,
+        date, status, remarks,
+      });
       setSnackbar({ open: true, message: 'Teacher attendance saved successfully', severity: 'success' });
       loadRecords(teacher.id);
     } catch (err: unknown) {
@@ -92,6 +103,17 @@ const TeacherAttendancePage: React.FC = () => {
               renderInput={(params) => <TextField {...params} label="Teacher" />}
             />
           </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select label="Class" size="small" fullWidth
+              value={selectedClass?.id ?? ''}
+              onChange={e => setSelectedClass(classes.find(c => c.id === e.target.value) || null)}
+            >
+              {classes.map(c => (
+                <MenuItem key={c.id} value={c.id}>{c.className} – {c.courseName}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
           <Grid item xs={12} sm={2}>
             <TextField
               label="Date" type="date" size="small" fullWidth value={date}
@@ -106,14 +128,14 @@ const TeacherAttendancePage: React.FC = () => {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={3}>
-            <TextField label="Remarks" size="small" fullWidth value={remarks}
-              onChange={e => setRemarks(e.target.value)} placeholder="Optional" />
-          </Grid>
-          <Grid item xs={12} sm={2}>
-            <Button variant="contained" fullWidth startIcon={<SaveIcon />} onClick={handleSave}>
-              Save
-            </Button>
+          <Grid item xs={12} sm={12}>
+            <Box display="flex" gap={2} alignItems="flex-end">
+              <TextField label="Remarks" size="small" fullWidth value={remarks}
+                onChange={e => setRemarks(e.target.value)} placeholder="Optional" />
+              <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} sx={{ whiteSpace: 'nowrap' }}>
+                Save
+              </Button>
+            </Box>
           </Grid>
         </Grid>
       </Paper>

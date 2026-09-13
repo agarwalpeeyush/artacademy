@@ -1,7 +1,7 @@
 package com.artacademy.attendance.repository;
 
 import com.artacademy.attendance.domain.AttendanceCorrection;
-import com.artacademy.attendance.domain.CorrectionStatus;
+import com.artacademy.attendance.domain.AttendanceRecordType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -11,9 +11,10 @@ import java.util.UUID;
 @Repository
 public interface AttendanceCorrectionRepository extends JpaRepository<AttendanceCorrection, UUID> {
 
-    List<AttendanceCorrection> findByStatus(CorrectionStatus status);
+    List<AttendanceCorrection> findByAttendanceId(UUID attendanceId);
 
-    List<AttendanceCorrection> findByRequestedByTeacherId(UUID teacherId);
+    List<AttendanceCorrection> findBySubjectId(UUID subjectId);
 
-    List<AttendanceCorrection> findByStudentId(UUID studentId);
+    List<AttendanceCorrection> findByAttendanceTypeAndClassIdAndAttendanceDate(
+            AttendanceRecordType attendanceType, UUID classId, java.time.LocalDate attendanceDate);
 }

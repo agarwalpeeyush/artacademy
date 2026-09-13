@@ -36,6 +36,14 @@ public class User {
     @Builder.Default
     private String status = "ACTIVE";
 
+    @Column(name = "MUST_CHANGE_PASSWORD", nullable = false)
+    @Builder.Default
+    private boolean mustChangePassword = false;
+
+    @Column(name = "IS_BOOTSTRAP", nullable = false)
+    @Builder.Default
+    private boolean bootstrap = false;
+
     @Column(name = "CREATED_AT")
     @Builder.Default
     private Instant createdAt = Instant.now();

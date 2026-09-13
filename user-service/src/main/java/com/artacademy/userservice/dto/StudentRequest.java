@@ -44,6 +44,10 @@ public class StudentRequest {
 
     private String address;
 
+    private String schoolName;
+
+    private String className;
+
     private LocalDate enrollmentDate;
 
     @NotBlank(message = "Status is required")

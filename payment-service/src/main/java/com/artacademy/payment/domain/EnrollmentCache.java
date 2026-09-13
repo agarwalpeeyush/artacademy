@@ -25,6 +25,7 @@ public class EnrollmentCache {
     @Column(name = "COURSE_ID", nullable = false)
     private UUID courseId;
 
+    /** Sum of the course's RECURRING (monthly) fees. Drives the monthly batch generator. */
     @Column(name = "COURSE_FEE", nullable = false, precision = 12, scale = 2)
     private BigDecimal courseFee;
 

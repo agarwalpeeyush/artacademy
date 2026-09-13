@@ -21,7 +21,7 @@ import enrollmentService from '../../services/enrollmentService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, feeTypeLabel } from '../../utils/formatters';
 
 const Info: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <Grid item xs={12} sm={6} md={4}>
@@ -105,12 +105,25 @@ const CourseDetailPage: React.FC = () => {
           </Box>
           <Grid container spacing={2}>
             <Info label="Course Code" value={course?.courseCode} />
-            <Info label="Type" value={course?.courseType} />
+            <Info label="Type" value={course?.courseTypeName} />
             <Info label="Duration (Months)" value={course?.durationMonths} />
-            <Info label="Monthly Fee" value={course != null ? formatCurrency(course.monthlyFee) : '-'} />
-            <Info label="Admission Fee" value={course != null ? formatCurrency(course.admissionFee) : '-'} />
             <Info label="Description" value={course?.description} />
           </Grid>
+          {course?.fees?.length ? (
+            <Box mt={2}>
+              <Typography variant="subtitle2" gutterBottom>Fee Structure</Typography>
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {course.fees.map((f, i) => (
+                  <Chip
+                    key={f.id ?? i}
+                    label={`${feeTypeLabel(f.feeType)}: ${formatCurrency(f.amount)}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                ))}
+              </Box>
+            </Box>
+          ) : null}
         </CardContent>
       </Card>
 

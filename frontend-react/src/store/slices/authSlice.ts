@@ -19,6 +19,7 @@ const toUser = (resp: LoginResponse): User => ({
   username: resp.username,
   email: resp.email,
   roles: resp.roles,
+  bootstrap: resp.bootstrap ?? false,
 });
 
 export const loginThunk = createAsyncThunk<LoginResponse, LoginRequest>(

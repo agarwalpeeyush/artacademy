@@ -1,6 +1,7 @@
 package com.artacademy.userservice.controller;
 
 import com.artacademy.common.dto.ApiResponse;
+import com.artacademy.common.exception.ApiException;
 import com.artacademy.userservice.dto.TeacherAvailabilityExceptionRequest;
 import com.artacademy.userservice.dto.TeacherAvailabilityExceptionResponse;
 import com.artacademy.userservice.dto.TeacherAvailabilityRequest;
@@ -64,7 +65,19 @@ public class TeacherController {
     @PostMapping
     @Operation(summary = "Create a new teacher")
     public ResponseEntity<ApiResponse<TeacherResponse>> createTeacher(
+            Authentication authentication,
             @Valid @RequestBody TeacherRequest request) {
+        // The bootstrap admin holds PRINCIPAL but is scoped to creating the first real Principal only.
+        // URL matchers can't express that body rule, so enforce it here: a bootstrap caller may create
+        // only a teacher whose additionalRoles include PRINCIPAL.
+        boolean isBootstrap = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_BOOTSTRAP".equals(a.getAuthority()));
+        if (isBootstrap) {
+            List<String> additionalRoles = request.getAdditionalRoles();
+            if (additionalRoles == null || !additionalRoles.contains("PRINCIPAL")) {
+                throw ApiException.forbidden("Bootstrap admin may only create a Principal");
+            }
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(teacherService.createTeacher(request)));
     }

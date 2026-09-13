@@ -1,6 +1,7 @@
 package com.artacademy.notification.kafka;
 
 import com.artacademy.common.events.AttendanceRecordedEvent;
+import com.artacademy.common.events.ExamScheduledEvent;
 import com.artacademy.common.events.FeeGeneratedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.NotificationRequestEvent;
@@ -14,6 +15,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -159,6 +161,48 @@ public class NotificationEventConsumer {
         } catch (Exception ex) {
             log.error("Error processing AttendanceRecordedEvent for subjectId={}: {}",
                     event.getSubjectId(), ex.getMessage(), ex);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // exam-scheduled topic
+    // Notify each enrolled student that an exam has been scheduled (R19)
+    // -------------------------------------------------------------------------
+
+    @KafkaListener(
+            topics = KafkaTopics.EXAM_SCHEDULED,
+            groupId = "${spring.kafka.consumer.group-id:notification-service}",
+            containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void onExamScheduled(@Payload ExamScheduledEvent event) {
+        List<ExamScheduledEvent.EnrolledStudent> students =
+                event.getStudents() != null ? event.getStudents() : List.of();
+        log.info("Received ExamScheduledEvent: examId={}, courseName={}, {} enrolled students",
+                event.getExamId(), event.getCourseName(), students.size());
+
+        String subject = String.format("Exam Scheduled – %s", event.getCourseName());
+        String body = String.format(
+                "Dear Student,%n%n"
+                + "An exam has been scheduled for %s.%n"
+                + "Date: %s%n"
+                + "Time: %s – %s%n%n"
+                + "Please be present on time.%n%n"
+                + "Regards,%nArt Academy",
+                event.getCourseName(), event.getExamDate(), event.getStartTime(), event.getEndTime());
+
+        for (ExamScheduledEvent.EnrolledStudent student : students) {
+            try {
+                NotificationRequest request = NotificationRequest.builder()
+                        .userId(student.getStudentId())
+                        .subject(subject)
+                        .body(body)
+                        .channel("EMAIL")
+                        .build();
+                notificationService.sendNotification(request);
+            } catch (Exception ex) {
+                log.error("Error notifying studentId={} of examId={}: {}",
+                        student.getStudentId(), event.getExamId(), ex.getMessage(), ex);
+            }
         }
     }
 }

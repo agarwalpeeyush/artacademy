@@ -1,7 +1,7 @@
 package com.artacademy.attendance.dto;
 
+import com.artacademy.attendance.domain.AttendanceRecordType;
 import com.artacademy.attendance.domain.AttendanceStatus;
-import com.artacademy.attendance.domain.CorrectionStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -11,6 +11,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
+/**
+ * A single attendance-edit audit-log entry (R16).
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,16 +21,15 @@ import java.util.UUID;
 public class AttendanceCorrectionResponse {
 
     private UUID id;
-    private UUID studentAttendanceId;
-    private UUID studentId;
+    private AttendanceRecordType attendanceType;
+    private UUID attendanceId;
+    private UUID subjectId;
     private UUID classId;
     private LocalDate attendanceDate;
-    private AttendanceStatus requestedStatus;
+    private AttendanceStatus oldStatus;
+    private AttendanceStatus newStatus;
     private String reason;
-    private UUID requestedByTeacherId;
-    private CorrectionStatus status;
-    private UUID reviewedByPrincipalId;
-    private String reviewNote;
-    private Instant createdAt;
-    private Instant reviewedAt;
+    private UUID editedByUserId;
+    private String editorRole;
+    private Instant editedAt;
 }

@@ -7,7 +7,13 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
-@Table(name = "TEACHER_ATTENDANCE")
+@Table(
+    name = "TEACHER_ATTENDANCE",
+    uniqueConstraints = @UniqueConstraint(
+        name = "uq_teacher_attendance",
+        columnNames = {"TEACHER_ID", "CLASS_ID", "ATTENDANCE_DATE"}
+    )
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,6 +27,12 @@ public class TeacherAttendance {
 
     @Column(name = "TEACHER_ID", nullable = false)
     private UUID teacherId;
+
+    @Column(name = "CLASS_ID", nullable = false)
+    private UUID classId;
+
+    @Column(name = "COURSE_ID")
+    private UUID courseId;
 
     @Column(name = "ATTENDANCE_DATE", nullable = false)
     private LocalDate attendanceDate;
