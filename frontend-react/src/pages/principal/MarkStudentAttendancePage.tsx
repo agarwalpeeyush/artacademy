@@ -45,7 +45,9 @@ const MarkStudentAttendancePage: React.FC = () => {
   const { list: courses } = useSelector((state: RootState) => state.courses);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
 
-  const isTeacher = roles.includes('ROLE_TEACHER');
+  // A principal marks on behalf of any teacher; only treat the user as a plain teacher
+  // when they are NOT also a principal (principal role takes precedence, per the app's routing).
+  const isTeacher = roles.includes('ROLE_TEACHER') && !roles.includes('ROLE_PRINCIPAL');
 
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
