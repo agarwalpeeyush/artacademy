@@ -13,14 +13,14 @@ const normStudentAttendance = (a: any): StudentAttendance => ({
   id: a.id,
   studentId: a.studentId,
   studentName: a.studentName,
-  classId: a.classId,
   courseId: a.courseId,
-  sessionId: a.sessionId,
+  timetableId: a.timetableId,
   date: a.attendanceDate ?? a.date ?? '',
   attendanceDate: a.attendanceDate ?? a.date ?? '',
   status: a.status,
+  startTime: a.startTime,
+  endTime: a.endTime,
   remarks: a.remarks,
-  sessionKind: a.sessionKind ?? 'REGULAR',
 });
 
 const normTeacherAttendance = (a: any): TeacherAttendance => ({
@@ -60,17 +60,11 @@ export interface AttendanceEdit {
   newStatus: AttendanceStatus;
 }
 
-export interface CoverUpStudentEntry {
-  studentId: string;
-  status: AttendanceStatus;
-  remarks?: string;
-}
-
 const attendanceService = {
   // ---- Student attendance ----
   getStudentAttendance: async (params: {
     studentId?: string;
-    classId?: string;
+    timetableId?: string;
     startDate?: string;
     endDate?: string;
   }): Promise<StudentAttendance[]> => {
@@ -100,48 +94,37 @@ const attendanceService = {
     return toArray(unwrap(response)).map(normStudentAttendance);
   },
 
-  // R9 bulk range: POST /attendance/students/class/{classId}/bulk-range
+  // R10 bulk range: POST /attendance/students/timetable/{timetableId}/bulk-range
   markStudentBulkRange: async (data: {
-    classId: string;
-    courseId?: string;
-    fromDate: string;
-    toDate: string;
+    timetableId: string;
+    courseId: string;
+    sessionDates: string[];
     status: AttendanceStatus;
-    studentIds?: string[];
+    studentIds: string[];
+    startTime?: string;
+    endTime?: string;
+    remarks?: string;
   }): Promise<StudentAttendance[]> => {
+    const { timetableId, status, ...rest } = data;
     const response = await api.post(
-      `/attendance/students/class/${data.classId}/bulk-range`,
-      data
+      `/attendance/students/timetable/${timetableId}/bulk-range`,
+      { ...rest, defaultStatus: status }
     );
     return toArray(unwrap(response)).map(normStudentAttendance);
   },
 
-  // R18 cover-up / extra class: POST /attendance/students/cover-up
-  markCoverUp: async (data: {
-    classId: string;
-    courseId?: string;
-    sessionDate: string;
-    startTime?: string;
-    endTime?: string;
-    originalSessionId?: string;
-    students: CoverUpStudentEntry[];
-  }): Promise<StudentAttendance[]> => {
-    const response = await api.post('/attendance/students/cover-up', data);
-    return toArray(unwrap(response)).map(normStudentAttendance);
-  },
-
-  getStudentStats: async (studentId: string, classId?: string): Promise<AttendanceStats> => {
-    const params = classId ? { classId } : {};
+  getStudentStats: async (studentId: string, courseId?: string): Promise<AttendanceStats> => {
+    const params = courseId ? { courseId } : {};
     const response = await api.get(`/attendance/students/${studentId}/stats`, { params });
     return unwrap(response);
   },
 
-  getClassAttendanceForDate: async (classId: string, date: string): Promise<StudentAttendance[]> => {
-    const response = await api.get(`/attendance/students/class/${classId}/date`, { params: { date } });
+  getTimetableAttendanceForDate: async (timetableId: string, date: string): Promise<StudentAttendance[]> => {
+    const response = await api.get(`/attendance/students/timetable/${timetableId}/date`, { params: { date } });
     return toArray(unwrap(response)).map(normStudentAttendance);
   },
 
-  // ---- Teacher attendance (per class, R11) ----
+  // ---- Teacher attendance (per timetable slot, R12) ----
   getTeacherAttendance: async (params: {
     teacherId?: string;
     startDate?: string;
@@ -165,38 +148,39 @@ const attendanceService = {
   },
 
   markTeacherAttendance: async (
-    data: Omit<TeacherAttendance, 'id'> & { classId: string; courseId?: string }
+    data: Omit<TeacherAttendance, 'id'> & { timetableId: string; courseId: string }
   ): Promise<TeacherAttendance> => {
     const { date, ...rest } = data as Omit<TeacherAttendance, 'id'> & {
       date?: string;
-      classId: string;
-      courseId?: string;
+      timetableId: string;
+      courseId: string;
     };
     const response = await api.post('/attendance/teachers', { ...rest, attendanceDate: date });
     return normTeacherAttendance(unwrap(response));
   },
 
-  // GET /attendance/teachers/class/{classId}/date
-  getTeacherClassAttendanceForDate: async (
-    classId: string,
+  // GET /attendance/teachers/timetable/{timetableId}/date
+  getTeacherTimetableAttendanceForDate: async (
+    timetableId: string,
     date: string
   ): Promise<TeacherAttendance[]> => {
-    const response = await api.get(`/attendance/teachers/class/${classId}/date`, { params: { date } });
+    const response = await api.get(`/attendance/teachers/timetable/${timetableId}/date`, { params: { date } });
     return toArray(unwrap(response)).map(normTeacherAttendance);
   },
 
-  // POST /attendance/teachers/class/{classId}/bulk-range
+  // POST /attendance/teachers/timetable/{timetableId}/bulk-range
   markTeacherBulkRange: async (data: {
-    classId: string;
-    courseId?: string;
-    fromDate: string;
-    toDate: string;
+    timetableId: string;
+    courseId: string;
+    sessionDates: string[];
     status: AttendanceStatus;
-    teacherId?: string;
+    teacherIds: string[];
+    remarks?: string;
   }): Promise<TeacherAttendance[]> => {
+    const { timetableId, status, ...rest } = data;
     const response = await api.post(
-      `/attendance/teachers/class/${data.classId}/bulk-range`,
-      data
+      `/attendance/teachers/timetable/${timetableId}/bulk-range`,
+      { ...rest, defaultStatus: status }
     );
     return toArray(unwrap(response)).map(normTeacherAttendance);
   },

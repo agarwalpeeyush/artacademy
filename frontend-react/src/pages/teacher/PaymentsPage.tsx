@@ -46,7 +46,7 @@ const PaymentsPage: React.FC = () => {
   const { feeCycles } = useSelector((state: RootState) => state.fees);
   const { cyclePayments } = useSelector((state: RootState) => state.payments);
 
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [students, setStudents] = useState<Student[]>([]);
   const [nameFilter, setNameFilter] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,9 +61,9 @@ const PaymentsPage: React.FC = () => {
   }, [dispatch, user]);
 
   useEffect(() => {
-    if (selectedClassId) {
+    if (selectedCourseId) {
       setLoading(true);
-      studentService.getByClass(selectedClassId)
+      studentService.getByCourse(selectedCourseId)
         .then(data => {
           setStudents(data);
           data.forEach(s => dispatch(fetchFeeCycles({ studentId: s.id })));
@@ -73,10 +73,10 @@ const PaymentsPage: React.FC = () => {
     } else {
       setStudents([]);
     }
-  }, [selectedClassId, dispatch]);
+  }, [selectedCourseId, dispatch]);
 
-  const uniqueClasses = useMemo(
-    () => [...new Map(teacherTimetables.map(s => [s.classId, s])).values()],
+  const uniqueCourses = useMemo(
+    () => [...new Map(teacherTimetables.map(s => [s.courseId, s])).values()],
     [teacherTimetables],
   );
 
@@ -128,15 +128,15 @@ const PaymentsPage: React.FC = () => {
     <Box>
       <PageHeader
         title="Payments"
-        subtitle="View students in your classes and record fee payments"
+        subtitle="View students in your courses and record fee payments"
         breadcrumbs={[{ label: 'Teacher' }, { label: 'Payments' }]}
       />
 
       <Box mb={3} display="flex" gap={2} flexWrap="wrap">
-        <TextField select label="Select Class" size="small" sx={{ minWidth: 260 }}
-          value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)}>
-          <MenuItem value="">-- Select a class --</MenuItem>
-          {uniqueClasses.map(s => <MenuItem key={s.classId} value={s.classId}>{s.className}</MenuItem>)}
+        <TextField select label="Select Course" size="small" sx={{ minWidth: 260 }}
+          value={selectedCourseId} onChange={e => setSelectedCourseId(e.target.value)}>
+          <MenuItem value="">-- Select a course --</MenuItem>
+          {uniqueCourses.map(s => <MenuItem key={s.courseId} value={s.courseId}>{s.courseName}</MenuItem>)}
         </TextField>
         <TextField label="Search student by name" size="small" sx={{ minWidth: 260 }}
           value={nameFilter} onChange={e => setNameFilter(e.target.value)} />
@@ -144,7 +144,7 @@ const PaymentsPage: React.FC = () => {
 
       {loading ? (
         <LoadingSpinner />
-      ) : selectedClassId && filteredStudents.length > 0 ? (
+      ) : selectedCourseId && filteredStudents.length > 0 ? (
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
@@ -207,10 +207,10 @@ const PaymentsPage: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
-      ) : selectedClassId ? (
-        <Typography color="text.secondary">No students found in this class.</Typography>
+      ) : selectedCourseId ? (
+        <Typography color="text.secondary">No students found in this course.</Typography>
       ) : (
-        <Typography color="text.secondary">Select a class to view students.</Typography>
+        <Typography color="text.secondary">Select a course to view students.</Typography>
       )}
 
       <Dialog open={!!payCycle} onClose={() => setPayCycle(null)} maxWidth="sm" fullWidth>

@@ -60,8 +60,8 @@ const studentService = {
     await api.delete(`/students/${id}`);
   },
 
-  getByClass: async (classId: string): Promise<Student[]> => {
-    const enrollments = await enrollmentService.getByClass(classId);
+  getByCourse: async (courseId: string): Promise<Student[]> => {
+    const enrollments = await enrollmentService.getByCourse(courseId);
     const enrolledIds = new Set(
       enrollments.filter(e => e.status === 'ACTIVE').map(e => e.studentId),
     );

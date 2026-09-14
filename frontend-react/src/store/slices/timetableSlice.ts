@@ -58,7 +58,7 @@ export const fetchStudentTimetables = createAsyncThunk<Timetable[], string>(
   }
 );
 
-export const createTimetable = createAsyncThunk<Timetable, { classId: string; teacherId: string; startTime: string; endTime: string; dayOfWeek: string }>(
+export const createTimetable = createAsyncThunk<Timetable, { courseId: string; teacherId: string; startTime: string; endTime: string; dayOfWeek: string }>(
   'timetables/create',
   async (data, { rejectWithValue }) => {
     try {
@@ -66,6 +66,18 @@ export const createTimetable = createAsyncThunk<Timetable, { classId: string; te
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };
       return rejectWithValue(err.response?.data?.message || 'Failed to create timetable');
+    }
+  }
+);
+
+export const updateTimetable = createAsyncThunk<Timetable, { id: string; courseId: string; teacherId: string; startTime: string; endTime: string; dayOfWeek: string }>(
+  'timetables/update',
+  async ({ id, ...data }, { rejectWithValue }) => {
+    try {
+      return await timetableService.update(id, data);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(err.response?.data?.message || 'Failed to update timetable');
     }
   }
 );
@@ -95,11 +107,11 @@ export const fetchConflicts = createAsyncThunk<TimetableConflict[]>(
   }
 );
 
-export const fetchUpcomingClasses = createAsyncThunk<UpcomingClass[], { classIds: string[]; limit?: number }>(
+export const fetchUpcomingClasses = createAsyncThunk<UpcomingClass[], { courseIds: string[]; limit?: number }>(
   'timetables/fetchUpcoming',
-  async ({ classIds, limit }, { rejectWithValue }) => {
+  async ({ courseIds, limit }, { rejectWithValue }) => {
     try {
-      return await timetableService.getUpcoming(classIds, limit);
+      return await timetableService.getUpcoming(courseIds, limit);
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };
       return rejectWithValue(err.response?.data?.message || 'Failed to fetch upcoming classes');
@@ -121,6 +133,9 @@ const timetableSlice = createSlice({
       .addCase(fetchTeacherTimetables.fulfilled, (state, action) => { state.teacherTimetables = action.payload; })
       .addCase(fetchStudentTimetables.fulfilled, (state, action) => { state.studentTimetables = action.payload; })
       .addCase(createTimetable.fulfilled, (state, action) => { state.list.push(action.payload); })
+      .addCase(updateTimetable.fulfilled, (state, action) => {
+        state.list = state.list.map(s => s.id === action.payload.id ? action.payload : s);
+      })
       .addCase(deleteTimetable.fulfilled, (state, action) => {
         state.list = state.list.filter(s => s.id !== action.payload);
       })

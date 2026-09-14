@@ -1,6 +1,5 @@
 package com.artacademy.courseenrollment.controller;
 
-import com.artacademy.courseenrollment.dto.GenerateTimetableRequest;
 import com.artacademy.courseenrollment.dto.TimetableConflictResponse;
 import com.artacademy.courseenrollment.dto.TimetableRequest;
 import com.artacademy.courseenrollment.dto.TimetableResponse;
@@ -46,14 +45,6 @@ public class TimetableController {
         return ResponseEntity.status(HttpStatus.CREATED).body(timetableService.createTimetable(request));
     }
 
-    @PostMapping("/generate")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Auto-generate timetables for a list of class/teacher pairs")
-    public ResponseEntity<List<TimetableResponse>> generateTimetables(
-            @Valid @RequestBody GenerateTimetableRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(timetableService.generateTimetables(request));
-    }
-
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('PRINCIPAL')")
     @Operation(summary = "Update an existing timetable")
@@ -72,7 +63,7 @@ public class TimetableController {
 
     @GetMapping("/conflicts")
     @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "List timetable conflicts (teacher double-booking, class overlaps)")
+    @Operation(summary = "List timetable conflicts (teacher double-booking, course overlaps)")
     public ResponseEntity<List<TimetableConflictResponse>> getConflicts() {
         return ResponseEntity.ok(timetableService.getConflicts());
     }
@@ -80,10 +71,10 @@ public class TimetableController {
     @GetMapping("/upcoming")
     @Operation(summary = "Get upcoming class sessions in chronological order")
     public ResponseEntity<List<UpcomingClassResponse>> getUpcoming(
-            @RequestParam(name = "classIds", required = false) String classIdsParam,
+            @RequestParam(name = "courseIds", required = false) String courseIdsParam,
             @RequestParam(name = "limit", defaultValue = "10") int limit) {
-        List<UUID> classIds = parseClassIds(classIdsParam);
-        return ResponseEntity.ok(timetableService.getUpcoming(classIds, limit));
+        List<UUID> courseIds = parseCourseIds(courseIdsParam);
+        return ResponseEntity.ok(timetableService.getUpcoming(courseIds, limit));
     }
 
     @GetMapping("/teacher/{teacherId}")
@@ -92,29 +83,29 @@ public class TimetableController {
         return ResponseEntity.ok(timetableService.getByTeacher(teacherId));
     }
 
-    @GetMapping("/class/{classId}")
-    @Operation(summary = "Get timetables for a class")
-    public ResponseEntity<List<TimetableResponse>> getByClass(@PathVariable("classId") UUID classId) {
-        return ResponseEntity.ok(timetableService.getByClass(classId));
+    @GetMapping("/course/{courseId}")
+    @Operation(summary = "Get timetables for a course")
+    public ResponseEntity<List<TimetableResponse>> getByCourse(@PathVariable("courseId") UUID courseId) {
+        return ResponseEntity.ok(timetableService.getByCourse(courseId));
     }
 
     @GetMapping("/student/{studentId}")
-    @Operation(summary = "Get timetables for a student by their enrolled class IDs")
+    @Operation(summary = "Get timetables for a student by their enrolled course IDs")
     public ResponseEntity<List<TimetableResponse>> getByStudent(
             @PathVariable("studentId") UUID studentId,
-            @RequestParam(name = "classIds", required = false) String classIdsParam) {
-        List<UUID> classIds = parseClassIds(classIdsParam);
-        if (classIds.isEmpty()) {
+            @RequestParam(name = "courseIds", required = false) String courseIdsParam) {
+        List<UUID> courseIds = parseCourseIds(courseIdsParam);
+        if (courseIds.isEmpty()) {
             return ResponseEntity.ok(List.of());
         }
-        return ResponseEntity.ok(timetableService.getByStudent(studentId, classIds));
+        return ResponseEntity.ok(timetableService.getByStudent(studentId, courseIds));
     }
 
-    private static List<UUID> parseClassIds(String classIdsParam) {
-        if (classIdsParam == null || classIdsParam.isBlank()) {
+    private static List<UUID> parseCourseIds(String courseIdsParam) {
+        if (courseIdsParam == null || courseIdsParam.isBlank()) {
             return List.of();
         }
-        return Arrays.stream(classIdsParam.split(","))
+        return Arrays.stream(courseIdsParam.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .map(UUID::fromString)

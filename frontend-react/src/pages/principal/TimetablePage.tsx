@@ -6,16 +6,16 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTimetables, createTimetable, deleteTimetable } from '../../store/slices/timetableSlice';
+import { fetchTimetables, createTimetable, updateTimetable, deleteTimetable } from '../../store/slices/timetableSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
-import { Timetable, CourseClass } from '../../types';
-import courseService from '../../services/courseService';
+import { Timetable } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { getDayName, formatTime } from '../../utils/formatters';
@@ -23,7 +23,7 @@ import { getDayName, formatTime } from '../../utils/formatters';
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
 const schema = yup.object({
-  classId: yup.string().required('Class is required'),
+  courseId: yup.string().required('Course is required'),
   teacherId: yup.string().required('Teacher is required'),
   daysOfWeek: yup.array(yup.string().required()).min(1, 'Select at least one day').required(),
   startTime: yup.string().required('Start time is required'),
@@ -31,7 +31,7 @@ const schema = yup.object({
 });
 
 type TimetableFormData = {
-  classId: string;
+  courseId: string;
   teacherId: string;
   daysOfWeek: string[];
   startTime: string;
@@ -42,24 +42,56 @@ const TimetablePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { list: timetables, loading } = useSelector((state: RootState) => state.timetables);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
-  const [classes, setClasses] = useState<CourseClass[]>([]);
+  const { list: courses } = useSelector((state: RootState) => state.courses);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Timetable | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<TimetableFormData>({
     resolver: yupResolver(schema) as never,
-    defaultValues: { classId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00' },
+    defaultValues: { courseId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00' },
   });
 
   useEffect(() => {
     dispatch(fetchTimetables());
     dispatch(fetchTeachers());
     dispatch(fetchCourses());
-    courseService.getAllClasses().then(setClasses).catch(() => {});
   }, [dispatch]);
+
+  const handleAdd = () => {
+    setEditing(null);
+    reset({ courseId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00' });
+    setDialogOpen(true);
+  };
+
+  const handleEdit = (s: Timetable) => {
+    setEditing(s);
+    reset({
+      courseId: s.courseId,
+      teacherId: s.teacherId,
+      daysOfWeek: [s.dayOfWeek.toUpperCase()],
+      startTime: s.startTime.slice(0, 5),
+      endTime: s.endTime.slice(0, 5),
+    });
+    setDialogOpen(true);
+  };
 
   const handleSubmitForm = async (data: TimetableFormData) => {
     const { daysOfWeek, ...rest } = data;
+
+    if (editing) {
+      try {
+        await dispatch(updateTimetable({ id: editing.id, ...rest, dayOfWeek: daysOfWeek[0] })).unwrap();
+        setSnackbar({ open: true, message: 'Timetable entry updated', severity: 'success' });
+        setDialogOpen(false);
+        setEditing(null);
+        reset();
+      } catch (err: unknown) {
+        setSnackbar({ open: true, message: String(err) || 'Update failed', severity: 'error' });
+      }
+      return;
+    }
+
     const failures: string[] = [];
     let successCount = 0;
     for (const day of daysOfWeek) {
@@ -92,9 +124,9 @@ const TimetablePage: React.FC = () => {
     }
   };
 
-  const classNameById = useMemo(
-    () => new Map(classes.map(c => [c.id, c.className])),
-    [classes],
+  const courseNameById = useMemo(
+    () => new Map(courses.map(c => [c.id, c.courseName])),
+    [courses],
   );
   const teacherNameById = useMemo(
     () => new Map(teachers.map(t => [t.id, `${t.firstName} ${t.lastName}`.trim()])),
@@ -115,7 +147,7 @@ const TimetablePage: React.FC = () => {
         subtitle="Weekly class timetable"
         breadcrumbs={[{ label: 'Principal' }, { label: 'Timetable' }]}
         action={
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
             Add Schedule
           </Button>
         }
@@ -126,7 +158,7 @@ const TimetablePage: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 700 }}>Day</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Class</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
               <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
@@ -143,10 +175,13 @@ const TimetablePage: React.FC = () => {
                       {getDayName(day)}
                     </TableCell>
                   )}
-                  <TableCell>{s.className || classNameById.get(s.classId) || '-'}</TableCell>
+                  <TableCell>{s.courseName || courseNameById.get(s.courseId) || '-'}</TableCell>
                   <TableCell>{s.teacherName || teacherNameById.get(s.teacherId) || '-'}</TableCell>
                   <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
                   <TableCell align="center">
+                    <Button size="small" startIcon={<EditIcon />} onClick={() => handleEdit(s)}>
+                      Edit
+                    </Button>
                     <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(s.id)}>
                       Remove
                     </Button>
@@ -165,15 +200,15 @@ const TimetablePage: React.FC = () => {
         </Table>
       </TableContainer>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Timetable Entry</DialogTitle>
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditing(null); }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editing ? 'Edit Timetable Entry' : 'Add Timetable Entry'}</DialogTitle>
         <Box component="form" onSubmit={handleSubmit(handleSubmitForm)}>
           <DialogContent>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
-                <Controller name="classId" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Class" fullWidth size="small" error={!!errors.classId} helperText={errors.classId?.message}>
-                    {classes.map(c => <MenuItem key={c.id} value={c.id}>{c.className}</MenuItem>)}
+                <Controller name="courseId" control={control} render={({ field }) => (
+                  <TextField {...field} select label="Course" fullWidth size="small" error={!!errors.courseId} helperText={errors.courseId?.message}>
+                    {courses.map(c => <MenuItem key={c.id} value={c.id}>{c.courseName}</MenuItem>)}
                   </TextField>
                 )} />
               </Grid>
@@ -186,18 +221,33 @@ const TimetablePage: React.FC = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Controller name="daysOfWeek" control={control} render={({ field }) => (
-                  <TextField
-                    {...field}
-                    select
-                    SelectProps={{ multiple: true, renderValue: (sel) => (sel as string[]).map(getDayName).join(', ') }}
-                    label="Days of Week"
-                    fullWidth
-                    size="small"
-                    error={!!errors.daysOfWeek}
-                    helperText={errors.daysOfWeek?.message as string | undefined}
-                  >
-                    {DAYS.map(d => <MenuItem key={d} value={d}>{getDayName(d)}</MenuItem>)}
-                  </TextField>
+                  editing ? (
+                    <TextField
+                      select
+                      value={field.value[0] ?? ''}
+                      onChange={(e) => field.onChange([e.target.value])}
+                      label="Day of Week"
+                      fullWidth
+                      size="small"
+                      error={!!errors.daysOfWeek}
+                      helperText={errors.daysOfWeek?.message as string | undefined}
+                    >
+                      {DAYS.map(d => <MenuItem key={d} value={d}>{getDayName(d)}</MenuItem>)}
+                    </TextField>
+                  ) : (
+                    <TextField
+                      {...field}
+                      select
+                      SelectProps={{ multiple: true, renderValue: (sel) => (sel as string[]).map(getDayName).join(', ') }}
+                      label="Days of Week"
+                      fullWidth
+                      size="small"
+                      error={!!errors.daysOfWeek}
+                      helperText={errors.daysOfWeek?.message as string | undefined}
+                    >
+                      {DAYS.map(d => <MenuItem key={d} value={d}>{getDayName(d)}</MenuItem>)}
+                    </TextField>
+                  )
                 )} />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -213,8 +263,8 @@ const TimetablePage: React.FC = () => {
             </Grid>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
-            <Button onClick={() => setDialogOpen(false)} variant="outlined">Cancel</Button>
-            <Button type="submit" variant="contained">Add</Button>
+            <Button onClick={() => { setDialogOpen(false); setEditing(null); }} variant="outlined">Cancel</Button>
+            <Button type="submit" variant="contained">{editing ? 'Update' : 'Add'}</Button>
           </DialogActions>
         </Box>
       </Dialog>

@@ -3,7 +3,6 @@ package com.artacademy.payment.service;
 import com.artacademy.common.events.FeeStatusUpdatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.PaymentReceivedEvent;
-import com.artacademy.common.events.AdmissionFeePaidEvent;
 import com.artacademy.payment.domain.*;
 import com.artacademy.payment.dto.PaymentRequest;
 import com.artacademy.payment.dto.PaymentResponse;
@@ -158,23 +157,6 @@ public class PaymentService {
                 .build();
         kafkaTemplate.send(KafkaTopics.FEE_STATUS_UPDATED,
                 request.getStudentId().toString(), statusEvent);
-
-        // 9. When an ADMISSION cycle is fully settled, notify course-enrollment-service so it
-        // can flip Enrollment.admissionFeePaid = true.
-        if (cycle.getCycleKind() == FeeCycleKind.ADMISSION && cycle.getStatus() == FeeStatus.PAID) {
-            allDetails.stream().findFirst().ifPresent(detail -> {
-                AdmissionFeePaidEvent admissionEvent = AdmissionFeePaidEvent.builder()
-                        .enrollmentId(detail.getEnrollmentId())
-                        .studentId(request.getStudentId())
-                        .feeCycleId(cycle.getId())
-                        .occurredAt(Instant.now())
-                        .build();
-                kafkaTemplate.send(KafkaTopics.ADMISSION_FEE_PAID,
-                        detail.getEnrollmentId().toString(), admissionEvent);
-                log.info("Published AdmissionFeePaidEvent for enrollmentId={}, cycleId={}",
-                        detail.getEnrollmentId(), cycle.getId());
-            });
-        }
 
         log.info("Payment recorded: paymentId={}, cycleId={}, cycleStatus={}",
                 payment.getId(), cycle.getId(), cycle.getStatus());

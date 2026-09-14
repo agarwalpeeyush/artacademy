@@ -51,20 +51,9 @@ const StudentEnrollmentsPage: React.FC = () => {
                       size="small"
                     />
                   </Box>
-                  {enrollment.className && (
-                    <Typography variant="body2" color="text.secondary" mb={1}>
-                      Class: {enrollment.className}
-                    </Typography>
-                  )}
                   <Box display="flex" gap={1} flexWrap="wrap">
                     <Chip
                       label={`Enrolled: ${formatDate(enrollment.enrollmentDate)}`}
-                      size="small"
-                      variant="outlined"
-                    />
-                    <Chip
-                      label={enrollment.admissionFeePaid ? 'Admission Paid' : 'Admission Pending'}
-                      color={enrollment.admissionFeePaid ? 'success' : 'warning'}
                       size="small"
                       variant="outlined"
                     />

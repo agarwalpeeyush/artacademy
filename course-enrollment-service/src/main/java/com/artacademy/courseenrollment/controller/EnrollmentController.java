@@ -1,9 +1,11 @@
 package com.artacademy.courseenrollment.controller;
 
 import com.artacademy.common.dto.ApiResponse;
+import com.artacademy.courseenrollment.dto.EnrollmentFeesUpdateRequest;
 import com.artacademy.courseenrollment.dto.EnrollmentRequest;
 import com.artacademy.courseenrollment.dto.EnrollmentResponse;
 import com.artacademy.courseenrollment.dto.EnrollmentStatusRequest;
+import com.artacademy.courseenrollment.dto.EnrollmentTimetablesRequest;
 import com.artacademy.courseenrollment.service.EnrollmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,7 +29,7 @@ public class EnrollmentController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
-    @Operation(summary = "Enroll a student in a course/class (PRINCIPAL only)")
+    @Operation(summary = "Enroll a student in a course (PRINCIPAL or TEACHER)")
     public ResponseEntity<ApiResponse<EnrollmentResponse>> enrollStudent(
             @Valid @RequestBody EnrollmentRequest request) {
         EnrollmentResponse created = enrollmentService.enrollStudent(request);
@@ -56,12 +58,12 @@ public class EnrollmentController {
                 enrollmentService.getEnrollmentsByCourseId(courseId)));
     }
 
-    @GetMapping("/class/{classId}")
-    @Operation(summary = "Get all enrollments for a class")
-    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByClass(
-            @PathVariable("classId") UUID classId) {
+    @GetMapping("/timetable/{timetableId}")
+    @Operation(summary = "Get the active roster assigned to a timetable slot")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByTimetable(
+            @PathVariable("timetableId") UUID timetableId) {
         return ResponseEntity.ok(ApiResponse.success(
-                enrollmentService.getEnrollmentsByClassId(classId)));
+                enrollmentService.getEnrollmentsByTimetableId(timetableId)));
     }
 
     @DeleteMapping("/{id}")
@@ -80,5 +82,25 @@ public class EnrollmentController {
             @Valid @RequestBody EnrollmentStatusRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 enrollmentService.updateStatus(id, request.getStatus())));
+    }
+
+    @PutMapping("/{id}/fees")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Override the fee lines on an enrollment (PRINCIPAL or TEACHER)")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> updateFees(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody EnrollmentFeesUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                enrollmentService.updateFees(id, request.getFees())));
+    }
+
+    @PutMapping("/{id}/timetables")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Assign the timetable slots an enrolled child attends (PRINCIPAL or TEACHER)")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> updateTimetables(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody EnrollmentTimetablesRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                enrollmentService.updateTimetables(id, request.getTimetableIds())));
     }
 }

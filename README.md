@@ -189,11 +189,22 @@ sets `SPRING_PROFILES_ACTIVE=docker`, so containers seed automatically. A **defa
 (`ON CONFLICT DO NOTHING`) — restarts never duplicate rows, and any account you create later is
 preserved.
 
-**All seeded accounts share the password `Admin@1234`** (emails follow `<username>@artacademy.test`).
-Log in at http://localhost:3000.
+The auth seed (`auth-service`) creates a **single bootstrap `admin` account** so the system is
+loggable on a fresh database. Log in at http://localhost:3000 with:
+
+| Username | Password | Email |
+|---|---|---|
+| `admin` | `Admin@1234` | `admin@artacademy.test` |
+
+This bootstrap account is scoped **solely to creating the first real PRINCIPAL**: its password
+cannot be changed, and once a non-bootstrap PRINCIPAL exists it auto-deactivates (`STATUS='INACTIVE'`)
+and can no longer log in. Any other seeded demo accounts also use the password `Admin@1234` (emails
+follow `<username>@artacademy.test`).
 
 The known BCrypt hash used for the seeded password `Admin@1234` is
 `$2a$10$tfXCZWMTBa8t03.d/TajOOYcWT9PnaRrb6ufOW4k.tjaoPV2R3qKy`.
+
+These are demo credentials for local/testing use only.
 
 ---
 

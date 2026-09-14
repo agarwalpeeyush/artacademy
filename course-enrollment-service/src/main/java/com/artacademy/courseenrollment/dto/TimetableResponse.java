@@ -16,8 +16,9 @@ import java.util.UUID;
 public class TimetableResponse {
 
     private UUID id;
-    private UUID classId;
+    private UUID courseId;
     private UUID teacherId;
+    private String teacherName;
     private LocalTime startTime;
     private LocalTime endTime;
     private DayOfWeek dayOfWeek;

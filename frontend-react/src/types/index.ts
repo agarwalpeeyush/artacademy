@@ -130,39 +130,26 @@ export interface Exam {
   status: string;
 }
 
-export interface CourseClass {
-  id: string;
-  courseId: string;
-  courseName?: string;
-  teacherId?: string;
-  teacherName?: string;
-  className: string;
-  roomNumber?: string;
-  roomId?: string;
-  roomName?: string;
-  capacity: number;
-  startDate?: string;
-  endDate?: string;
-  status: string;
-}
-
 export interface Enrollment {
   id: string;
   studentId: string;
   studentName?: string;
   courseId: string;
   courseName?: string;
-  classId?: string;
-  className?: string;
   enrollmentDate: string;
   status: 'ACTIVE' | 'COMPLETED' | 'DROPPED' | 'SUSPENDED';
-  admissionFeePaid: boolean;
+  fees?: CourseFeeItem[];
+  // R9: the course timetable slots this child is assigned to attend.
+  timetables?: Timetable[];
+  timetableIds?: string[];
 }
 
 export interface TeacherAttendance {
   id: string;
   teacherId: string;
   teacherName?: string;
+  courseId?: string;
+  timetableId?: string;
   date: string;
   status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
   checkIn?: string;
@@ -176,15 +163,14 @@ export interface StudentAttendance {
   id: string;
   studentId: string;
   studentName?: string;
-  classId: string;
-  className?: string;
   courseId?: string;
-  sessionId?: string;
+  timetableId?: string;
   date: string;
   attendanceDate?: string;
   status: AttendanceStatus;
+  startTime?: string;
+  endTime?: string;
   remarks?: string;
-  sessionKind?: 'REGULAR' | 'COVER_UP_CLASS';
 }
 
 export interface AttendanceStats {
@@ -239,19 +225,21 @@ export interface AttendanceException {
 
 export interface Timetable {
   id: string;
-  classId: string;
-  className?: string;
+  courseId: string;
   teacherId: string;
   teacherName?: string;
-  courseId?: string;
   courseName?: string;
   dayOfWeek: string;
   startTime: string;
   endTime: string;
   active: boolean;
+  // Deprecated (Class model) — kept required so Step 5-7 pages compile unchanged
+  // until they are rewritten to the course/timetable-assignment model.
+  classId: string;
+  className?: string;
 }
 
-export type TimetableConflictType = 'TEACHER_DOUBLE_BOOKED' | 'CLASS_OVERLAP';
+export type TimetableConflictType = 'TEACHER_DOUBLE_BOOKED' | 'COURSE_OVERLAP';
 
 export interface TimetableConflict {
   type: TimetableConflictType;
@@ -261,7 +249,7 @@ export interface TimetableConflict {
   timetableId: string;
   otherTimetableId: string;
   teacherId: string;
-  classId: string;
+  courseId: string;
   description: string;
 }
 
@@ -271,11 +259,13 @@ export interface UpcomingClass {
   dayOfWeek: string;
   startTime: string;
   endTime: string;
-  classId: string;
+  courseId: string;
   teacherId: string;
-  className?: string;
   courseName?: string;
   teacherName?: string;
+  // Deprecated (Class model) — retained until Step 5-7 rewrites.
+  classId: string;
+  className?: string;
 }
 
 export interface TeacherAvailabilityException {

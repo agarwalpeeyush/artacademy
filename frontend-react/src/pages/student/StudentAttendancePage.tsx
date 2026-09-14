@@ -36,13 +36,6 @@ const StudentAttendancePage: React.FC = () => {
 
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'date', label: 'Date', minWidth: 120, format: (v) => formatDate(v as string) },
-    { id: 'className', label: 'Class', minWidth: 150 },
-    {
-      id: 'sessionKind', label: 'Type', minWidth: 110,
-      format: (v) => (v === 'COVER_UP_CLASS'
-        ? <Chip label="Cover-up" color="info" size="small" variant="outlined" />
-        : <Chip label="Regular" size="small" variant="outlined" />),
-    },
     {
       id: 'status', label: 'Status', minWidth: 100,
       format: (v) => <Chip label={v as string} color={statusColorMap[v as string] || 'default'} size="small" />,

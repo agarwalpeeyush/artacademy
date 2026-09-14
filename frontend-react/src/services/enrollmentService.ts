@@ -1,20 +1,39 @@
 import api from './api';
-import { Enrollment } from '../types';
+import { Enrollment, CourseFeeItem, Timetable } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 const toArray = (d: any): any[] => (Array.isArray(d) ? d : d?.content ?? []);
+
+const normTimetable = (t: any): Timetable => ({
+  id: t.id,
+  courseId: t.courseId,
+  teacherId: t.teacherId,
+  teacherName: t.teacherName ?? '',
+  courseName: t.courseName ?? '',
+  dayOfWeek: t.dayOfWeek,
+  startTime: t.startTime,
+  endTime: t.endTime,
+  active: t.active ?? true,
+  classId: t.classId ?? '',
+  className: t.className ?? '',
+});
 
 const norm = (e: any): Enrollment => ({
   id: e.id,
   studentId: e.studentId,
   studentName: e.studentName ?? '',
   courseId: e.courseId,
-  classId: e.classId,
   courseName: e.courseName ?? '',
-  className: e.className ?? '',
   enrollmentDate: e.enrollmentDate,
   status: e.status,
-  admissionFeePaid: e.admissionFeePaid ?? false,
+  fees: (e.fees ?? []).map((f: any) => ({
+    id: f.id,
+    feeType: f.feeType,
+    amount: Number(f.amount),
+    cadence: f.cadence,
+  })),
+  timetables: (e.timetables ?? []).map(normTimetable),
+  timetableIds: (e.timetables ?? []).map((t: any) => t.id),
 });
 
 const enrollmentService = {
@@ -33,13 +52,14 @@ const enrollmentService = {
     return toArray(unwrap(response)).map(norm);
   },
 
-  getByClass: async (classId: string): Promise<Enrollment[]> => {
-    const response = await api.get(`/enrollments/class/${classId}`);
+  getByCourse: async (courseId: string): Promise<Enrollment[]> => {
+    const response = await api.get(`/enrollments/course/${courseId}`);
     return toArray(unwrap(response)).map(norm);
   },
 
-  getByCourse: async (courseId: string): Promise<Enrollment[]> => {
-    const response = await api.get(`/enrollments/course/${courseId}`);
+  // R10: the ACTIVE roster assigned to a timetable slot (base roster for attendance marking).
+  getByTimetable: async (timetableId: string): Promise<Enrollment[]> => {
+    const response = await api.get(`/enrollments/timetable/${timetableId}`);
     return toArray(unwrap(response)).map(norm);
   },
 
@@ -50,6 +70,16 @@ const enrollmentService = {
 
   updateStatus: async (id: string, status: string): Promise<Enrollment> => {
     const response = await api.put(`/enrollments/${id}/status`, { status });
+    return norm(unwrap(response));
+  },
+
+  updateFees: async (id: string, fees: CourseFeeItem[]): Promise<Enrollment> => {
+    const response = await api.put(`/enrollments/${id}/fees`, { fees });
+    return norm(unwrap(response));
+  },
+
+  updateTimetables: async (id: string, timetableIds: string[]): Promise<Enrollment> => {
+    const response = await api.put(`/enrollments/${id}/timetables`, { timetableIds });
     return norm(unwrap(response));
   },
 

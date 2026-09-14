@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { Enrollment } from '../../types';
+import { Enrollment, CourseFeeItem } from '../../types';
 import enrollmentService from '../../services/enrollmentService';
 
 interface EnrollmentState {
@@ -64,6 +64,30 @@ export const updateEnrollmentStatus = createAsyncThunk<Enrollment, { id: string;
   }
 );
 
+export const updateEnrollmentFees = createAsyncThunk<Enrollment, { id: string; fees: CourseFeeItem[] }>(
+  'enrollments/updateFees',
+  async ({ id, fees }, { rejectWithValue }) => {
+    try {
+      return await enrollmentService.updateFees(id, fees);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(err.response?.data?.message || 'Failed to update fees');
+    }
+  }
+);
+
+export const updateEnrollmentTimetables = createAsyncThunk<Enrollment, { id: string; timetableIds: string[] }>(
+  'enrollments/updateTimetables',
+  async ({ id, timetableIds }, { rejectWithValue }) => {
+    try {
+      return await enrollmentService.updateTimetables(id, timetableIds);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(err.response?.data?.message || 'Failed to update timetable slots');
+    }
+  }
+);
+
 export const deleteEnrollment = createAsyncThunk<string, string>(
   'enrollments/delete',
   async (id, { rejectWithValue }) => {
@@ -91,6 +115,14 @@ const enrollmentSlice = createSlice({
       .addCase(fetchStudentEnrollments.fulfilled, (state, action) => { state.studentEnrollments = action.payload; })
       .addCase(createEnrollment.fulfilled, (state, action) => { state.list.push(action.payload); })
       .addCase(updateEnrollmentStatus.fulfilled, (state, action) => {
+        const idx = state.list.findIndex(e => e.id === action.payload.id);
+        if (idx !== -1) state.list[idx] = action.payload;
+      })
+      .addCase(updateEnrollmentFees.fulfilled, (state, action) => {
+        const idx = state.list.findIndex(e => e.id === action.payload.id);
+        if (idx !== -1) state.list[idx] = action.payload;
+      })
+      .addCase(updateEnrollmentTimetables.fulfilled, (state, action) => {
         const idx = state.list.findIndex(e => e.id === action.payload.id);
         if (idx !== -1) state.list[idx] = action.payload;
       })

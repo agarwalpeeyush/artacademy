@@ -17,7 +17,7 @@ public class TimetableConflictResponse {
 
     public enum ConflictType {
         TEACHER_DOUBLE_BOOKED,
-        CLASS_OVERLAP
+        COURSE_OVERLAP
     }
 
     private ConflictType type;
@@ -27,6 +27,6 @@ public class TimetableConflictResponse {
     private UUID timetableId;
     private UUID otherTimetableId;
     private UUID teacherId;
-    private UUID classId;
+    private UUID courseId;
     private String description;
 }

@@ -47,4 +47,12 @@ public class CourseTypeController {
             @Valid @RequestBody CourseTypeRequest request) {
         return ResponseEntity.ok(ApiResponse.success(courseTypeService.update(id, request)));
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "Delete a course type (PRINCIPAL only); blocked if in use")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
+        courseTypeService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
 }

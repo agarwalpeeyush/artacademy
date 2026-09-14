@@ -1,16 +1,12 @@
 package com.artacademy.attendance.service;
 
-import com.artacademy.attendance.domain.ClassSession;
-import com.artacademy.attendance.domain.ClassSessionStatus;
 import com.artacademy.attendance.domain.StudentAttendance;
-import com.artacademy.attendance.dto.ClassRangeAttendanceRequest;
-import com.artacademy.attendance.dto.CoverUpSessionRequest;
 import com.artacademy.attendance.dto.StudentAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceResponse;
 import com.artacademy.attendance.dto.StudentAttendanceStatsResponse;
+import com.artacademy.attendance.dto.TimetableRangeAttendanceRequest;
 import com.artacademy.attendance.domain.AttendanceStatus;
 import com.artacademy.attendance.mapper.StudentAttendanceMapper;
-import com.artacademy.attendance.repository.ClassSessionRepository;
 import com.artacademy.attendance.repository.StudentAttendanceRepository;
 import com.artacademy.common.events.AttendanceRecordedEvent;
 import com.artacademy.common.events.AttendanceUpdatedEvent;
@@ -36,22 +32,20 @@ public class StudentAttendanceService {
 
     private final StudentAttendanceRepository studentAttendanceRepository;
     private final StudentAttendanceMapper studentAttendanceMapper;
-    private final ClassSessionService classSessionService;
-    private final ClassSessionRepository classSessionRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /**
-     * Mark attendance for a student. Rejects duplicate entries for the same
-     * student + class + date combination.
+     * Mark attendance for a student on a timetable slot. Rejects duplicate entries for the same
+     * student + timetable slot + date combination.
      */
     public StudentAttendanceResponse markAttendance(StudentAttendanceRequest request) {
-        boolean duplicate = studentAttendanceRepository.existsByStudentIdAndClassIdAndAttendanceDate(
-                request.getStudentId(), request.getClassId(), request.getAttendanceDate());
+        boolean duplicate = studentAttendanceRepository.existsByStudentIdAndTimetableIdAndAttendanceDate(
+                request.getStudentId(), request.getTimetableId(), request.getAttendanceDate());
 
         if (duplicate) {
             throw ApiException.conflict(
                     "Attendance already recorded for studentId=" + request.getStudentId()
-                    + ", classId=" + request.getClassId()
+                    + ", timetableId=" + request.getTimetableId()
                     + ", date=" + request.getAttendanceDate());
         }
 
@@ -62,20 +56,22 @@ public class StudentAttendanceService {
 
     /**
      * Bulk upsert: for each request, update the existing record for
-     * student+class+date (firing ATTENDANCE_UPDATED) or insert a new one
+     * student+timetable+date (firing ATTENDANCE_UPDATED) or insert a new one
      * (firing ATTENDANCE_RECORDED). Safe to re-submit.
      */
     public List<StudentAttendanceResponse> markAttendanceBulk(List<StudentAttendanceRequest> requests) {
         return requests.stream().map(request -> {
             Optional<StudentAttendance> existing = studentAttendanceRepository
-                    .findByStudentIdAndClassIdAndAttendanceDate(
-                            request.getStudentId(), request.getClassId(), request.getAttendanceDate());
+                    .findByStudentIdAndTimetableIdAndAttendanceDate(
+                            request.getStudentId(), request.getTimetableId(), request.getAttendanceDate());
 
             if (existing.isPresent()) {
                 StudentAttendance record = existing.get();
                 AttendanceStatus oldStatus = record.getStatus();
                 record.setStatus(request.getStatus());
                 record.setRemarks(request.getRemarks());
+                record.setStartTime(request.getStartTime());
+                record.setEndTime(request.getEndTime());
                 StudentAttendance saved = studentAttendanceRepository.save(record);
                 publishUpdated(saved, oldStatus);
                 return studentAttendanceMapper.toResponse(saved);
@@ -88,47 +84,37 @@ public class StudentAttendanceService {
     }
 
     /**
-     * Mark attendance for every supplied student on each scheduled session day of a
-     * class within [fromDate, toDate]. Only dates that already have a (non-CANCELLED)
-     * ClassSession for the class are touched — sessions are not created here. Each
-     * student+date pair is upserted: existing records are updated (ATTENDANCE_UPDATED),
-     * missing ones are inserted (ATTENDANCE_RECORDED). Safe to re-submit.
+     * Bulk-mark a timetable slot's roster across an explicit set of session dates (R10). The
+     * frontend supplies the dates that fall on the slot's weekday (decision 8.3). Each
+     * student+date pair is upserted: existing records are updated (ATTENDANCE_UPDATED), missing
+     * ones inserted (ATTENDANCE_RECORDED). Safe to re-submit.
      */
-    public List<StudentAttendanceResponse> markClassAttendanceForRange(UUID classId,
-                                                                       ClassRangeAttendanceRequest request) {
-        if (request.getFromDate().isAfter(request.getToDate())) {
-            throw ApiException.badRequest(
-                    "fromDate " + request.getFromDate() + " must not be after toDate " + request.getToDate());
-        }
-
-        List<ClassSession> sessions = classSessionRepository
-                .findByClassIdAndSessionDateBetween(classId, request.getFromDate(), request.getToDate())
-                .stream()
-                .filter(s -> s.getStatus() != ClassSessionStatus.CANCELLED)
-                .toList();
-
+    public List<StudentAttendanceResponse> markTimetableAttendanceForRange(UUID timetableId,
+                                                                           TimetableRangeAttendanceRequest request) {
         List<StudentAttendanceResponse> results = new java.util.ArrayList<>();
-        for (ClassSession session : sessions) {
-            UUID courseId = request.getCourseId() != null ? request.getCourseId() : session.getCourseId();
+        for (LocalDate date : request.getSessionDates()) {
             for (UUID studentId : request.getStudentIds()) {
                 StudentAttendanceRequest attendanceRequest = StudentAttendanceRequest.builder()
                         .studentId(studentId)
-                        .classId(classId)
-                        .courseId(courseId)
-                        .attendanceDate(session.getSessionDate())
+                        .courseId(request.getCourseId())
+                        .timetableId(timetableId)
+                        .attendanceDate(date)
                         .status(request.getDefaultStatus())
+                        .startTime(request.getStartTime())
+                        .endTime(request.getEndTime())
                         .remarks(request.getRemarks())
                         .build();
 
                 Optional<StudentAttendance> existing = studentAttendanceRepository
-                        .findByStudentIdAndClassIdAndAttendanceDate(
-                                studentId, classId, session.getSessionDate());
+                        .findByStudentIdAndTimetableIdAndAttendanceDate(studentId, timetableId, date);
 
                 if (existing.isPresent()) {
                     StudentAttendance record = existing.get();
                     AttendanceStatus oldStatus = record.getStatus();
                     record.setStatus(request.getDefaultStatus());
                     record.setRemarks(request.getRemarks());
+                    record.setStartTime(request.getStartTime());
+                    record.setEndTime(request.getEndTime());
                     StudentAttendance saved = studentAttendanceRepository.save(record);
                     publishUpdated(saved, oldStatus);
                     results.add(studentAttendanceMapper.toResponse(saved));
@@ -143,46 +129,10 @@ public class StudentAttendanceService {
     }
 
     /**
-     * Create a cover-up (extra) class session and mark attendance for its ad-hoc roster (R18).
-     * Each roster entry becomes a StudentAttendance row tied to the new cover-up session. This does
-     * NOT touch any existing REGULAR-session attendance: the original absence stands as its own row
-     * (I6). No fee is generated — cover-up classes are free.
-     */
-    public List<StudentAttendanceResponse> createCoverUpAndMark(CoverUpSessionRequest request) {
-        ClassSession session = classSessionService.createCoverUp(
-                request.getClassId(),
-                request.getCourseId(),
-                request.getSessionDate(),
-                request.getStartTime(),
-                request.getEndTime(),
-                request.getOriginalSessionId());
-
-        UUID courseId = request.getCourseId() != null ? request.getCourseId() : session.getCourseId();
-
-        List<StudentAttendanceResponse> results = new java.util.ArrayList<>();
-        for (CoverUpSessionRequest.StudentEntry entry : request.getStudents()) {
-            StudentAttendance attendance = StudentAttendance.builder()
-                    .studentId(entry.getStudentId())
-                    .classId(request.getClassId())
-                    .courseId(courseId)
-                    .sessionId(session.getId())
-                    .attendanceDate(request.getSessionDate())
-                    .status(entry.getStatus())
-                    .remarks(entry.getRemarks())
-                    .build();
-            StudentAttendance saved = studentAttendanceRepository.save(attendance);
-            publishRecorded(saved);
-            results.add(studentAttendanceMapper.toResponse(saved));
-        }
-        log.info("Recorded cover-up session id={} classId={} date={} for {} students",
-                session.getId(), request.getClassId(), request.getSessionDate(), results.size());
-        return results;
-    }
-
-    /**
      * Update status/remarks of a single record; publishes ATTENDANCE_UPDATED.
      */
-    public StudentAttendanceResponse updateAttendance(UUID id, StudentAttendanceRequest request) {        StudentAttendance record = studentAttendanceRepository.findById(id)
+    public StudentAttendanceResponse updateAttendance(UUID id, StudentAttendanceRequest request) {
+        StudentAttendance record = studentAttendanceRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Attendance record not found: " + id));
 
         AttendanceStatus oldStatus = record.getStatus();
@@ -210,31 +160,25 @@ public class StudentAttendanceService {
         } else {
             records = studentAttendanceRepository.findByStudentId(studentId);
         }
-        return records.stream()
-                .map(studentAttendanceMapper::toResponse)
-                .collect(java.util.stream.Collectors.collectingAndThen(
-                        java.util.stream.Collectors.toList(), this::enrichSessionKind));
+        return records.stream().map(studentAttendanceMapper::toResponse).toList();
     }
 
     /**
-     * List attendance records for a class on a specific date.
+     * List attendance records for a timetable slot on a specific date.
      */
     @Transactional(readOnly = true)
-    public List<StudentAttendanceResponse> getByClassAndDate(UUID classId, LocalDate date) {
-        return studentAttendanceRepository.findByClassIdAndAttendanceDate(classId, date)
-                .stream()
-                .map(studentAttendanceMapper::toResponse)
-                .collect(java.util.stream.Collectors.collectingAndThen(
-                        java.util.stream.Collectors.toList(), this::enrichSessionKind));
+    public List<StudentAttendanceResponse> getByTimetableAndDate(UUID timetableId, LocalDate date) {
+        return studentAttendanceRepository.findByTimetableIdAndAttendanceDate(timetableId, date)
+                .stream().map(studentAttendanceMapper::toResponse).toList();
     }
 
     /**
-     * Compute attendance stats for a student, optionally scoped to one class.
+     * Compute attendance stats for a student, optionally scoped to one course.
      */
     @Transactional(readOnly = true)
-    public StudentAttendanceStatsResponse getStats(UUID studentId, UUID classId) {
-        List<StudentAttendance> records = (classId != null)
-                ? studentAttendanceRepository.findByStudentIdAndClassId(studentId, classId)
+    public StudentAttendanceStatsResponse getStats(UUID studentId, UUID courseId) {
+        List<StudentAttendance> records = (courseId != null)
+                ? studentAttendanceRepository.findByStudentIdAndCourseId(studentId, courseId)
                 : studentAttendanceRepository.findByStudentId(studentId);
 
         long total = records.size();
@@ -274,46 +218,11 @@ public class StudentAttendanceService {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /**
-     * Resolve each response's {@link SessionKind} from its ClassSession (which owns the
-     * field — StudentAttendance does not). Sessions are batch-fetched once by id to avoid
-     * N+1. Rows with a null/unknown sessionId default to REGULAR so self-views (I5) can
-     * label cover-up rows without special-casing nulls.
-     */
-    private List<StudentAttendanceResponse> enrichSessionKind(List<StudentAttendanceResponse> responses) {
-        List<UUID> sessionIds = responses.stream()
-                .map(StudentAttendanceResponse::getSessionId)
-                .filter(java.util.Objects::nonNull)
-                .distinct()
-                .toList();
-
-        java.util.Map<UUID, com.artacademy.attendance.domain.SessionKind> kindById =
-                sessionIds.isEmpty()
-                        ? java.util.Map.of()
-                        : classSessionRepository.findAllById(sessionIds).stream()
-                                .collect(java.util.stream.Collectors.toMap(
-                                        ClassSession::getId, ClassSession::getSessionKind));
-
-        for (StudentAttendanceResponse r : responses) {
-            r.setSessionKind(kindById.getOrDefault(
-                    r.getSessionId(), com.artacademy.attendance.domain.SessionKind.REGULAR));
-        }
-        return responses;
-    }
-
     private StudentAttendance insertRecord(StudentAttendanceRequest request) {
-        ClassSession session = classSessionService.resolveOrCreate(
-                request.getClassId(), request.getCourseId(), request.getAttendanceDate());
-
         StudentAttendance attendance = studentAttendanceMapper.toEntity(request);
-        attendance.setSessionId(session.getId());
-        if (attendance.getCourseId() == null) {
-            attendance.setCourseId(session.getCourseId());
-        }
         StudentAttendance saved = studentAttendanceRepository.save(attendance);
-        log.info("Created student attendance id={} for studentId={} classId={} date={} sessionId={}",
-                saved.getId(), saved.getStudentId(), saved.getClassId(),
-                saved.getAttendanceDate(), saved.getSessionId());
+        log.info("Created student attendance id={} for studentId={} timetableId={} date={}",
+                saved.getId(), saved.getStudentId(), saved.getTimetableId(), saved.getAttendanceDate());
         return saved;
     }
 

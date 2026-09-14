@@ -14,16 +14,16 @@ public interface StudentAttendanceRepository extends JpaRepository<StudentAttend
 
     List<StudentAttendance> findByStudentId(UUID studentId);
 
-    List<StudentAttendance> findByStudentIdAndClassId(UUID studentId, UUID classId);
+    List<StudentAttendance> findByStudentIdAndCourseId(UUID studentId, UUID courseId);
 
     List<StudentAttendance> findByStudentIdAndAttendanceDateBetween(
             UUID studentId, LocalDate from, LocalDate to);
 
-    List<StudentAttendance> findByClassIdAndAttendanceDate(UUID classId, LocalDate attendanceDate);
+    List<StudentAttendance> findByTimetableIdAndAttendanceDate(UUID timetableId, LocalDate attendanceDate);
 
-    Optional<StudentAttendance> findByStudentIdAndClassIdAndAttendanceDate(
-            UUID studentId, UUID classId, LocalDate attendanceDate);
+    Optional<StudentAttendance> findByStudentIdAndTimetableIdAndAttendanceDate(
+            UUID studentId, UUID timetableId, LocalDate attendanceDate);
 
-    boolean existsByStudentIdAndClassIdAndAttendanceDate(
-            UUID studentId, UUID classId, LocalDate attendanceDate);
+    boolean existsByStudentIdAndTimetableIdAndAttendanceDate(
+            UUID studentId, UUID timetableId, LocalDate attendanceDate);
 }

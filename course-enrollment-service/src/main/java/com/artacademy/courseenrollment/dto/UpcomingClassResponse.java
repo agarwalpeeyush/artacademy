@@ -21,6 +21,6 @@ public class UpcomingClassResponse {
     private DayOfWeek dayOfWeek;
     private LocalTime startTime;
     private LocalTime endTime;
-    private UUID classId;
+    private UUID courseId;
     private UUID teacherId;
 }

@@ -16,9 +16,9 @@ public interface TimetableRepository extends JpaRepository<Timetable, UUID> {
 
     List<Timetable> findByTeacherId(UUID teacherId);
 
-    List<Timetable> findByClassId(UUID classId);
+    List<Timetable> findByCourseId(UUID courseId);
 
-    List<Timetable> findByClassIdIn(List<UUID> classIds);
+    List<Timetable> findByCourseIdIn(List<UUID> courseIds);
 
     @Query("SELECT s FROM Timetable s WHERE s.teacherId = :teacherId AND s.dayOfWeek = :day " +
            "AND s.startTime < :end AND s.endTime > :start")

@@ -19,10 +19,11 @@ public class TeacherAttendanceRequest {
     @NotNull(message = "Teacher ID is required")
     private UUID teacherId;
 
-    @NotNull(message = "Class ID is required")
-    private UUID classId;
-
+    @NotNull(message = "Course ID is required")
     private UUID courseId;
+
+    @NotNull(message = "Timetable slot ID is required")
+    private UUID timetableId;
 
     @NotNull(message = "Attendance date is required")
     private LocalDate attendanceDate;

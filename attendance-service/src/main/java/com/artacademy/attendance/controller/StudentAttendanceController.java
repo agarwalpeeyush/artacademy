@@ -1,10 +1,9 @@
 package com.artacademy.attendance.controller;
 
-import com.artacademy.attendance.dto.ClassRangeAttendanceRequest;
-import com.artacademy.attendance.dto.CoverUpSessionRequest;
 import com.artacademy.attendance.dto.StudentAttendanceRequest;
 import com.artacademy.attendance.dto.StudentAttendanceResponse;
 import com.artacademy.attendance.dto.StudentAttendanceStatsResponse;
+import com.artacademy.attendance.dto.TimetableRangeAttendanceRequest;
 import com.artacademy.attendance.service.StudentAttendanceService;
 import com.artacademy.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,7 +28,7 @@ public class StudentAttendanceController {
     private final StudentAttendanceService studentAttendanceService;
 
     @PostMapping
-    @Operation(summary = "Mark student attendance")
+    @Operation(summary = "Mark student attendance for a timetable slot")
     public ResponseEntity<ApiResponse<StudentAttendanceResponse>> markAttendance(
             @Valid @RequestBody StudentAttendanceRequest request) {
         StudentAttendanceResponse response = studentAttendanceService.markAttendance(request);
@@ -37,7 +36,7 @@ public class StudentAttendanceController {
     }
 
     @PostMapping("/bulk")
-    @Operation(summary = "Bulk upsert student attendance for a class session")
+    @Operation(summary = "Bulk upsert student attendance for a timetable slot")
     public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> markAttendanceBulk(
             @Valid @RequestBody List<StudentAttendanceRequest> requests) {
         List<StudentAttendanceResponse> response =
@@ -45,23 +44,14 @@ public class StudentAttendanceController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @PostMapping("/class/{classId}/bulk-range")
-    @Operation(summary = "Mark attendance for students across scheduled session days of a class in a date range")
-    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> markClassAttendanceForRange(
-            @PathVariable("classId") UUID classId,
-            @Valid @RequestBody ClassRangeAttendanceRequest request) {
+    @PostMapping("/timetable/{timetableId}/bulk-range")
+    @Operation(summary = "Mark attendance for a timetable slot's roster across a set of session dates")
+    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> markTimetableAttendanceForRange(
+            @PathVariable("timetableId") UUID timetableId,
+            @Valid @RequestBody TimetableRangeAttendanceRequest request) {
         List<StudentAttendanceResponse> response =
-                studentAttendanceService.markClassAttendanceForRange(classId, request);
+                studentAttendanceService.markTimetableAttendanceForRange(timetableId, request);
         return ResponseEntity.ok(ApiResponse.success(response));
-    }
-
-    @PostMapping("/cover-up")
-    @Operation(summary = "Create a cover-up (extra) class session and mark attendance for an ad-hoc roster")
-    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> createCoverUp(
-            @Valid @RequestBody CoverUpSessionRequest request) {
-        List<StudentAttendanceResponse> response =
-                studentAttendanceService.createCoverUpAndMark(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
     @PutMapping("/{id}")
@@ -85,21 +75,21 @@ public class StudentAttendanceController {
     }
 
     @GetMapping("/{studentId}/stats")
-    @Operation(summary = "Get attendance stats for a student, optionally scoped to a class")
+    @Operation(summary = "Get attendance stats for a student, optionally scoped to a course")
     public ResponseEntity<ApiResponse<StudentAttendanceStatsResponse>> getStats(
             @PathVariable("studentId") UUID studentId,
-            @RequestParam(value = "classId", required = false) UUID classId) {
-        StudentAttendanceStatsResponse stats = studentAttendanceService.getStats(studentId, classId);
+            @RequestParam(value = "courseId", required = false) UUID courseId) {
+        StudentAttendanceStatsResponse stats = studentAttendanceService.getStats(studentId, courseId);
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
-    @GetMapping("/class/{classId}/date")
-    @Operation(summary = "List attendance records for a class on a specific date")
-    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> getByClassAndDate(
-            @PathVariable("classId") UUID classId,
+    @GetMapping("/timetable/{timetableId}/date")
+    @Operation(summary = "List attendance records for a timetable slot on a specific date")
+    public ResponseEntity<ApiResponse<List<StudentAttendanceResponse>>> getByTimetableAndDate(
+            @PathVariable("timetableId") UUID timetableId,
             @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         List<StudentAttendanceResponse> records =
-                studentAttendanceService.getByClassAndDate(classId, date);
+                studentAttendanceService.getByTimetableAndDate(timetableId, date);
         return ResponseEntity.ok(ApiResponse.success(records));
     }
 }

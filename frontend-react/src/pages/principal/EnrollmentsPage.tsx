@@ -2,11 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Grid, Chip, Alert, Snackbar, MenuItem, Autocomplete,
-  IconButton, Tooltip,
+  IconButton, Tooltip, Checkbox, ListItemText, OutlinedInput, InputLabel,
+  FormControl, Select, Typography, Divider,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { useForm, Controller } from 'react-hook-form';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
@@ -14,37 +17,48 @@ import { AppDispatch, RootState } from '../../store/store';
 import { fetchStudents } from '../../store/slices/studentSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
-import { fetchEnrollments, createEnrollment, updateEnrollmentStatus, deleteEnrollment } from '../../store/slices/enrollmentSlice';
-import { Enrollment, Course, Teacher } from '../../types';
-import courseService from '../../services/courseService';
+import { fetchEnrollments, createEnrollment, updateEnrollmentStatus, updateEnrollmentFees, updateEnrollmentTimetables, deleteEnrollment } from '../../store/slices/enrollmentSlice';
+import { Enrollment, Course, Teacher, Timetable, CourseFeeItem, FeeType, FeeCadence } from '../../types';
 import timetableService from '../../services/timetableService';
-import { CourseClass, Timetable } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatDate } from '../../utils/formatters';
-import { buildClassMap, resolveTeacherName, filterEnrollments, formatClassTimetable } from '../../utils/enrollmentHelpers';
+import { formatDate, feeTypeLabel } from '../../utils/formatters';
+import { buildCourseTeacherMap, resolveTeacherNames, filterEnrollments, formatTimetableSummary, formatSlotLabel } from '../../utils/enrollmentHelpers';
 
 const schema = yup.object({
   studentId: yup.string().required('Student is required'),
   courseId: yup.string().required('Course is required'),
-  classId: yup.string().required('Class is required'),
   enrollmentDate: yup.string().required('Enrollment date is required'),
-  admissionFeePaid: yup.boolean().required(),
+  timetableIds: yup.array().of(yup.string().required()).required(),
 });
 
 type EnrollmentFormData = {
   studentId: string;
   courseId: string;
-  classId: string;
   enrollmentDate: string;
-  admissionFeePaid: boolean;
+  timetableIds: string[];
+};
+
+// A row in the Edit Fees dialog: a fee type on this enrollment with its amount.
+type FeeLine = {
+  feeType: FeeType;
+  amount: number;
+  cadence: FeeCadence;
 };
 
 const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
   ACTIVE: 'success', COMPLETED: 'default', DROPPED: 'error', SUSPENDED: 'warning',
 };
+
+// Each fee type has an intrinsic cadence (mirrors the backend FeeType enum). Used when adding a
+// fee line that isn't already on the enrollment.
+const FEE_CADENCE: Record<FeeType, FeeCadence> = {
+  ADMISSION: 'ONE_TIME', MONTHLY: 'RECURRING', EXAM: 'ONE_TIME', ONE_TIME_SHORT_TERM: 'ONE_TIME',
+};
+
+const FEE_TYPES: FeeType[] = ['ADMISSION', 'MONTHLY', 'EXAM', 'ONE_TIME_SHORT_TERM'];
 
 const EnrollmentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -52,57 +66,56 @@ const EnrollmentsPage: React.FC = () => {
   const { list: students } = useSelector((state: RootState) => state.students);
   const { list: courses } = useSelector((state: RootState) => state.courses);
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
-  const [allClasses, setAllClasses] = useState<CourseClass[]>([]);
-  const [classes, setClasses] = useState<CourseClass[]>([]);
-  const [timetablesByClass, setTimetablesByClass] = useState<Map<string, Timetable[]>>(new Map());
+  const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [searchCourse, setSearchCourse] = useState<Course | null>(null);
   const [searchTeacher, setSearchTeacher] = useState<Teacher | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editFeesTarget, setEditFeesTarget] = useState<Enrollment | null>(null);
+  const [editFeeLines, setEditFeeLines] = useState<FeeLine[]>([]);
+  const [savingFees, setSavingFees] = useState(false);
+  const [editSlotsTarget, setEditSlotsTarget] = useState<Enrollment | null>(null);
+  const [editSlotIds, setEditSlotIds] = useState<string[]>([]);
+  const [savingSlots, setSavingSlots] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Enrollment | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
-  const { control, handleSubmit, reset, watch, formState: { errors } } = useForm<EnrollmentFormData>({
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<EnrollmentFormData>({
     resolver: yupResolver(schema) as never,
-    defaultValues: { studentId: '', courseId: '', classId: '', enrollmentDate: new Date().toISOString().split('T')[0], admissionFeePaid: false },
+    defaultValues: { studentId: '', courseId: '', enrollmentDate: new Date().toISOString().split('T')[0], timetableIds: [] },
   });
 
-  const selectedCourseId = watch('courseId');
-  const classMap = useMemo(() => buildClassMap(allClasses), [allClasses]);
+  const selectedCourseId = useWatch({ control, name: 'courseId' });
+
+  const courseTeacherMap = useMemo(() => buildCourseTeacherMap(timetables), [timetables]);
+  const timetablesByCourse = useMemo(() => {
+    const map = new Map<string, Timetable[]>();
+    timetables.forEach((t) => {
+      const arr = map.get(t.courseId) ?? [];
+      arr.push(t);
+      map.set(t.courseId, arr);
+    });
+    return map;
+  }, [timetables]);
+
+  const courseSlots = useMemo(
+    () => timetablesByCourse.get(selectedCourseId) ?? [],
+    [timetablesByCourse, selectedCourseId],
+  );
 
   useEffect(() => {
     dispatch(fetchStudents());
     dispatch(fetchCourses());
     dispatch(fetchTeachers());
     dispatch(fetchEnrollments());
-    courseService.getAllClasses().then(setAllClasses).catch(() => setAllClasses([]));
-    timetableService.getAll()
-      .then((all) => {
-        const map = new Map<string, Timetable[]>();
-        all.forEach((s) => {
-          const arr = map.get(s.classId) ?? [];
-          arr.push(s);
-          map.set(s.classId, arr);
-        });
-        setTimetablesByClass(map);
-      })
-      .catch(() => setTimetablesByClass(new Map()));
+    timetableService.getAll().then(setTimetables).catch(() => setTimetables([]));
   }, [dispatch]);
-
-  useEffect(() => {
-    if (selectedCourseId) {
-      courseService.getClassesByCourse(selectedCourseId).then(setClasses).catch(() => setClasses([]));
-    } else {
-      setClasses([]);
-    }
-  }, [selectedCourseId]);
 
   const openCreate = () => {
     reset({
       studentId: '',
       courseId: searchCourse?.id || '',
-      classId: '',
       enrollmentDate: new Date().toISOString().split('T')[0],
-      admissionFeePaid: false,
+      timetableIds: [],
     });
     setDialogOpen(true);
   };
@@ -117,7 +130,6 @@ const EnrollmentsPage: React.FC = () => {
       setSnackbar({ open: true, message: 'Student enrolled successfully', severity: 'success' });
       setDialogOpen(false);
       reset();
-      courseService.getAllClasses().then(setAllClasses).catch(() => { /* keep existing */ });
     } catch (err: unknown) {
       setSnackbar({ open: true, message: String(err) || 'Enrollment failed', severity: 'error' });
     }
@@ -143,24 +155,113 @@ const EnrollmentsPage: React.FC = () => {
     setDeleteTarget(null);
   };
 
+  const openEditFees = (enrollment: Enrollment) => {
+    setEditFeesTarget(enrollment);
+    const existing = enrollment.fees ?? [];
+    const courseFees = courses.find(c => c.id === enrollment.courseId)?.fees ?? [];
+    // Seed from the union of the enrollment's current fee lines and the course's current catalog.
+    // Enrollment amounts win for fee types on both; fee types that exist only on the course (e.g.
+    // a type added to the course after this child enrolled) appear by default with the course
+    // amount. The principal can then delete any line before saving.
+    const lines: FeeLine[] = [];
+    const seen = new Set<string>();
+    existing.forEach(f => {
+      seen.add(f.feeType);
+      lines.push({ feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType] });
+    });
+    courseFees.forEach(f => {
+      if (seen.has(f.feeType)) return;
+      seen.add(f.feeType);
+      lines.push({ feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType] });
+    });
+    setEditFeeLines(lines);
+  };
+
+  const updateEditFeeLine = (idx: number, amount: string) => {
+    setEditFeeLines(prev => prev.map((f, i) => i === idx ? { ...f, amount: Number(amount) } : f));
+  };
+
+  const changeFeeType = (idx: number, feeType: FeeType) => {
+    setEditFeeLines(prev => prev.map((f, i) => i === idx ? { ...f, feeType, cadence: FEE_CADENCE[feeType] } : f));
+  };
+
+  const addFeeLine = () => {
+    setEditFeeLines(prev => {
+      const used = new Set(prev.map(f => f.feeType));
+      const next = FEE_TYPES.find(t => !used.has(t)) ?? FEE_TYPES[0];
+      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next] }];
+    });
+  };
+
+  const removeFeeLine = (idx: number) => {
+    setEditFeeLines(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveFees = async () => {
+    if (!editFeesTarget) return;
+    const seen = new Set<string>();
+    for (const f of editFeeLines) {
+      if (seen.has(f.feeType)) {
+        setSnackbar({ open: true, message: `Duplicate fee type: ${feeTypeLabel(f.feeType)}`, severity: 'error' });
+        return;
+      }
+      seen.add(f.feeType);
+    }
+    if (editFeeLines.length === 0) {
+      setSnackbar({ open: true, message: 'Add at least one fee type', severity: 'error' });
+      return;
+    }
+    const fees: CourseFeeItem[] = editFeeLines.map(f => ({ feeType: f.feeType, amount: f.amount, cadence: f.cadence }));
+    setSavingFees(true);
+    try {
+      await dispatch(updateEnrollmentFees({ id: editFeesTarget.id, fees })).unwrap();
+      setSnackbar({ open: true, message: 'Fees updated successfully', severity: 'success' });
+      setEditFeesTarget(null);
+    } catch (err: unknown) {
+      setSnackbar({ open: true, message: String(err) || 'Failed to update fees', severity: 'error' });
+    } finally {
+      setSavingFees(false);
+    }
+  };
+
+  const openEditSlots = (enrollment: Enrollment) => {
+    setEditSlotsTarget(enrollment);
+    setEditSlotIds((enrollment.timetables ?? []).map(t => t.id));
+  };
+
+  const handleSaveSlots = async () => {
+    if (!editSlotsTarget) return;
+    setSavingSlots(true);
+    try {
+      await dispatch(updateEnrollmentTimetables({ id: editSlotsTarget.id, timetableIds: editSlotIds })).unwrap();
+      setSnackbar({ open: true, message: 'Timetable slots updated successfully', severity: 'success' });
+      setEditSlotsTarget(null);
+    } catch (err: unknown) {
+      setSnackbar({ open: true, message: String(err) || 'Failed to update slots', severity: 'error' });
+    } finally {
+      setSavingSlots(false);
+    }
+  };
+
+  const editSlotOptions = useMemo(
+    () => (editSlotsTarget ? (timetablesByCourse.get(editSlotsTarget.courseId) ?? []) : []),
+    [editSlotsTarget, timetablesByCourse],
+  );
+
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'studentName', label: 'Student', minWidth: 150 },
     { id: 'courseName', label: 'Course', minWidth: 150 },
     { id: 'teacherName', label: 'Teacher', minWidth: 150 },
-    { id: 'className', label: 'Class', minWidth: 130 },
     {
       id: 'timetable', label: 'Timetable', minWidth: 200, sortable: false,
       format: (_v, row) => {
         const enrollment = row as unknown as Enrollment;
-        const summary = formatClassTimetable(timetablesByClass.get(enrollment.classId ?? '') ?? []);
-        return summary || <span style={{ color: '#9e9e9e' }}>Not scheduled</span>;
+        const assigned = enrollment.timetables ?? [];
+        const summary = formatTimetableSummary(assigned);
+        return summary || <span style={{ color: '#9e9e9e' }}>Not assigned</span>;
       },
     },
     { id: 'enrollmentDate', label: 'Enrolled On', minWidth: 120, format: (v) => formatDate(v as string) },
-    {
-      id: 'admissionFeePaid', label: 'Admission Fee', minWidth: 120,
-      format: (v) => <Chip label={v ? 'Paid' : 'Pending'} color={v ? 'success' : 'warning'} size="small" />,
-    },
     {
       id: 'status', label: 'Status', minWidth: 100,
       format: (v, row) => {
@@ -181,15 +282,27 @@ const EnrollmentsPage: React.FC = () => {
       },
     },
     {
-      id: 'actions', label: 'Actions', minWidth: 90, align: 'center',
+      id: 'actions', label: 'Actions', minWidth: 140, align: 'center',
       format: (_v, row) => {
         const enrollment = row as unknown as Enrollment;
         return (
-          <Tooltip title="Cancel enrollment">
-            <IconButton size="small" color="error" onClick={() => setDeleteTarget(enrollment)}>
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <Box display="flex" gap={0.5} justifyContent="center">
+            <Tooltip title="Edit fees">
+              <IconButton size="small" color="primary" onClick={() => openEditFees(enrollment)}>
+                <PaymentsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Edit timetable slots">
+              <IconButton size="small" color="primary" onClick={() => openEditSlots(enrollment)}>
+                <ScheduleIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Cancel enrollment">
+              <IconButton size="small" color="error" onClick={() => setDeleteTarget(enrollment)}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         );
       },
     },
@@ -200,7 +313,7 @@ const EnrollmentsPage: React.FC = () => {
   const filtered = filterEnrollments(
     enrollments,
     { courseId: searchCourse?.id, teacherId: searchTeacher?.id },
-    classMap,
+    courseTeacherMap,
   );
 
   const rows = filtered.map((e) => {
@@ -209,7 +322,7 @@ const EnrollmentsPage: React.FC = () => {
       ...e,
       studentName: e.studentName || (student ? `${student.firstName} ${student.lastName}`.trim() : ''),
       courseName: e.courseName || courses.find(c => c.id === e.courseId)?.courseName || '',
-      teacherName: resolveTeacherName(e, classMap, teachers),
+      teacherName: resolveTeacherNames(e, courseTeacherMap, teachers),
     };
   });
 
@@ -243,7 +356,7 @@ const EnrollmentsPage: React.FC = () => {
         </Grid>
       </Grid>
 
-      <DataTable columns={columns} rows={rows as unknown as Record<string, unknown>[]} searchable searchKeys={['studentName']} searchPlaceholder="Search by student..." />
+      <DataTable columns={columns} rows={rows as unknown as Record<string, unknown>[]} searchable searchKeys={['studentName', 'courseName']} searchPlaceholder="Search by student..." />
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Enroll Student</DialogTitle>
@@ -265,27 +378,35 @@ const EnrollmentsPage: React.FC = () => {
                 )} />
               </Grid>
               <Grid item xs={12}>
-                <Controller name="classId" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Class" fullWidth size="small" error={!!errors.classId} helperText={errors.classId?.message || (selectedCourseId ? '' : 'Select a course first')}>
-                    {classes.map(cl => {
-                      const t = teachers.find(tt => tt.id === cl.teacherId);
-                      const tName = t ? ` — ${t.firstName} ${t.lastName}`.trimEnd() : '';
-                      return <MenuItem key={cl.id} value={cl.id}>{cl.className}{tName}</MenuItem>;
-                    })}
-                  </TextField>
-                )} />
+                <Controller name="timetableIds" control={control} render={({ field }) => {
+                  const validIds = (field.value ?? []).filter((id) => courseSlots.some((s) => s.id === id));
+                  return (
+                    <FormControl fullWidth size="small" disabled={!selectedCourseId || courseSlots.length === 0}>
+                      <InputLabel id="timetable-slots-label">Timetable Slots</InputLabel>
+                      <Select
+                        labelId="timetable-slots-label"
+                        multiple
+                        value={validIds}
+                        onChange={(e) => field.onChange(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                        input={<OutlinedInput label="Timetable Slots" />}
+                        renderValue={(selected) => (selected as string[])
+                          .map((id) => { const s = courseSlots.find((c) => c.id === id); return s ? formatSlotLabel(s) : id; })
+                          .join(', ')}
+                      >
+                        {courseSlots.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>
+                            <Checkbox checked={validIds.includes(s.id)} />
+                            <ListItemText primary={formatSlotLabel(s)} secondary={s.teacherName || undefined} />
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  );
+                }} />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Controller name="enrollmentDate" control={control} render={({ field }) => (
                   <TextField {...field} label="Enrollment Date" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.enrollmentDate} helperText={errors.enrollmentDate?.message} />
-                )} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Controller name="admissionFeePaid" control={control} render={({ field }) => (
-                  <TextField {...field} select label="Admission Fee Status" fullWidth size="small">
-                    <MenuItem value="true">Paid</MenuItem>
-                    <MenuItem value="false">Pending</MenuItem>
-                  </TextField>
                 )} />
               </Grid>
             </Grid>
@@ -295,6 +416,96 @@ const EnrollmentsPage: React.FC = () => {
             <Button type="submit" variant="contained">Enroll</Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      <Dialog open={!!editFeesTarget} onClose={() => setEditFeesTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Fees</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            {editFeesTarget?.studentName || 'Student'} — {editFeesTarget?.courseName || 'Course'}
+          </Typography>
+          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Add or remove fee types for this child. The saved fees are final for this enrollment.
+            </Typography>
+            <Button size="small" startIcon={<AddIcon />} onClick={addFeeLine} disabled={editFeeLines.length >= FEE_TYPES.length}>
+              Add Fee
+            </Button>
+          </Box>
+          <Divider sx={{ my: 1 }} />
+          {editFeeLines.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No fee lines. Use "Add Fee" to add one.</Typography>
+          ) : (
+            editFeeLines.map((f, idx) => {
+              const usedElsewhere = new Set(editFeeLines.filter((_, i) => i !== idx).map(l => l.feeType));
+              return (
+                <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ mb: 1 }}>
+                  <TextField
+                    select size="small" label="Fee Type" sx={{ flex: 1 }}
+                    value={f.feeType}
+                    onChange={e => changeFeeType(idx, e.target.value as FeeType)}
+                  >
+                    {FEE_TYPES.map(ft => (
+                      <MenuItem key={ft} value={ft} disabled={ft !== f.feeType && usedElsewhere.has(ft)}>
+                        {feeTypeLabel(ft)}{FEE_CADENCE[ft] === 'RECURRING' ? ' (monthly)' : ''}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    type="number" size="small" label="Amount" sx={{ width: 130 }}
+                    value={f.amount}
+                    onChange={e => updateEditFeeLine(idx, e.target.value)}
+                  />
+                  <IconButton size="small" color="error" onClick={() => removeFeeLine(idx)} aria-label="remove fee">
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              );
+            })
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setEditFeesTarget(null)} variant="outlined">Cancel</Button>
+          <Button onClick={handleSaveFees} variant="contained" disabled={savingFees}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!editSlotsTarget} onClose={() => setEditSlotsTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Timetable Slots</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            {editSlotsTarget?.studentName || 'Student'} — {editSlotsTarget?.courseName || 'Course'}
+          </Typography>
+          <Divider sx={{ my: 1 }} />
+          {editSlotOptions.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No timetable slots exist for this course.</Typography>
+          ) : (
+            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+              <InputLabel id="edit-slots-label">Timetable Slots</InputLabel>
+              <Select
+                labelId="edit-slots-label"
+                multiple
+                value={editSlotIds}
+                onChange={(e) => setEditSlotIds(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                input={<OutlinedInput label="Timetable Slots" />}
+                renderValue={(selected) => (selected as string[])
+                  .map((id) => { const s = editSlotOptions.find((c) => c.id === id); return s ? formatSlotLabel(s) : id; })
+                  .join(', ')}
+              >
+                {editSlotOptions.map((s) => (
+                  <MenuItem key={s.id} value={s.id}>
+                    <Checkbox checked={editSlotIds.includes(s.id)} />
+                    <ListItemText primary={formatSlotLabel(s)} secondary={s.teacherName || undefined} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setEditSlotsTarget(null)} variant="outlined">Cancel</Button>
+          <Button onClick={handleSaveSlots} variant="contained" disabled={savingSlots || editSlotOptions.length === 0}>Save</Button>
+        </DialogActions>
       </Dialog>
 
       <ConfirmDialog

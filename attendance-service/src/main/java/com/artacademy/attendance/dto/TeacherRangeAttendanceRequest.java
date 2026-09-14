@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Bulk-marks teacher attendance for one class across a date range (R11 / G4). A separate
- * TEACHER_ATTENDANCE row is written per (teacher, class, date), so a teacher taking two classes
- * on the same day accumulates two rows.
+ * Bulk-marks teacher attendance for one timetable slot across an explicit set of session dates
+ * (R12). The frontend supplies the dates that fall on the slot's weekday (decision 8.3). One
+ * TEACHER_ATTENDANCE row is written per (teacher, slot, date).
  */
 @Data
 @Builder
@@ -23,13 +23,11 @@ import java.util.UUID;
 @AllArgsConstructor
 public class TeacherRangeAttendanceRequest {
 
+    @NotNull(message = "Course ID is required")
     private UUID courseId;
 
-    @NotNull(message = "From date is required")
-    private LocalDate fromDate;
-
-    @NotNull(message = "To date is required")
-    private LocalDate toDate;
+    @NotEmpty(message = "At least one session date is required")
+    private List<LocalDate> sessionDates;
 
     @NotNull(message = "Default status is required")
     private AttendanceStatus defaultStatus;

@@ -15,4 +15,6 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     List<Course> findByStatus(String status);
 
     boolean existsByCourseCode(String courseCode);
+
+    long countByCourseType_Id(UUID courseTypeId);
 }

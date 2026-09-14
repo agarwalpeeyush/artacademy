@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -16,11 +17,11 @@ public class EnrollmentResponse {
 
     private UUID id;
     private UUID studentId;
+    private String studentName;
     private UUID courseId;
-    private UUID classId;
     private String courseName;
-    private String className;
     private LocalDate enrollmentDate;
     private String status;
-    private boolean admissionFeePaid;
+    private List<EnrollmentFeeDto> fees;
+    private List<TimetableResponse> timetables;
 }

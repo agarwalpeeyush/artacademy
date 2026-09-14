@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -15,8 +15,8 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeacherById } from '../../store/slices/teacherSlice';
-import { CourseClass } from '../../types';
-import courseService from '../../services/courseService';
+import { Timetable } from '../../types';
+import timetableService from '../../services/timetableService';
 import teacherService from '../../services/teacherService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
@@ -44,7 +44,7 @@ const TeacherDetailPage: React.FC = () => {
   const { selected: teacher, loading } = useSelector((state: RootState) => state.teachers);
 
   const [tab, setTab] = useState(0);
-  const [classes, setClasses] = useState<CourseClass[]>([]);
+  const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [availability, setAvailability] = useState<Record<string, unknown>[]>([]);
   const [stats, setStats] = useState<AttendanceStats | null>(null);
 
@@ -54,7 +54,7 @@ const TeacherDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
-    courseService.getClassesByTeacher(id).then(setClasses).catch(() => setClasses([]));
+    timetableService.getByTeacher(id).then(setTimetables).catch(() => setTimetables([]));
     teacherService.getAvailability(id)
       .then((d) => setAvailability(Array.isArray(d) ? d : d?.content ?? []))
       .catch(() => setAvailability([]));
@@ -63,12 +63,25 @@ const TeacherDetailPage: React.FC = () => {
       .catch(() => setStats(null));
   }, [id]);
 
-  const classCols: Column<Record<string, unknown>>[] = [
-    { id: 'className', label: 'Class', minWidth: 160 },
-    { id: 'courseName', label: 'Course', minWidth: 160 },
-    { id: 'roomNumber', label: 'Room', minWidth: 100 },
-    { id: 'capacity', label: 'Capacity', minWidth: 90, align: 'center' },
-    { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'ACTIVE' ? 'success' : 'default'} /> },
+  const courses = useMemo(() => {
+    const map = new Map<string, string>();
+    timetables.forEach((t) => {
+      if (t.courseId && !map.has(t.courseId)) {
+        map.set(t.courseId, t.courseName ?? t.courseId);
+      }
+    });
+    return Array.from(map.entries()).map(([courseId, courseName]) => ({ courseId, courseName }));
+  }, [timetables]);
+
+  const scheduleCols: Column<Record<string, unknown>>[] = [
+    { id: 'dayOfWeek', label: 'Day', minWidth: 120, format: (v) => getDayName(v as string) },
+    { id: 'courseName', label: 'Course', minWidth: 160, format: (v) => (v as string) || '—' },
+    { id: 'startTime', label: 'Start', minWidth: 100, format: (v) => formatTime(v as string) },
+    { id: 'endTime', label: 'End', minWidth: 100, format: (v) => formatTime(v as string) },
+  ];
+
+  const courseCols: Column<Record<string, unknown>>[] = [
+    { id: 'courseName', label: 'Course', minWidth: 200 },
   ];
 
   const availabilityCols: Column<Record<string, unknown>>[] = [
@@ -108,20 +121,25 @@ const TeacherDetailPage: React.FC = () => {
       </Card>
 
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label="Classes" />
+        <Tab label={`Courses (${courses.length})`} />
+        <Tab label={`Schedule (${timetables.length})`} />
         <Tab label="Availability" />
         <Tab label="Attendance" />
       </Tabs>
 
       {tab === 0 && (
-        <DataTable columns={classCols} rows={classes as unknown as Record<string, unknown>[]} emptyMessage="No assigned classes." />
+        <DataTable columns={courseCols} rows={courses as unknown as Record<string, unknown>[]} emptyMessage="No assigned courses." />
       )}
 
       {tab === 1 && (
-        <DataTable columns={availabilityCols} rows={availability} emptyMessage="No availability configured." />
+        <DataTable columns={scheduleCols} rows={timetables as unknown as Record<string, unknown>[]} emptyMessage="No scheduled timetable slots." />
       )}
 
       {tab === 2 && (
+        <DataTable columns={availabilityCols} rows={availability} emptyMessage="No availability configured." />
+      )}
+
+      {tab === 3 && (
         <Box>
           {stats ? (
             <Grid container spacing={2}>

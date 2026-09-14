@@ -8,11 +8,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { editStudentAttendance, editTeacherAttendance } from '../../store/slices/correctionSlice';
 import attendanceService, { AttendanceEdit } from '../../services/attendanceService';
-import courseService from '../../services/courseService';
+import timetableService from '../../services/timetableService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
-import { StudentAttendance, TeacherAttendance, AttendanceStatus, CourseClass } from '../../types';
-import { formatDateTime } from '../../utils/formatters';
+import { StudentAttendance, TeacherAttendance, AttendanceStatus, Timetable } from '../../types';
+import { formatDateTime, getDayName, formatTime } from '../../utils/formatters';
 import { format } from 'date-fns';
 
 const STATUS_OPTIONS: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY'];
@@ -35,7 +35,7 @@ const AttendanceCorrectionsPage: React.FC = () => {
   const { corrections, loading } = useSelector((state: RootState) => state.corrections);
 
   const [mode, setMode] = useState<CorrectionMode>('STUDENT');
-  const [classes, setClasses] = useState<CourseClass[]>([]);
+  const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [classId, setClassId] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [rows, setRows] = useState<EditableRow[]>([]);
@@ -44,7 +44,7 @@ const AttendanceCorrectionsPage: React.FC = () => {
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
-    courseService.getAllClasses().then(setClasses).catch(() => setClasses([]));
+    timetableService.getAll().then(setTimetables).catch(() => setTimetables([]));
   }, []);
 
   const toRows = (
@@ -60,8 +60,8 @@ const AttendanceCorrectionsPage: React.FC = () => {
     if (!cid || !d) { setRows([]); setEdited({}); return; }
     try {
       const data = m === 'STUDENT'
-        ? toRows(m, await attendanceService.getClassAttendanceForDate(cid, d), [])
-        : toRows(m, [], await attendanceService.getTeacherClassAttendanceForDate(cid, d));
+        ? toRows(m, await attendanceService.getTimetableAttendanceForDate(cid, d), [])
+        : toRows(m, [], await attendanceService.getTeacherTimetableAttendanceForDate(cid, d));
       setRows(data);
       setEdited(Object.fromEntries(data.map(r => [r.id, r.status])));
     } catch {
@@ -144,10 +144,12 @@ const AttendanceCorrectionsPage: React.FC = () => {
         </ToggleButtonGroup>
         <Grid container spacing={2} alignItems="flex-end">
           <Grid item xs={12} sm={4}>
-            <TextField select label="Class" size="small" fullWidth value={classId}
+            <TextField select label="Timetable Slot" size="small" fullWidth value={classId}
               onChange={e => { setClassId(e.target.value); loadRecords(mode, e.target.value, date); }}>
-              {classes.map(c => (
-                <MenuItem key={c.id} value={c.id}>{c.className} – {c.courseName}</MenuItem>
+              {timetables.map(t => (
+                <MenuItem key={t.id} value={t.id}>
+                  {(t.courseName || t.courseId)} – {getDayName(t.dayOfWeek)} {formatTime(t.startTime)}
+                </MenuItem>
               ))}
             </TextField>
           </Grid>
@@ -166,7 +168,7 @@ const AttendanceCorrectionsPage: React.FC = () => {
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
         {rows.length === 0 ? (
           <Box sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
-            No {mode === 'STUDENT' ? 'student' : 'teacher'} attendance records for this class/date.
+            No {mode === 'STUDENT' ? 'student' : 'teacher'} attendance records for this slot/date.
           </Box>
         ) : (
           <Grid container spacing={2}>

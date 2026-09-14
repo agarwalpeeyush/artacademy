@@ -35,8 +35,8 @@ const TeacherAnnouncementsPage: React.FC = () => {
     setSending(true);
     setFeedback(null);
     try {
-      const classIds = [...new Set(teacherTimetables.map(t => t.classId))];
-      const studentLists = await Promise.all(classIds.map(id => studentService.getByClass(id)));
+      const courseIds = [...new Set(teacherTimetables.map(t => t.courseId))];
+      const studentLists = await Promise.all(courseIds.map(id => studentService.getByCourse(id)));
       const recipientUserIds = [...new Set(studentLists.flat().map(s => s.id))];
 
       if (recipientUserIds.length === 0) {

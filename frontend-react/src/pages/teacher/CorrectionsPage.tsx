@@ -11,6 +11,7 @@ import attendanceService, { AttendanceEdit } from '../../services/attendanceServ
 import { StudentAttendance, AttendanceStatus } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import { format } from 'date-fns';
+import { getDayName, formatTime } from '../../utils/formatters';
 
 const STATUS_OPTIONS: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY'];
 
@@ -40,7 +41,7 @@ const CorrectionsPage: React.FC = () => {
   const loadRecords = async (cid: string, d: string) => {
     if (!cid || !d) { setRecords([]); setEdited({}); return; }
     try {
-      const data = await attendanceService.getClassAttendanceForDate(cid, d);
+      const data = await attendanceService.getTimetableAttendanceForDate(cid, d);
       setRecords(data);
       setEdited(Object.fromEntries(data.map(r => [r.id, r.status])));
     } catch {
@@ -80,8 +81,6 @@ const CorrectionsPage: React.FC = () => {
     }
   };
 
-  const uniqueClasses = [...new Map(teacherTimetables.map(s => [s.classId, s])).values()];
-
   return (
     <Box>
       <PageHeader
@@ -93,10 +92,12 @@ const CorrectionsPage: React.FC = () => {
       <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2} alignItems="flex-end">
           <Grid item xs={12} sm={4}>
-            <TextField select label="Class" size="small" fullWidth value={classId}
+            <TextField select label="Timetable Slot" size="small" fullWidth value={classId}
               onChange={e => { setClassId(e.target.value); loadRecords(e.target.value, date); }}>
-              {uniqueClasses.map(s => (
-                <MenuItem key={s.classId} value={s.classId}>{s.className} – {s.courseName}</MenuItem>
+              {teacherTimetables.map(s => (
+                <MenuItem key={s.id} value={s.id}>
+                  {(s.courseName || s.courseId)} – {getDayName(s.dayOfWeek)} {formatTime(s.startTime)}
+                </MenuItem>
               ))}
             </TextField>
           </Grid>
@@ -115,7 +116,7 @@ const CorrectionsPage: React.FC = () => {
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
         {records.length === 0 ? (
           <Box sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
-            No attendance records for this class/date.
+            No attendance records for this slot/date.
           </Box>
         ) : (
           <Grid container spacing={2}>

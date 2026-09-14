@@ -26,6 +26,10 @@ const courseTypeService = {
     const response = await api.put(`/course-types/${id}`, data);
     return norm(unwrap(response));
   },
+
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/course-types/${id}`);
+  },
 };
 
 export default courseTypeService;

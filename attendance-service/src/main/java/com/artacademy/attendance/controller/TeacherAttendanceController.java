@@ -34,23 +34,23 @@ public class TeacherAttendanceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
-    @PostMapping("/class/{classId}/bulk-range")
-    @Operation(summary = "Bulk-mark teacher attendance for a class across scheduled session days in a date range")
-    public ResponseEntity<ApiResponse<List<TeacherAttendanceResponse>>> markClassAttendanceForRange(
-            @PathVariable("classId") UUID classId,
+    @PostMapping("/timetable/{timetableId}/bulk-range")
+    @Operation(summary = "Bulk-mark teacher attendance for a timetable slot across a set of session dates")
+    public ResponseEntity<ApiResponse<List<TeacherAttendanceResponse>>> markTimetableAttendanceForRange(
+            @PathVariable("timetableId") UUID timetableId,
             @Valid @RequestBody TeacherRangeAttendanceRequest request) {
         List<TeacherAttendanceResponse> response =
-                teacherAttendanceService.markClassAttendanceForRange(classId, request);
+                teacherAttendanceService.markTimetableAttendanceForRange(timetableId, request);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @GetMapping("/class/{classId}/date")
-    @Operation(summary = "List teacher attendance rows for a class on a specific date")
-    public ResponseEntity<ApiResponse<List<TeacherAttendanceResponse>>> getByClassAndDate(
-            @PathVariable("classId") UUID classId,
+    @GetMapping("/timetable/{timetableId}/date")
+    @Operation(summary = "List teacher attendance rows for a timetable slot on a specific date")
+    public ResponseEntity<ApiResponse<List<TeacherAttendanceResponse>>> getByTimetableAndDate(
+            @PathVariable("timetableId") UUID timetableId,
             @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         List<TeacherAttendanceResponse> records =
-                teacherAttendanceService.getByClassAndDate(classId, date);
+                teacherAttendanceService.getByTimetableAndDate(timetableId, date);
         return ResponseEntity.ok(ApiResponse.success(records));
     }
 

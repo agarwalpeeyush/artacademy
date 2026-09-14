@@ -16,8 +16,8 @@ import java.util.UUID;
 @AllArgsConstructor
 public class TimetableRequest {
 
-    @NotNull(message = "Class ID is required")
-    private UUID classId;
+    @NotNull(message = "Course ID is required")
+    private UUID courseId;
 
     @NotNull(message = "Teacher ID is required")
     private UUID teacherId;

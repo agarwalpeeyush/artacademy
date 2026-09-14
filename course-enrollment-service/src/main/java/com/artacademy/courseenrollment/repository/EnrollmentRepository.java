@@ -2,6 +2,8 @@ package com.artacademy.courseenrollment.repository;
 
 import com.artacademy.courseenrollment.domain.Enrollment;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -15,9 +17,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
 
     List<Enrollment> findByCourseId(UUID courseId);
 
-    List<Enrollment> findByClassId(UUID classId);
-
     Optional<Enrollment> findByStudentIdAndCourseId(UUID studentId, UUID courseId);
 
-    long countByClassIdAndStatus(UUID classId, String status);
+    @Query("SELECT DISTINCT e FROM Enrollment e JOIN e.timetables t WHERE t.id = :timetableId")
+    List<Enrollment> findByTimetableId(@Param("timetableId") UUID timetableId);
 }

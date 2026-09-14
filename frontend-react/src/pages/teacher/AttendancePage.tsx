@@ -2,19 +2,21 @@ import React, { useEffect, useState } from 'react';
 import {
   Box, Button, TextField, Grid, Paper, Typography, Chip, MenuItem,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Alert, Snackbar,
-  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, FormControlLabel,
+  Autocomplete, IconButton,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
-import EventRepeatIcon from '@mui/icons-material/EventRepeat';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
 import { markStudentAttendance } from '../../store/slices/attendanceSlice';
 import studentService from '../../services/studentService';
-import attendanceService, { CoverUpStudentEntry } from '../../services/attendanceService';
+import enrollmentService from '../../services/enrollmentService';
 import { Student, StudentAttendance, Timetable, AttendanceStatus } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { getDayName, formatTime } from '../../utils/formatters';
 import { format } from 'date-fns';
 
 interface AttendanceEntry {
@@ -22,52 +24,52 @@ interface AttendanceEntry {
   studentName: string;
   status: AttendanceStatus;
   remarks: string;
+  makeUp?: boolean;
 }
 
-interface CoverUpRow {
-  studentId: string;
-  studentName: string;
-  selected: boolean;
-  status: AttendanceStatus;
-}
+const statusColors: Record<AttendanceStatus, 'success' | 'error' | 'warning' | 'default'> = {
+  PRESENT: 'success', ABSENT: 'error', LEAVE: 'warning', HALF_DAY: 'default',
+};
 
 const AttendancePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
-  const [selectedClass, setSelectedClass] = useState<Timetable | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<Timetable | null>(null);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [students, setStudents] = useState<Student[]>([]);
+  const [courseStudents, setCourseStudents] = useState<Student[]>([]);
   const [entries, setEntries] = useState<AttendanceEntry[]>([]);
+  const [addStudent, setAddStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
-
-  const [coverUpOpen, setCoverUpOpen] = useState(false);
-  const [coverUpClass, setCoverUpClass] = useState<Timetable | null>(null);
-  const [coverUpDate, setCoverUpDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [coverUpStart, setCoverUpStart] = useState('');
-  const [coverUpEnd, setCoverUpEnd] = useState('');
-  const [coverUpRows, setCoverUpRows] = useState<CoverUpRow[]>([]);
-  const [coverUpLoading, setCoverUpLoading] = useState(false);
-  const [coverUpSaving, setCoverUpSaving] = useState(false);
-
-  const uniqueClasses = [...new Map(teacherTimetables.map(s => [s.classId, s])).values()];
 
   useEffect(() => {
     if (user?.id) dispatch(fetchTeacherTimetables(user.id));
   }, [dispatch, user]);
 
-  const handleClassChange = async (classId: string) => {
-    const timetable = teacherTimetables.find(s => s.classId === classId) || null;
-    setSelectedClass(timetable);
-    if (timetable) {
+  const handleSlotChange = async (slotId: string) => {
+    const slot = teacherTimetables.find(s => s.id === slotId) || null;
+    setSelectedSlot(slot);
+    setAddStudent(null);
+    if (slot) {
       setLoading(true);
       try {
-        const data = await studentService.getByClass(timetable.classId);
-        setStudents(data);
-        setEntries(data.map(s => ({ studentId: s.id, studentName: `${s.firstName} ${s.lastName}`, status: 'PRESENT', remarks: '' })));
-      } catch { setStudents([]); setEntries([]); }
+        const [roster, allStudents] = await Promise.all([
+          enrollmentService.getByTimetable(slot.id),
+          studentService.getByCourse(slot.courseId),
+        ]);
+        setCourseStudents(allStudents);
+        setEntries(roster.map(e => ({
+          studentId: e.studentId,
+          studentName: e.studentName || e.studentId,
+          status: 'PRESENT',
+          remarks: '',
+        })));
+      } catch { setCourseStudents([]); setEntries([]); }
       finally { setLoading(false); }
+    } else {
+      setCourseStudents([]);
+      setEntries([]);
     }
   };
 
@@ -79,11 +81,34 @@ const AttendancePage: React.FC = () => {
     setEntries(prev => prev.map(e => ({ ...e, status })));
   };
 
+  // R11: add a student not on the base roster for a make-up session.
+  const handleAddStudent = (student: Student | null) => {
+    if (!student) return;
+    if (entries.some(e => e.studentId === student.id)) {
+      setSnackbar({ open: true, message: 'Student already in the list', severity: 'error' });
+      setAddStudent(null);
+      return;
+    }
+    setEntries(prev => [...prev, {
+      studentId: student.id,
+      studentName: `${student.firstName} ${student.lastName}`,
+      status: 'PRESENT',
+      remarks: '',
+      makeUp: true,
+    }]);
+    setAddStudent(null);
+  };
+
+  const removeEntry = (studentId: string) => {
+    setEntries(prev => prev.filter(e => e.studentId !== studentId));
+  };
+
   const handleSave = async () => {
-    if (!selectedClass) return;
+    if (!selectedSlot) return;
     try {
       const payload: StudentAttendance[] = entries.map(e => ({
-        id: '', studentId: e.studentId, classId: selectedClass.classId, date, status: e.status, remarks: e.remarks,
+        id: '', studentId: e.studentId, timetableId: selectedSlot.id, courseId: selectedSlot.courseId,
+        date, attendanceDate: date, status: e.status, remarks: e.remarks,
       }));
       await dispatch(markStudentAttendance(payload)).unwrap();
       setSnackbar({ open: true, message: 'Attendance saved successfully', severity: 'success' });
@@ -92,122 +117,65 @@ const AttendancePage: React.FC = () => {
     }
   };
 
-  const statusColors: Record<AttendanceStatus, 'success' | 'error' | 'warning' | 'default'> = {
-    PRESENT: 'success', ABSENT: 'error', LEAVE: 'warning', HALF_DAY: 'default',
-  };
-
-  const openCoverUp = () => {
-    setCoverUpClass(selectedClass);
-    setCoverUpRows([]);
-    setCoverUpStart('');
-    setCoverUpEnd('');
-    setCoverUpDate(format(new Date(), 'yyyy-MM-dd'));
-    setCoverUpOpen(true);
-    if (selectedClass) loadCoverUpRoster(selectedClass.classId);
-  };
-
-  const loadCoverUpRoster = async (classId: string) => {
-    setCoverUpLoading(true);
-    try {
-      const data = await studentService.getByClass(classId);
-      setCoverUpRows(data.map(s => ({
-        studentId: s.id,
-        studentName: `${s.firstName} ${s.lastName}`,
-        selected: false,
-        status: 'PRESENT' as AttendanceStatus,
-      })));
-    } catch {
-      setCoverUpRows([]);
-    } finally {
-      setCoverUpLoading(false);
-    }
-  };
-
-  const handleCoverUpClassChange = (classId: string) => {
-    const cls = uniqueClasses.find(c => c.classId === classId) || null;
-    setCoverUpClass(cls);
-    if (cls) loadCoverUpRoster(cls.classId);
-    else setCoverUpRows([]);
-  };
-
-  const toggleCoverUpRow = (studentId: string, field: 'selected' | 'status', value: boolean | AttendanceStatus) => {
-    setCoverUpRows(prev => prev.map(r => r.studentId === studentId ? { ...r, [field]: value } : r));
-  };
-
-  const handleCoverUpSave = async () => {
-    if (!coverUpClass) {
-      setSnackbar({ open: true, message: 'Please select a class', severity: 'error' });
-      return;
-    }
-    const students: CoverUpStudentEntry[] = coverUpRows
-      .filter(r => r.selected)
-      .map(r => ({ studentId: r.studentId, status: r.status }));
-    if (students.length === 0) {
-      setSnackbar({ open: true, message: 'Select at least one student', severity: 'error' });
-      return;
-    }
-    setCoverUpSaving(true);
-    try {
-      await attendanceService.markCoverUp({
-        classId: coverUpClass.classId,
-        courseId: coverUpClass.courseId,
-        sessionDate: coverUpDate,
-        startTime: coverUpStart || undefined,
-        endTime: coverUpEnd || undefined,
-        students,
-      });
-      setSnackbar({ open: true, message: `Cover-up class recorded for ${students.length} student(s)`, severity: 'success' });
-      setCoverUpOpen(false);
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } };
-      setSnackbar({ open: true, message: e.response?.data?.message || 'Failed to record cover-up class', severity: 'error' });
-    } finally {
-      setCoverUpSaving(false);
-    }
-  };
+  const addableStudents = courseStudents.filter(s => !entries.some(e => e.studentId === s.id));
 
   return (
     <Box>
       <PageHeader
         title="Mark Attendance"
-        subtitle="Record student attendance for your classes"
+        subtitle="Record student attendance for your timetable slots"
         breadcrumbs={[{ label: 'Teacher' }, { label: 'Attendance' }]}
       />
-
-      <Box display="flex" justifyContent="flex-end" sx={{ mb: 2 }}>
-        <Button variant="outlined" startIcon={<EventRepeatIcon />} onClick={openCoverUp}>
-          Add Extra / Cover-up Class
-        </Button>
-      </Box>
 
       <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={5}>
             <TextField
-              select label="Select Class" size="small" fullWidth
-              onChange={e => handleClassChange(e.target.value)}
+              select label="Select Timetable Slot" size="small" fullWidth
+              value={selectedSlot?.id ?? ''}
+              onChange={e => handleSlotChange(e.target.value)}
             >
-              {uniqueClasses.map(s => (
-                <MenuItem key={s.classId} value={s.classId}>{s.className} – {s.courseName}</MenuItem>
+              {teacherTimetables.map(s => (
+                <MenuItem key={s.id} value={s.id}>
+                  {(s.courseName || s.courseId)} – {getDayName(s.dayOfWeek)} {formatTime(s.startTime)}
+                </MenuItem>
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={3}>
             <TextField
               label="Date" type="date" size="small" fullWidth value={date}
               onChange={e => setDate(e.target.value)} InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={3}>
-            <Box display="flex" gap={1}>
-              <Button size="small" variant="outlined" color="success" onClick={() => markAll('PRESENT')}>All Present</Button>
-              <Button size="small" variant="outlined" color="error" onClick={() => markAll('ABSENT')}>All Absent</Button>
-            </Box>
+          <Grid item xs={12} sm={4}>
+            <Autocomplete
+              size="small"
+              options={addableStudents}
+              value={addStudent}
+              onChange={(_e, v) => handleAddStudent(v)}
+              getOptionLabel={(s) => `${s.firstName} ${s.lastName}`.trim()}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              disabled={!selectedSlot}
+              renderInput={(params) => (
+                <TextField {...params} label="Add student (make-up)" placeholder="Search…" InputProps={{
+                  ...params.InputProps,
+                  startAdornment: <PersonAddIcon fontSize="small" sx={{ mr: 0.5, color: 'action.active' }} />,
+                }} />
+              )}
+            />
           </Grid>
         </Grid>
       </Paper>
 
-      {loading ? <LoadingSpinner /> : selectedClass && entries.length > 0 ? (
+      {selectedSlot && (
+        <Box display="flex" gap={1} sx={{ mb: 2 }}>
+          <Button size="small" variant="outlined" color="success" onClick={() => markAll('PRESENT')}>All Present</Button>
+          <Button size="small" variant="outlined" color="error" onClick={() => markAll('ABSENT')}>All Absent</Button>
+        </Box>
+      )}
+
+      {loading ? <LoadingSpinner /> : selectedSlot && entries.length > 0 ? (
         <>
           <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
             <Table size="small">
@@ -217,13 +185,17 @@ const AttendancePage: React.FC = () => {
                   <TableCell>Student Name</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Remarks</TableCell>
+                  <TableCell />
                 </TableRow>
               </TableHead>
               <TableBody>
                 {entries.map((entry, idx) => (
                   <TableRow key={entry.studentId}>
                     <TableCell>{idx + 1}</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>{entry.studentName}</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>
+                      {entry.studentName}
+                      {entry.makeUp && <Chip label="Make-up" color="info" size="small" variant="outlined" sx={{ ml: 1 }} />}
+                    </TableCell>
                     <TableCell>
                       <TextField
                         select size="small" value={entry.status}
@@ -244,6 +216,13 @@ const AttendancePage: React.FC = () => {
                         sx={{ minWidth: 180 }}
                       />
                     </TableCell>
+                    <TableCell>
+                      {entry.makeUp && (
+                        <IconButton size="small" onClick={() => removeEntry(entry.studentId)} aria-label="remove">
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -255,85 +234,15 @@ const AttendancePage: React.FC = () => {
             </Button>
           </Box>
         </>
-      ) : selectedClass ? (
+      ) : selectedSlot ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">No students enrolled in this class.</Typography>
+          <Typography color="text.secondary">No students assigned to this timetable slot. Use "Add student" for a make-up.</Typography>
         </Paper>
       ) : null}
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(s => ({ ...s, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>{snackbar.message}</Alert>
       </Snackbar>
-
-      <Dialog open={coverUpOpen} onClose={() => setCoverUpOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Extra / Cover-up Class</DialogTitle>
-        <DialogContent dividers>
-          <Grid container spacing={2} sx={{ mb: 1 }}>
-            <Grid item xs={12}>
-              <TextField
-                select label="Class" size="small" fullWidth
-                value={coverUpClass?.classId ?? ''}
-                onChange={e => handleCoverUpClassChange(e.target.value)}
-              >
-                {uniqueClasses.map(s => (
-                  <MenuItem key={s.classId} value={s.classId}>{s.className} – {s.courseName}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField label="Date" type="date" size="small" fullWidth value={coverUpDate}
-                onChange={e => setCoverUpDate(e.target.value)} InputLabelProps={{ shrink: true }} />
-            </Grid>
-            <Grid item xs={6} sm={4}>
-              <TextField label="Start" type="time" size="small" fullWidth value={coverUpStart}
-                onChange={e => setCoverUpStart(e.target.value)} InputLabelProps={{ shrink: true }} />
-            </Grid>
-            <Grid item xs={6} sm={4}>
-              <TextField label="End" type="time" size="small" fullWidth value={coverUpEnd}
-                onChange={e => setCoverUpEnd(e.target.value)} InputLabelProps={{ shrink: true }} />
-            </Grid>
-          </Grid>
-
-          <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Attendees</Typography>
-          {coverUpLoading ? (
-            <LoadingSpinner />
-          ) : coverUpRows.length === 0 ? (
-            <Typography color="text.secondary" variant="body2">
-              {coverUpClass ? 'No students enrolled in this class.' : 'Select a class to load its roster.'}
-            </Typography>
-          ) : (
-            coverUpRows.map(r => (
-              <Box key={r.studentId} display="flex" alignItems="center" gap={2} sx={{ mb: 1 }}>
-                <FormControlLabel
-                  sx={{ flex: 1, mr: 0 }}
-                  control={
-                    <Checkbox
-                      checked={r.selected}
-                      onChange={e => toggleCoverUpRow(r.studentId, 'selected', e.target.checked)}
-                    />
-                  }
-                  label={r.studentName}
-                />
-                <TextField
-                  select size="small" label="Status" sx={{ minWidth: 140 }}
-                  value={r.status} disabled={!r.selected}
-                  onChange={e => toggleCoverUpRow(r.studentId, 'status', e.target.value as AttendanceStatus)}
-                >
-                  {(['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY'] as AttendanceStatus[]).map(s => (
-                    <MenuItem key={s} value={s}>{s}</MenuItem>
-                  ))}
-                </TextField>
-              </Box>
-            ))
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCoverUpOpen(false)}>Cancel</Button>
-          <Button variant="contained" startIcon={<SaveIcon />} onClick={handleCoverUpSave} disabled={coverUpSaving}>
-            Record Cover-up
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

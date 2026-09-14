@@ -69,7 +69,6 @@ const StudentDetailPage: React.FC = () => {
     { id: 'className', label: 'Class', minWidth: 140 },
     { id: 'enrollmentDate', label: 'Enrolled On', minWidth: 120, format: (v) => formatDate(v as string) },
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'ACTIVE' ? 'success' : 'default'} /> },
-    { id: 'admissionFeePaid', label: 'Admission Fee', minWidth: 120, format: (v) => (v ? 'Paid' : 'Unpaid') },
   ];
 
   const attendanceCols: Column<Record<string, unknown>>[] = [

@@ -18,7 +18,6 @@ public final class KafkaTopics {
     public static final String FEE_GENERATED = "fee-generated";
     public static final String PAYMENT_RECEIVED = "payment-received";
     public static final String FEE_STATUS_UPDATED = "fee-status-updated";
-    public static final String ADMISSION_FEE_PAID = "admission-fee-paid";
     public static final String EXAM_SCHEDULED = "exam-scheduled";
 
     public static final String TIMETABLE_GENERATED = "timetable-generated";

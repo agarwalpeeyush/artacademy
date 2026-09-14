@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 
 @Entity
@@ -22,14 +23,11 @@ public class StudentAttendance {
     @Column(name = "STUDENT_ID", nullable = false)
     private UUID studentId;
 
-    @Column(name = "CLASS_ID", nullable = false)
-    private UUID classId;
-
-    @Column(name = "COURSE_ID")
+    @Column(name = "COURSE_ID", nullable = false)
     private UUID courseId;
 
-    @Column(name = "SESSION_ID")
-    private UUID sessionId;
+    @Column(name = "TIMETABLE_ID", nullable = false)
+    private UUID timetableId;
 
     @Column(name = "ATTENDANCE_DATE", nullable = false)
     private LocalDate attendanceDate;
@@ -37,6 +35,12 @@ public class StudentAttendance {
     @Enumerated(EnumType.STRING)
     @Column(name = "STATUS", nullable = false, length = 20)
     private AttendanceStatus status;
+
+    @Column(name = "START_TIME")
+    private LocalTime startTime;
+
+    @Column(name = "END_TIME")
+    private LocalTime endTime;
 
     @Column(name = "REMARKS", columnDefinition = "TEXT")
     private String remarks;

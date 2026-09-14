@@ -4,6 +4,7 @@ import com.artacademy.common.exception.ApiException;
 import com.artacademy.courseenrollment.domain.CourseType;
 import com.artacademy.courseenrollment.dto.CourseTypeRequest;
 import com.artacademy.courseenrollment.dto.CourseTypeResponse;
+import com.artacademy.courseenrollment.repository.CourseRepository;
 import com.artacademy.courseenrollment.repository.CourseTypeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import java.util.UUID;
 public class CourseTypeService {
 
     private final CourseTypeRepository courseTypeRepository;
+    private final CourseRepository courseRepository;
 
     @Transactional(readOnly = true)
     public List<CourseTypeResponse> getAll() {
@@ -50,6 +52,18 @@ public class CourseTypeService {
         type.setName(request.getName());
         type.setStatus(request.getStatus());
         return toResponse(courseTypeRepository.save(type));
+    }
+
+    public void delete(UUID id) {
+        CourseType type = courseTypeRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Course type not found with id: " + id));
+        long inUse = courseRepository.countByCourseType_Id(id);
+        if (inUse > 0) {
+            throw ApiException.conflict("Course type '" + type.getCode()
+                    + "' is in use by " + inUse + " course(s) and cannot be deleted");
+        }
+        courseTypeRepository.delete(type);
+        log.info("Deleted course type id={}, code={}", id, type.getCode());
     }
 
     private CourseTypeResponse toResponse(CourseType type) {

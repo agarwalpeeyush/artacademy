@@ -18,7 +18,7 @@ const FeeStatusPage: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
   const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
   const { feeCycles } = useSelector((state: RootState) => state.fees);
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const currentMonth = new Date().getMonth() + 1;
@@ -29,9 +29,9 @@ const FeeStatusPage: React.FC = () => {
   }, [dispatch, user]);
 
   useEffect(() => {
-    if (selectedClassId) {
+    if (selectedCourseId) {
       setLoading(true);
-      studentService.getByClass(selectedClassId)
+      studentService.getByCourse(selectedCourseId)
         .then(data => {
           setStudents(data);
           data.forEach(s => dispatch(fetchFeeCycles({ studentId: s.id, month: currentMonth, year: currentYear })));
@@ -39,7 +39,7 @@ const FeeStatusPage: React.FC = () => {
         .catch(() => setStudents([]))
         .finally(() => setLoading(false));
     }
-  }, [selectedClassId, dispatch, currentMonth, currentYear]);
+  }, [selectedCourseId, dispatch, currentMonth, currentYear]);
 
   const getStudentFeeStatus = (studentId: string): FeeCycle | undefined => {
     return feeCycles.find(f => f.studentId === studentId && f.month === currentMonth && f.year === currentYear);
@@ -49,7 +49,7 @@ const FeeStatusPage: React.FC = () => {
     PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', PENDING: 'default',
   };
 
-  const uniqueClasses = [...new Map(teacherTimetables.map(s => [s.classId, s])).values()];
+  const uniqueCourses = [...new Map(teacherTimetables.map(s => [s.courseId, s])).values()];
 
   return (
     <Box>
@@ -61,20 +61,20 @@ const FeeStatusPage: React.FC = () => {
 
       <Box mb={3}>
         <TextField
-          select label="Select Class" size="small" sx={{ minWidth: 300 }}
-          value={selectedClassId}
-          onChange={e => setSelectedClassId(e.target.value)}
+          select label="Select Course" size="small" sx={{ minWidth: 300 }}
+          value={selectedCourseId}
+          onChange={e => setSelectedCourseId(e.target.value)}
         >
-          <MenuItem value="">-- Select a class --</MenuItem>
-          {uniqueClasses.map(s => (
-            <MenuItem key={s.classId} value={s.classId}>{s.className}</MenuItem>
+          <MenuItem value="">-- Select a course --</MenuItem>
+          {uniqueCourses.map(s => (
+            <MenuItem key={s.courseId} value={s.courseId}>{s.courseName}</MenuItem>
           ))}
         </TextField>
       </Box>
 
       {loading ? (
         <LoadingSpinner />
-      ) : selectedClassId && students.length > 0 ? (
+      ) : selectedCourseId && students.length > 0 ? (
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
@@ -115,8 +115,8 @@ const FeeStatusPage: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
-      ) : selectedClassId ? (
-        <Typography color="text.secondary">No students found in this class.</Typography>
+      ) : selectedCourseId ? (
+        <Typography color="text.secondary">No students found in this course.</Typography>
       ) : null}
     </Box>
   );

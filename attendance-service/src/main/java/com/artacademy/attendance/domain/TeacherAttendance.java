@@ -11,7 +11,7 @@ import java.util.UUID;
     name = "TEACHER_ATTENDANCE",
     uniqueConstraints = @UniqueConstraint(
         name = "uq_teacher_attendance",
-        columnNames = {"TEACHER_ID", "CLASS_ID", "ATTENDANCE_DATE"}
+        columnNames = {"TEACHER_ID", "TIMETABLE_ID", "ATTENDANCE_DATE"}
     )
 )
 @Getter
@@ -28,11 +28,11 @@ public class TeacherAttendance {
     @Column(name = "TEACHER_ID", nullable = false)
     private UUID teacherId;
 
-    @Column(name = "CLASS_ID", nullable = false)
-    private UUID classId;
-
-    @Column(name = "COURSE_ID")
+    @Column(name = "COURSE_ID", nullable = false)
     private UUID courseId;
+
+    @Column(name = "TIMETABLE_ID", nullable = false)
+    private UUID timetableId;
 
     @Column(name = "ATTENDANCE_DATE", nullable = false)
     private LocalDate attendanceDate;

@@ -17,7 +17,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import PeopleIcon from '@mui/icons-material/People';
 import SchoolIcon from '@mui/icons-material/School';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import ClassIcon from '@mui/icons-material/Class';
+import CategoryIcon from '@mui/icons-material/Category';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import EventNoteIcon from '@mui/icons-material/EventNote';
@@ -41,7 +41,7 @@ const masterDataItems = [
   { label: 'Students', icon: <SchoolIcon />, path: '/principal/students' },
   { label: 'Teachers', icon: <PeopleIcon />, path: '/principal/teachers' },
   { label: 'Courses', icon: <MenuBookIcon />, path: '/principal/courses' },
-  { label: 'Classes', icon: <ClassIcon />, path: '/principal/classes' },
+  { label: 'Course Types', icon: <CategoryIcon />, path: '/principal/course-types' },
   { label: 'Timetable', icon: <ScheduleIcon />, path: '/principal/timetable' },
 ];
 

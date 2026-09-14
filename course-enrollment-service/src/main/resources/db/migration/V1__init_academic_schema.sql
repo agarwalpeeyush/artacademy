@@ -34,40 +34,19 @@ CREATE TABLE COURSE_FEES (
 
 CREATE INDEX idx_course_fees_course_id ON COURSE_FEES (COURSE_ID);
 
-CREATE TABLE CLASSES (
-    ID          UUID PRIMARY KEY,
-    COURSE_ID   UUID NOT NULL,
-    TEACHER_ID  UUID,
-    CLASS_NAME  VARCHAR(255) NOT NULL,
-    ROOM_NUMBER VARCHAR(255),
-    ROOM_ID     UUID,
-    ROOM_NAME   VARCHAR(255),
-    CAPACITY    INTEGER,
-    START_DATE  DATE,
-    END_DATE    DATE,
-    STATUS      VARCHAR(255) NOT NULL,
-    CONSTRAINT fk_classes_course FOREIGN KEY (COURSE_ID) REFERENCES COURSES (ID)
-);
-
-CREATE INDEX idx_classes_course_id ON CLASSES (COURSE_ID);
-CREATE INDEX idx_classes_teacher_id ON CLASSES (TEACHER_ID);
-
 CREATE TABLE ENROLLMENTS (
     ID              UUID PRIMARY KEY,
     STUDENT_ID      UUID NOT NULL,
     COURSE_ID       UUID NOT NULL,
-    CLASS_ID        UUID NOT NULL,
     ENROLLMENT_DATE DATE NOT NULL,
     STATUS          VARCHAR(20) NOT NULL,
     ADMISSION_FEE_PAID BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT uq_enrollment_student_course UNIQUE (STUDENT_ID, COURSE_ID),
-    CONSTRAINT fk_enrollments_course FOREIGN KEY (COURSE_ID) REFERENCES COURSES (ID),
-    CONSTRAINT fk_enrollments_class FOREIGN KEY (CLASS_ID) REFERENCES CLASSES (ID)
+    CONSTRAINT fk_enrollments_course FOREIGN KEY (COURSE_ID) REFERENCES COURSES (ID)
 );
 
 CREATE INDEX idx_enrollments_student_id ON ENROLLMENTS (STUDENT_ID);
 CREATE INDEX idx_enrollments_course_id ON ENROLLMENTS (COURSE_ID);
-CREATE INDEX idx_enrollments_class_id ON ENROLLMENTS (CLASS_ID);
 
 -- Standard course types (R4). Reference/master data, not dev seed — kept through the R17 reset.
 -- New types can be added at runtime via the course-type API.

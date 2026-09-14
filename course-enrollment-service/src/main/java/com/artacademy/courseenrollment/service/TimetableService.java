@@ -1,10 +1,8 @@
 package com.artacademy.courseenrollment.service;
 
-import com.artacademy.common.events.KafkaTopics;
-import com.artacademy.common.events.TimetableGeneratedEvent;
 import com.artacademy.common.exception.ApiException;
+import com.artacademy.courseenrollment.client.UserServiceClient;
 import com.artacademy.courseenrollment.domain.Timetable;
-import com.artacademy.courseenrollment.dto.GenerateTimetableRequest;
 import com.artacademy.courseenrollment.dto.TimetableConflictResponse;
 import com.artacademy.courseenrollment.dto.TimetableRequest;
 import com.artacademy.courseenrollment.dto.TimetableResponse;
@@ -13,17 +11,16 @@ import com.artacademy.courseenrollment.mapper.TimetableMapper;
 import com.artacademy.courseenrollment.repository.TimetableRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -33,45 +30,55 @@ public class TimetableService {
 
     private final TimetableRepository timetableRepository;
     private final TimetableMapper timetableMapper;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final UserServiceClient userServiceClient;
 
     private static final LocalTime DAY_START = LocalTime.of(8, 0);
     private static final LocalTime DAY_END = LocalTime.of(20, 0);
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getAllTimetables() {
-        return timetableRepository.findAll().stream()
+        return enrichTeacherNames(timetableRepository.findAll().stream()
                 .map(timetableMapper::toResponse)
-                .toList();
+                .toList());
     }
 
     @Transactional(readOnly = true)
     public TimetableResponse getById(UUID id) {
-        return timetableMapper.toResponse(findTimetableById(id));
+        return enrichTeacherNames(List.of(timetableMapper.toResponse(findTimetableById(id)))).get(0);
     }
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getByTeacher(UUID teacherId) {
-        return timetableRepository.findByTeacherId(teacherId).stream()
+        return enrichTeacherNames(timetableRepository.findByTeacherId(teacherId).stream()
                 .map(timetableMapper::toResponse)
-                .toList();
+                .toList());
     }
 
     @Transactional(readOnly = true)
-    public List<TimetableResponse> getByClass(UUID classId) {
-        return timetableRepository.findByClassId(classId).stream()
+    public List<TimetableResponse> getByCourse(UUID courseId) {
+        return enrichTeacherNames(timetableRepository.findByCourseId(courseId).stream()
                 .map(timetableMapper::toResponse)
-                .toList();
+                .toList());
     }
 
     @Transactional(readOnly = true)
-    public List<TimetableResponse> getByStudent(UUID studentId, List<UUID> classIds) {
-        if (classIds == null || classIds.isEmpty()) {
+    public List<TimetableResponse> getByStudent(UUID studentId, List<UUID> courseIds) {
+        if (courseIds == null || courseIds.isEmpty()) {
             return List.of();
         }
-        return timetableRepository.findByClassIdIn(classIds).stream()
+        return enrichTeacherNames(timetableRepository.findByCourseIdIn(courseIds).stream()
                 .map(timetableMapper::toResponse)
-                .toList();
+                .toList());
+    }
+
+    /** Populate {@code teacherName} on each response from user-service (one bulk lookup per call). */
+    private List<TimetableResponse> enrichTeacherNames(List<TimetableResponse> responses) {
+        if (responses.isEmpty()) {
+            return responses;
+        }
+        Map<UUID, String> names = userServiceClient.fetchTeacherNames();
+        responses.forEach(r -> r.setTeacherName(names.get(r.getTeacherId())));
+        return responses;
     }
 
     @Transactional
@@ -81,7 +88,7 @@ public class TimetableService {
                 request.getEndTime(), null);
 
         Timetable timetable = Timetable.builder()
-                .classId(request.getClassId())
+                .courseId(request.getCourseId())
                 .teacherId(request.getTeacherId())
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
@@ -89,8 +96,6 @@ public class TimetableService {
                 .build();
 
         timetable = timetableRepository.save(timetable);
-
-        publishTimetableGeneratedEvent(timetable);
 
         return timetableMapper.toResponse(timetable);
     }
@@ -103,15 +108,13 @@ public class TimetableService {
         validateTeacherConflict(request.getTeacherId(), request.getDayOfWeek(), request.getStartTime(),
                 request.getEndTime(), id);
 
-        existing.setClassId(request.getClassId());
+        existing.setCourseId(request.getCourseId());
         existing.setTeacherId(request.getTeacherId());
         existing.setStartTime(request.getStartTime());
         existing.setEndTime(request.getEndTime());
         existing.setDayOfWeek(request.getDayOfWeek());
 
         existing = timetableRepository.save(existing);
-
-        publishTimetableUpdatedEvent(existing);
 
         return timetableMapper.toResponse(existing);
     }
@@ -122,53 +125,6 @@ public class TimetableService {
             throw ApiException.notFound("Timetable not found with id: " + id);
         }
         timetableRepository.deleteById(id);
-    }
-
-    @Transactional
-    public List<TimetableResponse> generateTimetables(GenerateTimetableRequest request) {
-        List<TimetableResponse> results = new ArrayList<>();
-        // Pack sessions from 08:00 forward, with an independent cursor per weekday so that
-        // items on different days each start at DAY_START rather than continuing from the
-        // running total of previously placed items.
-        java.util.Map<DayOfWeek, LocalTime> slotStartByDay = new java.util.EnumMap<>(DayOfWeek.class);
-
-        for (GenerateTimetableRequest.TimetableItem item : request.getItems()) {
-            DayOfWeek day = item.getPreferredDayOfWeek();
-            LocalTime slotStart = slotStartByDay.getOrDefault(day, DAY_START);
-            LocalTime slotEnd = slotStart.plusMinutes(item.getDurationMinutes());
-
-            if (slotEnd.isAfter(DAY_END) || !slotEnd.isAfter(slotStart)) {
-                throw ApiException.badRequest(
-                        "Cannot fit class " + item.getClassId() + " on " + day +
-                        ": slot " + slotStart + "-" + slotEnd + " exceeds the working-day window "
-                        + DAY_START + "-" + DAY_END);
-            }
-
-            List<Timetable> teacherConflicts = timetableRepository.findConflictingTeacherTimetables(
-                    item.getTeacherId(), day, slotStart, slotEnd);
-            if (!teacherConflicts.isEmpty()) {
-                throw ApiException.conflict(
-                        "Teacher " + item.getTeacherId() + " has a conflicting timetable on " +
-                        day + " at " + slotStart);
-            }
-
-            Timetable timetable = Timetable.builder()
-                    .classId(item.getClassId())
-                    .teacherId(item.getTeacherId())
-                    .startTime(slotStart)
-                    .endTime(slotEnd)
-                    .dayOfWeek(day)
-                    .build();
-
-            timetable = timetableRepository.save(timetable);
-            publishTimetableGeneratedEvent(timetable);
-            results.add(timetableMapper.toResponse(timetable));
-
-            // Advance this day's cursor to the end of the placed slot for the next item on the same day.
-            slotStartByDay.put(day, slotEnd);
-        }
-
-        return results;
     }
 
     // -------------------------------------------------------------------------
@@ -198,10 +154,10 @@ public class TimetableService {
                             a, b, overlapStart, overlapEnd,
                             "Teacher " + a.getTeacherId() + " double-booked"));
                 }
-                if (a.getClassId().equals(b.getClassId())) {
-                    conflicts.add(buildConflict(TimetableConflictResponse.ConflictType.CLASS_OVERLAP,
+                if (a.getCourseId().equals(b.getCourseId())) {
+                    conflicts.add(buildConflict(TimetableConflictResponse.ConflictType.COURSE_OVERLAP,
                             a, b, overlapStart, overlapEnd,
-                            "Class " + a.getClassId() + " overlaps with itself"));
+                            "Course " + a.getCourseId() + " has overlapping slots"));
                 }
             }
         }
@@ -219,7 +175,7 @@ public class TimetableService {
                 .timetableId(a.getId())
                 .otherTimetableId(b.getId())
                 .teacherId(a.getTeacherId())
-                .classId(a.getClassId())
+                .courseId(a.getCourseId())
                 .description(description)
                 .build();
     }
@@ -229,11 +185,11 @@ public class TimetableService {
     // -------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<UpcomingClassResponse> getUpcoming(List<UUID> classIds, int limit) {
-        if (classIds == null || classIds.isEmpty()) {
+    public List<UpcomingClassResponse> getUpcoming(List<UUID> courseIds, int limit) {
+        if (courseIds == null || courseIds.isEmpty()) {
             return List.of();
         }
-        List<Timetable> timetables = timetableRepository.findByClassIdIn(classIds);
+        List<Timetable> timetables = timetableRepository.findByCourseIdIn(courseIds);
         LocalDate today = LocalDate.now();
         LocalTime now = LocalTime.now();
 
@@ -246,7 +202,7 @@ public class TimetableService {
                             .dayOfWeek(s.getDayOfWeek())
                             .startTime(s.getStartTime())
                             .endTime(s.getEndTime())
-                            .classId(s.getClassId())
+                            .courseId(s.getCourseId())
                             .teacherId(s.getTeacherId())
                             .build();
                 })
@@ -314,33 +270,5 @@ public class TimetableService {
                     "Teacher " + teacherId + " already has a timetable on " + day +
                     " that overlaps with " + start + " - " + end);
         }
-    }
-
-    private void publishTimetableGeneratedEvent(Timetable timetable) {
-        TimetableGeneratedEvent event = TimetableGeneratedEvent.builder()
-                .timetableId(timetable.getId())
-                .classId(timetable.getClassId())
-                .teacherId(timetable.getTeacherId())
-                .dayOfWeek(timetable.getDayOfWeek().name())
-                .startTime(timetable.getStartTime().toString())
-                .endTime(timetable.getEndTime().toString())
-                .occurredAt(Instant.now())
-                .build();
-        kafkaTemplate.send(KafkaTopics.TIMETABLE_GENERATED, String.valueOf(timetable.getId()), event);
-        log.info("Published TimetableGeneratedEvent for timetable id={}", timetable.getId());
-    }
-
-    private void publishTimetableUpdatedEvent(Timetable timetable) {
-        TimetableGeneratedEvent event = TimetableGeneratedEvent.builder()
-                .timetableId(timetable.getId())
-                .classId(timetable.getClassId())
-                .teacherId(timetable.getTeacherId())
-                .dayOfWeek(timetable.getDayOfWeek().name())
-                .startTime(timetable.getStartTime().toString())
-                .endTime(timetable.getEndTime().toString())
-                .occurredAt(Instant.now())
-                .build();
-        kafkaTemplate.send(KafkaTopics.TIMETABLE_UPDATED, String.valueOf(timetable.getId()), event);
-        log.info("Published TimetableUpdatedEvent for timetable id={}", timetable.getId());
     }
 }

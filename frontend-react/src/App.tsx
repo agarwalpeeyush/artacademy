@@ -21,7 +21,7 @@ import StudentDetailPage from './pages/principal/StudentDetailPage';
 import TeacherDetailPage from './pages/principal/TeacherDetailPage';
 import CourseDetailPage from './pages/principal/CourseDetailPage';
 import CoursesPage from './pages/principal/CoursesPage';
-import ClassesPage from './pages/principal/ClassesPage';
+import CourseTypesPage from './pages/principal/CourseTypesPage';
 import EnrollmentsPage from './pages/principal/EnrollmentsPage';
 import TimetablePage from './pages/principal/TimetablePage';
 import AttendanceReportPage from './pages/principal/AttendanceReportPage';
@@ -117,8 +117,9 @@ const App: React.FC = () => {
         <Route path="students" element={<StudentsPage />} />
         <Route path="students/:id" element={<StudentDetailPage />} />
         <Route path="courses" element={<CoursesPage />} />
+        <Route path="course-types" element={<CourseTypesPage />} />
         <Route path="courses/:id" element={<CourseDetailPage />} />
-        <Route path="classes" element={<ClassesPage />} />
+        <Route path="classes" element={<Navigate to="/principal/courses" replace />} />
         <Route path="enrollments" element={<EnrollmentsPage />} />
         <Route path="timetable" element={<TimetablePage />} />
         <Route path="conflicts" element={<Navigate to="/principal/dashboard" replace />} />

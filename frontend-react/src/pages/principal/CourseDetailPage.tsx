@@ -15,13 +15,13 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchCourseById } from '../../store/slices/courseSlice';
-import { CourseClass, Enrollment } from '../../types';
-import courseService from '../../services/courseService';
+import { Enrollment, Timetable } from '../../types';
+import timetableService from '../../services/timetableService';
 import enrollmentService from '../../services/enrollmentService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDate, feeTypeLabel } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatTime, getDayName, feeTypeLabel } from '../../utils/formatters';
 
 const Info: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <Grid item xs={12} sm={6} md={4}>
@@ -37,7 +37,7 @@ const CourseDetailPage: React.FC = () => {
   const { selected: course, loading } = useSelector((state: RootState) => state.courses);
 
   const [tab, setTab] = useState(0);
-  const [classes, setClasses] = useState<CourseClass[]>([]);
+  const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
 
   useEffect(() => {
@@ -46,42 +46,38 @@ const CourseDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
-    courseService.getClassesByCourse(id).then(setClasses).catch(() => setClasses([]));
+    timetableService.getByCourse(id).then(setTimetables).catch(() => setTimetables([]));
     enrollmentService.getByCourse(id).then(setEnrollments).catch(() => setEnrollments([]));
   }, [id]);
 
   const teachers = useMemo(() => {
-    const map = new Map<string, { teacherId: string; teacherName: string; className: string }>();
-    classes.forEach((c) => {
-      if (c.teacherId && !map.has(c.teacherId)) {
-        map.set(c.teacherId, {
-          teacherId: c.teacherId,
-          teacherName: c.teacherName ?? c.teacherId,
-          className: c.className,
+    const map = new Map<string, { teacherId: string; teacherName: string }>();
+    timetables.forEach((t) => {
+      if (t.teacherId && !map.has(t.teacherId)) {
+        map.set(t.teacherId, {
+          teacherId: t.teacherId,
+          teacherName: t.teacherName ?? t.teacherId,
         });
       }
     });
     return Array.from(map.values());
-  }, [classes]);
+  }, [timetables]);
 
-  const classCols: Column<Record<string, unknown>>[] = [
-    { id: 'className', label: 'Class', minWidth: 160 },
-    { id: 'teacherName', label: 'Teacher', minWidth: 160 },
-    { id: 'roomNumber', label: 'Room', minWidth: 100 },
-    { id: 'capacity', label: 'Capacity', minWidth: 90, align: 'center' },
-    { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'ACTIVE' ? 'success' : 'default'} /> },
+  const timetableCols: Column<Record<string, unknown>>[] = [
+    { id: 'dayOfWeek', label: 'Day', minWidth: 120, format: (v) => getDayName(v as string) },
+    { id: 'startTime', label: 'Start', minWidth: 100, format: (v) => formatTime(v as string) },
+    { id: 'endTime', label: 'End', minWidth: 100, format: (v) => formatTime(v as string) },
+    { id: 'teacherName', label: 'Teacher', minWidth: 160, format: (v) => (v as string) || '—' },
   ];
 
   const studentCols: Column<Record<string, unknown>>[] = [
     { id: 'studentName', label: 'Student', minWidth: 160 },
-    { id: 'className', label: 'Class', minWidth: 140 },
     { id: 'enrollmentDate', label: 'Enrolled On', minWidth: 120, format: (v) => formatDate(v as string) },
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'ACTIVE' ? 'success' : 'default'} /> },
   ];
 
   const teacherCols: Column<Record<string, unknown>>[] = [
     { id: 'teacherName', label: 'Teacher', minWidth: 200 },
-    { id: 'className', label: 'Class', minWidth: 160 },
   ];
 
   if (loading && !course) return <LoadingSpinner />;
@@ -128,13 +124,13 @@ const CourseDetailPage: React.FC = () => {
       </Card>
 
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label={`Classes (${classes.length})`} />
+        <Tab label={`Timetable (${timetables.length})`} />
         <Tab label={`Enrolled Students (${enrollments.length})`} />
         <Tab label={`Teachers (${teachers.length})`} />
       </Tabs>
 
       {tab === 0 && (
-        <DataTable columns={classCols} rows={classes as unknown as Record<string, unknown>[]} emptyMessage="No classes for this course." />
+        <DataTable columns={timetableCols} rows={timetables as unknown as Record<string, unknown>[]} emptyMessage="No timetable slots for this course." />
       )}
 
       {tab === 1 && (

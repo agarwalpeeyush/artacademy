@@ -1,14 +1,11 @@
 package com.artacademy.attendance.service;
 
-import com.artacademy.attendance.domain.ClassSession;
-import com.artacademy.attendance.domain.ClassSessionStatus;
 import com.artacademy.attendance.domain.AttendanceStatus;
 import com.artacademy.attendance.domain.TeacherAttendance;
 import com.artacademy.attendance.dto.TeacherAttendanceRequest;
 import com.artacademy.attendance.dto.TeacherAttendanceResponse;
 import com.artacademy.attendance.dto.TeacherRangeAttendanceRequest;
 import com.artacademy.attendance.mapper.TeacherAttendanceMapper;
-import com.artacademy.attendance.repository.ClassSessionRepository;
 import com.artacademy.attendance.repository.TeacherAttendanceRepository;
 import com.artacademy.common.events.AttendanceRecordedEvent;
 import com.artacademy.common.events.KafkaTopics;
@@ -34,30 +31,29 @@ public class TeacherAttendanceService {
 
     private final TeacherAttendanceRepository teacherAttendanceRepository;
     private final TeacherAttendanceMapper teacherAttendanceMapper;
-    private final ClassSessionRepository classSessionRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /**
-     * Upsert attendance: update if a record already exists for the teacher+class+date,
-     * otherwise create a new one. A teacher taking two classes on the same day therefore
-     * gets two rows (R11).
+     * Upsert attendance: update if a record already exists for the teacher+timetable+date,
+     * otherwise create a new one. A teacher teaching two slots on the same day therefore
+     * gets two rows (R12).
      */
     public TeacherAttendanceResponse markAttendance(TeacherAttendanceRequest request) {
         Optional<TeacherAttendance> existing =
-                teacherAttendanceRepository.findByTeacherIdAndClassIdAndAttendanceDate(
-                        request.getTeacherId(), request.getClassId(), request.getAttendanceDate());
+                teacherAttendanceRepository.findByTeacherIdAndTimetableIdAndAttendanceDate(
+                        request.getTeacherId(), request.getTimetableId(), request.getAttendanceDate());
 
         TeacherAttendance attendance;
         if (existing.isPresent()) {
             attendance = existing.get();
             teacherAttendanceMapper.updateEntityFromRequest(request, attendance);
-            log.info("Updating teacher attendance id={} for teacherId={} classId={} date={}",
-                    attendance.getId(), request.getTeacherId(), request.getClassId(),
+            log.info("Updating teacher attendance id={} for teacherId={} timetableId={} date={}",
+                    attendance.getId(), request.getTeacherId(), request.getTimetableId(),
                     request.getAttendanceDate());
         } else {
             attendance = teacherAttendanceMapper.toEntity(request);
-            log.info("Creating teacher attendance for teacherId={} classId={} date={}",
-                    request.getTeacherId(), request.getClassId(), request.getAttendanceDate());
+            log.info("Creating teacher attendance for teacherId={} timetableId={} date={}",
+                    request.getTeacherId(), request.getTimetableId(), request.getAttendanceDate());
         }
 
         TeacherAttendance saved = teacherAttendanceRepository.save(attendance);
@@ -66,35 +62,23 @@ public class TeacherAttendanceService {
     }
 
     /**
-     * Bulk-mark teacher attendance for one class across a date range (R11 / G4). Writes one row
-     * per (teacher, class, session day) for every scheduled, non-CANCELLED ClassSession of the
-     * class in [fromDate, toDate]. Existing rows are updated; missing ones inserted. Idempotent.
+     * Bulk-mark teacher attendance for one timetable slot across an explicit set of session dates
+     * (R12). The frontend supplies the dates that fall on the slot's weekday (decision 8.3).
+     * Existing rows are updated; missing ones inserted. Idempotent.
      */
-    public List<TeacherAttendanceResponse> markClassAttendanceForRange(UUID classId,
-                                                                       TeacherRangeAttendanceRequest request) {
-        if (request.getFromDate().isAfter(request.getToDate())) {
-            throw ApiException.badRequest(
-                    "fromDate " + request.getFromDate() + " must not be after toDate " + request.getToDate());
-        }
-
-        List<ClassSession> sessions = classSessionRepository
-                .findByClassIdAndSessionDateBetween(classId, request.getFromDate(), request.getToDate())
-                .stream()
-                .filter(s -> s.getStatus() != ClassSessionStatus.CANCELLED)
-                .toList();
-
+    public List<TeacherAttendanceResponse> markTimetableAttendanceForRange(UUID timetableId,
+                                                                           TeacherRangeAttendanceRequest request) {
         List<TeacherAttendanceResponse> results = new ArrayList<>();
-        for (ClassSession session : sessions) {
-            UUID courseId = request.getCourseId() != null ? request.getCourseId() : session.getCourseId();
+        for (LocalDate date : request.getSessionDates()) {
             for (UUID teacherId : request.getTeacherIds()) {
                 TeacherAttendance record = teacherAttendanceRepository
-                        .findByTeacherIdAndClassIdAndAttendanceDate(teacherId, classId, session.getSessionDate())
+                        .findByTeacherIdAndTimetableIdAndAttendanceDate(teacherId, timetableId, date)
                         .orElseGet(() -> TeacherAttendance.builder()
                                 .teacherId(teacherId)
-                                .classId(classId)
-                                .attendanceDate(session.getSessionDate())
+                                .timetableId(timetableId)
+                                .attendanceDate(date)
                                 .build());
-                record.setCourseId(courseId);
+                record.setCourseId(request.getCourseId());
                 record.setStatus(request.getDefaultStatus());
                 record.setRemarks(request.getRemarks());
 
@@ -107,11 +91,11 @@ public class TeacherAttendanceService {
     }
 
     /**
-     * List teacher attendance rows for a class on a specific date (all teachers on that day).
+     * List teacher attendance rows for a timetable slot on a specific date.
      */
     @Transactional(readOnly = true)
-    public List<TeacherAttendanceResponse> getByClassAndDate(UUID classId, LocalDate date) {
-        return teacherAttendanceRepository.findByClassIdAndAttendanceDate(classId, date)
+    public List<TeacherAttendanceResponse> getByTimetableAndDate(UUID timetableId, LocalDate date) {
+        return teacherAttendanceRepository.findByTimetableIdAndAttendanceDate(timetableId, date)
                 .stream()
                 .map(teacherAttendanceMapper::toResponse)
                 .toList();
@@ -179,7 +163,7 @@ public class TeacherAttendanceService {
 
         kafkaTemplate.send(KafkaTopics.ATTENDANCE_RECORDED,
                 saved.getTeacherId().toString(), event);
-        log.info("Published AttendanceRecordedEvent for teacherId={} classId={}",
-                saved.getTeacherId(), saved.getClassId());
+        log.info("Published AttendanceRecordedEvent for teacherId={} timetableId={}",
+                saved.getTeacherId(), saved.getTimetableId());
     }
 }

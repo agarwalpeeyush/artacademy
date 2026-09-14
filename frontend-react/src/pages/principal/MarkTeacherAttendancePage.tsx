@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Button, TextField, Grid, Paper, MenuItem, Chip, Alert, Snackbar, Typography,
-  Tabs, Tab,
+  Tabs, Tab, Autocomplete,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
-import courseService from '../../services/courseService';
+import timetableService from '../../services/timetableService';
 import attendanceService from '../../services/attendanceService';
-import { CourseClass, TeacherAttendance, AttendanceStatus } from '../../types';
+import { Timetable, TeacherAttendance, AttendanceStatus } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
+import { getDayName, formatTime } from '../../utils/formatters';
 import { format } from 'date-fns';
 
 const statusColors: Record<AttendanceStatus, 'success' | 'error' | 'warning' | 'default'> = {
@@ -16,8 +17,8 @@ const statusColors: Record<AttendanceStatus, 'success' | 'error' | 'warning' | '
 };
 
 const MarkTeacherAttendancePage: React.FC = () => {
-  const [classes, setClasses] = useState<CourseClass[]>([]);
-  const [selectedClass, setSelectedClass] = useState<CourseClass | null>(null);
+  const [timetables, setTimetables] = useState<Timetable[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<Timetable | null>(null);
   const [tab, setTab] = useState(0);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [status, setStatus] = useState<AttendanceStatus>('PRESENT');
@@ -29,53 +30,68 @@ const MarkTeacherAttendancePage: React.FC = () => {
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
-    courseService.getAllClasses().then(setClasses).catch(() => setClasses([]));
+    timetableService.getAll().then(setTimetables).catch(() => setTimetables([]));
   }, []);
 
-  const loadRecords = async (classId: string, forDate: string) => {
+  const loadRecords = async (slotId: string, forDate: string) => {
     try {
-      const rows = await attendanceService.getTeacherClassAttendanceForDate(classId, forDate);
+      const rows = await attendanceService.getTeacherTimetableAttendanceForDate(slotId, forDate);
       setRecords(rows);
     } catch {
       setRecords([]);
     }
   };
 
-  const handleClassChange = (classId: string) => {
-    const cls = classes.find(c => c.id === classId) || null;
-    setSelectedClass(cls);
-    if (cls) loadRecords(cls.id, date);
+  const handleSlotChange = (slotId: string) => {
+    const slot = timetables.find(t => t.id === slotId) || null;
+    setSelectedSlot(slot);
+    if (slot) loadRecords(slot.id, date);
     else setRecords([]);
   };
 
   const handleDateChange = (value: string) => {
     setDate(value);
-    if (selectedClass) loadRecords(selectedClass.id, value);
+    if (selectedSlot) loadRecords(selectedSlot.id, value);
   };
 
-  const hasTeacher = Boolean(selectedClass?.teacherId);
+  const hasTeacher = Boolean(selectedSlot?.teacherId);
 
   const handleSave = async () => {
-    if (!selectedClass?.teacherId) return;
+    if (!selectedSlot?.teacherId) return;
     try {
       await attendanceService.markTeacherAttendance({
-        teacherId: selectedClass.teacherId, classId: selectedClass.id, courseId: selectedClass.courseId,
+        teacherId: selectedSlot.teacherId, timetableId: selectedSlot.id, courseId: selectedSlot.courseId,
         date, status, remarks,
       });
       setSnackbar({ open: true, message: 'Teacher attendance saved successfully', severity: 'success' });
-      loadRecords(selectedClass.id, date);
+      loadRecords(selectedSlot.id, date);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
       setSnackbar({ open: true, message: e.response?.data?.message || 'Failed to save attendance', severity: 'error' });
     }
   };
 
+  const sessionDatesBetween = (start: string, end: string): string[] => {
+    const out: string[] = [];
+    const s = new Date(start);
+    const e = new Date(end);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      out.push(format(d, 'yyyy-MM-dd'));
+    }
+    return out;
+  };
+
   const handleBulkRange = async () => {
-    if (!selectedClass?.teacherId) return;
+    if (!selectedSlot?.teacherId) return;
+    const sessionDates = sessionDatesBetween(fromDate, toDate);
+    if (sessionDates.length === 0) {
+      setSnackbar({ open: true, message: 'Invalid date range', severity: 'error' });
+      return;
+    }
     try {
       await attendanceService.markTeacherBulkRange({
-        classId: selectedClass.id, courseId: selectedClass.courseId, teacherId: selectedClass.teacherId,
-        fromDate, toDate, status: rangeStatus,
+        timetableId: selectedSlot.id, courseId: selectedSlot.courseId,
+        sessionDates, status: rangeStatus, teacherIds: [selectedSlot.teacherId],
       });
       setSnackbar({ open: true, message: 'Bulk attendance applied successfully', severity: 'success' });
     } catch (err: unknown) {
@@ -98,36 +114,38 @@ const MarkTeacherAttendancePage: React.FC = () => {
     <Box>
       <PageHeader
         title="Mark Teacher Attendance"
-        subtitle="Record attendance for the teacher assigned to a class"
+        subtitle="Record attendance for the teacher assigned to a timetable slot"
         breadcrumbs={[{ label: 'Principal' }, { label: 'Mark Teacher Attendance' }]}
       />
 
       <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={6}>
-            <TextField
-              select label="Select Class" size="small" fullWidth
-              value={selectedClass?.id ?? ''}
-              onChange={e => handleClassChange(e.target.value)}
-            >
-              {classes.map(c => (
-                <MenuItem key={c.id} value={c.id}>{c.className} – {c.courseName}</MenuItem>
-              ))}
-            </TextField>
+            <Autocomplete
+              size="small"
+              options={timetables}
+              value={selectedSlot}
+              onChange={(_e, v) => handleSlotChange(v?.id ?? '')}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              getOptionLabel={(t) =>
+                `${t.courseName || t.courseId} — ${getDayName(t.dayOfWeek)} ${formatTime(t.startTime)}–${formatTime(t.endTime)}`
+              }
+              renderInput={(params) => <TextField {...params} label="Select Timetable Slot" placeholder="Search by course or time…" />}
+            />
           </Grid>
-          {selectedClass && (
+          {selectedSlot && (
             <Grid item xs={12} sm={6}>
               {hasTeacher ? (
-                <Typography>Teacher: <strong>{selectedClass?.teacherName || selectedClass?.teacherId}</strong></Typography>
+                <Typography>Teacher: <strong>{selectedSlot?.teacherName || '—'}</strong></Typography>
               ) : (
-                <Typography color="error">No teacher assigned to this class.</Typography>
+                <Typography color="error">No teacher assigned to this slot.</Typography>
               )}
             </Grid>
           )}
         </Grid>
       </Paper>
 
-      {selectedClass && (
+      {selectedSlot && (
         <Paper variant="outlined" sx={{ mb: 3 }}>
           <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
             <Tab label="Single Day" />

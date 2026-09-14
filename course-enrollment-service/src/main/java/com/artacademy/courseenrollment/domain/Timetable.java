@@ -22,8 +22,8 @@ public class Timetable {
     @UuidGenerator
     private UUID id;
 
-    @Column(name = "CLASS_ID", nullable = false)
-    private UUID classId;
+    @Column(name = "COURSE_ID", nullable = false)
+    private UUID courseId;
 
     @Column(name = "TEACHER_ID", nullable = false)
     private UUID teacherId;

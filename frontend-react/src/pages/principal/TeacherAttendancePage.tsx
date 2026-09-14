@@ -7,10 +7,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import attendanceService from '../../services/attendanceService';
-import courseService from '../../services/courseService';
-import { Teacher, TeacherAttendance, CourseClass } from '../../types';
+import timetableService from '../../services/timetableService';
+import { Teacher, TeacherAttendance, Timetable } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
+import { getDayName, formatTime } from '../../utils/formatters';
 import { format } from 'date-fns';
 
 type TeacherStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'LEAVE';
@@ -23,8 +24,8 @@ const TeacherAttendancePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { list: teachers } = useSelector((state: RootState) => state.teachers);
   const [teacher, setTeacher] = useState<Teacher | null>(null);
-  const [classes, setClasses] = useState<CourseClass[]>([]);
-  const [selectedClass, setSelectedClass] = useState<CourseClass | null>(null);
+  const [slots, setSlots] = useState<Timetable[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<Timetable | null>(null);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [status, setStatus] = useState<TeacherStatus>('PRESENT');
   const [remarks, setRemarks] = useState('');
@@ -33,7 +34,6 @@ const TeacherAttendancePage: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchTeachers());
-    courseService.getAllClasses().then(setClasses).catch(() => setClasses([]));
   }, [dispatch]);
 
   const loadRecords = async (teacherId: string) => {
@@ -47,8 +47,14 @@ const TeacherAttendancePage: React.FC = () => {
 
   const handleTeacherChange = (t: Teacher | null) => {
     setTeacher(t);
-    if (t?.id) loadRecords(t.id);
-    else setRecords([]);
+    setSelectedSlot(null);
+    if (t?.id) {
+      loadRecords(t.id);
+      timetableService.getByTeacher(t.id).then(setSlots).catch(() => setSlots([]));
+    } else {
+      setRecords([]);
+      setSlots([]);
+    }
   };
 
   const handleSave = async () => {
@@ -56,13 +62,13 @@ const TeacherAttendancePage: React.FC = () => {
       setSnackbar({ open: true, message: 'Please select a teacher', severity: 'error' });
       return;
     }
-    if (!selectedClass) {
-      setSnackbar({ open: true, message: 'Please select a class', severity: 'error' });
+    if (!selectedSlot) {
+      setSnackbar({ open: true, message: 'Please select a timetable slot', severity: 'error' });
       return;
     }
     try {
       await attendanceService.markTeacherAttendance({
-        teacherId: teacher.id, classId: selectedClass.id, courseId: selectedClass.courseId,
+        teacherId: teacher.id, timetableId: selectedSlot.id, courseId: selectedSlot.courseId,
         date, status, remarks,
       });
       setSnackbar({ open: true, message: 'Teacher attendance saved successfully', severity: 'success' });
@@ -105,12 +111,15 @@ const TeacherAttendancePage: React.FC = () => {
           </Grid>
           <Grid item xs={12} sm={3}>
             <TextField
-              select label="Class" size="small" fullWidth
-              value={selectedClass?.id ?? ''}
-              onChange={e => setSelectedClass(classes.find(c => c.id === e.target.value) || null)}
+              select label="Timetable Slot" size="small" fullWidth
+              value={selectedSlot?.id ?? ''}
+              onChange={e => setSelectedSlot(slots.find(s => s.id === e.target.value) || null)}
+              disabled={!teacher}
             >
-              {classes.map(c => (
-                <MenuItem key={c.id} value={c.id}>{c.className} – {c.courseName}</MenuItem>
+              {slots.map(s => (
+                <MenuItem key={s.id} value={s.id}>
+                  {(s.courseName || s.courseId)} – {getDayName(s.dayOfWeek)} {formatTime(s.startTime)}
+                </MenuItem>
               ))}
             </TextField>
           </Grid>

@@ -66,7 +66,7 @@ const attendanceSlice = createSlice({
       .addCase(markStudentAttendance.fulfilled, (state, action) => {
         action.payload.forEach(newRecord => {
           const idx = state.studentAttendance.findIndex(
-            a => a.studentId === newRecord.studentId && a.date === newRecord.date && a.classId === newRecord.classId
+            a => a.studentId === newRecord.studentId && a.date === newRecord.date && a.timetableId === newRecord.timetableId
           );
           if (idx !== -1) state.studentAttendance[idx] = newRecord;
           else state.studentAttendance.push(newRecord);

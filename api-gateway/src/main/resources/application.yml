@@ -34,7 +34,7 @@ spring:
         - id: course-enrollment-service
           uri: lb://course-enrollment-service
           predicates:
-            - Path=/courses/**,/classes/**,/enrollments/**,/timetables/**
+            - Path=/courses/**,/course-types/**,/enrollments/**,/timetables/**,/exams/**
           filters:
             - JwtAuth
         - id: attendance-service

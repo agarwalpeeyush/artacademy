@@ -16,7 +16,7 @@ const AssignedStudentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -25,18 +25,18 @@ const AssignedStudentsPage: React.FC = () => {
   }, [dispatch, user]);
 
   useEffect(() => {
-      if (selectedClassId) {
+      if (selectedCourseId) {
       setLoading(true);
-      studentService.getByClass(selectedClassId)
+      studentService.getByCourse(selectedCourseId)
         .then(setStudents)
         .catch(() => setStudents([]))
         .finally(() => setLoading(false));
     } else {
       setStudents([]);
     }
-  }, [selectedClassId]);
+  }, [selectedCourseId]);
 
-  const uniqueClasses = [...new Map(teacherTimetables.map(s => [s.classId, s])).values()];
+  const uniqueCourses = [...new Map(teacherTimetables.map(s => [s.courseId, s])).values()];
 
   const columns: Column<Record<string, unknown>>[] = [
     { id: 'firstName', label: 'First Name', minWidth: 120 },
@@ -57,32 +57,32 @@ const AssignedStudentsPage: React.FC = () => {
     <Box>
       <PageHeader
         title="My Students"
-        subtitle="Students enrolled in your classes"
+        subtitle="Students enrolled in your courses"
         breadcrumbs={[{ label: 'Teacher' }, { label: 'My Students' }]}
       />
 
       <Box mb={3}>
         <TextField
-          select label="Select Class" size="small" sx={{ minWidth: 300 }}
-          value={selectedClassId}
-          onChange={e => setSelectedClassId(e.target.value)}
+          select label="Select Course" size="small" sx={{ minWidth: 300 }}
+          value={selectedCourseId}
+          onChange={e => setSelectedCourseId(e.target.value)}
         >
-          <MenuItem value="">-- Select a class --</MenuItem>
-          {uniqueClasses.map(s => (
-            <MenuItem key={s.classId} value={s.classId}>{s.className} – {s.courseName}</MenuItem>
+          <MenuItem value="">-- Select a course --</MenuItem>
+          {uniqueCourses.map(s => (
+            <MenuItem key={s.courseId} value={s.courseId}>{s.courseName}</MenuItem>
           ))}
         </TextField>
       </Box>
 
       {loading ? (
         <LoadingSpinner />
-      ) : selectedClassId ? (
+      ) : selectedCourseId ? (
         <>
-          <Typography variant="body2" color="text.secondary" mb={1}>{students.length} student(s) in this class</Typography>
+          <Typography variant="body2" color="text.secondary" mb={1}>{students.length} student(s) in this course</Typography>
           <DataTable columns={columns} rows={students as unknown as Record<string, unknown>[]} searchable searchPlaceholder="Search students..." />
         </>
       ) : (
-        <Typography color="text.secondary">Select a class to view its students.</Typography>
+        <Typography color="text.secondary">Select a course to view its students.</Typography>
       )}
     </Box>
   );

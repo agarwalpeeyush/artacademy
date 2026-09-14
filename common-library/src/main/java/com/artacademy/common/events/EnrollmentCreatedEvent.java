@@ -20,7 +20,6 @@ public class EnrollmentCreatedEvent {
     private UUID enrollmentId;
     private UUID studentId;
     private UUID courseId;
-    private UUID classId;
 
     /**
      * The full fee set carried by the enrolled course. Replaces the old scalar
