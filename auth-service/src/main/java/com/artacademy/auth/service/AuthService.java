@@ -41,18 +41,7 @@ public class AuthService {
             auditLogService.log(request.getUsername(), "LOGIN_FAILED", "Invalid credentials", ipAddress, false);
             throw ApiException.badRequest("Invalid credentials");
         }
-        // The bootstrap dummy admin may log in only while no real principal exists. Once one does, it is
-        // permanently deactivated (persisted) and can only be revived via a DB migration script.
-        if (user.isBootstrap() && userRepository.countRealPrincipals() > 0) {
-            if (!"INACTIVE".equals(user.getStatus())) {
-                user.setStatus("INACTIVE");
-                user.setUpdatedAt(Instant.now());
-                userRepository.save(user);
-            }
-            auditLogService.log(request.getUsername(), "LOGIN_FAILED",
-                    "Bootstrap admin disabled: a principal already exists", ipAddress, false);
-            throw ApiException.forbidden("Account is not active");
-        }
+        // Standing ADMIN (D8): the seeded admin no longer self-deactivates; only an INACTIVE status blocks it.
         if (!"ACTIVE".equals(user.getStatus())) {
             loginAttemptService.recordFailure(request.getUsername());
             auditLogService.log(request.getUsername(), "LOGIN_FAILED", "Account not active", ipAddress, false);
@@ -60,7 +49,8 @@ public class AuthService {
         }
         loginAttemptService.recordSuccess(request.getUsername());
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-        String accessToken = jwtUtil.generateToken(user.getUsername(), roles, user.isBootstrap());
+        String accessToken = jwtUtil.generateToken(
+                user.getUsername(), roles, user.isBootstrap(), user.getId().toString());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
         auditLogService.log(user.getUsername(), "LOGIN", null, ipAddress, true);
         return LoginResponse.builder()
@@ -87,7 +77,8 @@ public class AuthService {
         refreshTokenService.verifyExpiry(refreshToken);
         User user = refreshToken.getUser();
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-        String accessToken = jwtUtil.generateToken(user.getUsername(), roles, user.isBootstrap());
+        String accessToken = jwtUtil.generateToken(
+                user.getUsername(), roles, user.isBootstrap(), user.getId().toString());
         RefreshToken newRefresh = refreshTokenService.createRefreshToken(user);
         return LoginResponse.builder()
                 .accessToken(accessToken)

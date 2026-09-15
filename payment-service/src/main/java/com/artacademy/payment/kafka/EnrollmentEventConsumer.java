@@ -6,7 +6,10 @@ import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.fee.FeeCadence;
 import com.artacademy.common.fee.FeeType;
 import com.artacademy.payment.domain.EnrollmentCache;
+import com.artacademy.payment.domain.FeeStatus;
+import com.artacademy.payment.domain.StudentFeeDetail;
 import com.artacademy.payment.repository.EnrollmentCacheRepository;
+import com.artacademy.payment.repository.StudentFeeDetailRepository;
 import com.artacademy.payment.service.AdmissionFeeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +26,7 @@ import java.util.List;
 public class EnrollmentEventConsumer {
 
     private final EnrollmentCacheRepository enrollmentCacheRepository;
+    private final StudentFeeDetailRepository feeDetailRepository;
     private final AdmissionFeeService admissionFeeService;
 
     @KafkaListener(
@@ -31,8 +35,8 @@ public class EnrollmentEventConsumer {
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleEnrollmentCreated(@Payload EnrollmentCreatedEvent event) {
-        log.info("Received EnrollmentCreatedEvent: enrollmentId={}, studentId={}, courseId={}",
-                event.getEnrollmentId(), event.getStudentId(), event.getCourseId());
+        log.info("Received EnrollmentCreatedEvent: enrollmentId={}, studentId={}, courseId={}, teacherId={}",
+                event.getEnrollmentId(), event.getStudentId(), event.getCourseId(), event.getTeacherId());
 
         List<EnrollmentCreatedEvent.FeeItem> fees = event.getFees() != null ? event.getFees() : List.of();
 
@@ -41,6 +45,12 @@ public class EnrollmentEventConsumer {
                 .filter(f -> f.getCadence() == FeeCadence.RECURRING)
                 .map(f -> f.getAmount() != null ? f.getAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // The monthly line carries the share rule stamped onto each monthly-generated detail.
+        EnrollmentCreatedEvent.FeeItem recurringLine = fees.stream()
+                .filter(f -> f.getCadence() == FeeCadence.RECURRING)
+                .findFirst()
+                .orElse(null);
 
         EnrollmentCache cache = enrollmentCacheRepository.findById(event.getEnrollmentId())
                 .orElse(EnrollmentCache.builder()
@@ -51,6 +61,11 @@ public class EnrollmentEventConsumer {
         cache.setCourseId(event.getCourseId());
         cache.setCourseFee(recurringTotal);
         cache.setStatus("ACTIVE");
+        cache.setTeacherId(event.getTeacherId());
+        if (recurringLine != null) {
+            cache.setInstituteShareType(recurringLine.getInstituteShareType());
+            cache.setInstituteShareValue(recurringLine.getInstituteShareValue());
+        }
 
         enrollmentCacheRepository.save(cache);
         log.info("Upserted EnrollmentCache for enrollmentId={} (recurringTotal={})",
@@ -62,6 +77,34 @@ public class EnrollmentEventConsumer {
             if (fee.getCadence() == FeeCadence.ONE_TIME && fee.getFeeType() != FeeType.EXAM) {
                 admissionFeeService.generateOneTimeDue(event, fee);
             }
+        }
+
+        // F13: a re-published event (child's fee/share edited before payment) updates the
+        // not-yet-paid details in place; PAID details are frozen and change only via override.
+        updateUnpaidDetails(event, recurringLine);
+    }
+
+    /**
+     * F13: refresh the teacher attribution and frozen share rule (and the billed amount, for
+     * recurring lines) on the enrollment's not-yet-paid details. PAID details are left untouched.
+     */
+    private void updateUnpaidDetails(EnrollmentCreatedEvent event,
+                                     EnrollmentCreatedEvent.FeeItem recurringLine) {
+        List<StudentFeeDetail> details = feeDetailRepository.findByEnrollmentId(event.getEnrollmentId());
+        for (StudentFeeDetail detail : details) {
+            if (detail.getStatus() == FeeStatus.PAID) {
+                continue;
+            }
+            detail.setTeacherId(event.getTeacherId());
+            if (recurringLine != null) {
+                detail.setInstituteShareType(recurringLine.getInstituteShareType());
+                detail.setInstituteShareValue(recurringLine.getInstituteShareValue());
+            }
+            feeDetailRepository.save(detail);
+        }
+        if (!details.isEmpty()) {
+            log.info("F13: refreshed share rule on {} not-yet-paid detail(s) for enrollmentId={}",
+                    details.size(), event.getEnrollmentId());
         }
     }
 

@@ -10,15 +10,31 @@ import { fetchRevenue } from '../../store/slices/reportSlice';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatCurrency, getMonthName } from '../../utils/formatters';
+import feeService from '../../services/feeService';
+import teacherService from '../../services/teacherService';
+import { TeacherRevenueSummary, Teacher } from '../../types';
 
 const RevenuePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { revenueReports, loading } = useSelector((state: RootState) => state.reports);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [teacherSummaries, setTeacherSummaries] = useState<TeacherRevenueSummary[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   useEffect(() => {
     dispatch(fetchRevenue({ year }));
   }, [dispatch, year]);
+
+  useEffect(() => {
+    Promise.all([feeService.getTeacherSummaries(), teacherService.getAll()])
+      .then(([summaries, ts]) => { setTeacherSummaries(summaries); setTeachers(ts); })
+      .catch(() => { setTeacherSummaries([]); setTeachers([]); });
+  }, []);
+
+  const teacherName = (id: string): string => {
+    const t = teachers.find(x => x.id === id);
+    return t ? `${t.firstName} ${t.lastName}`.trim() : id;
+  };
 
   const totalRevenue = revenueReports.reduce((sum, r) => sum + r.totalRevenue, 0);
   const totalCollected = revenueReports.reduce((sum, r) => sum + r.collectedAmount, 0);
@@ -105,6 +121,45 @@ const RevenuePage: React.FC = () => {
           </Table>
         </TableContainer>
       )}
+
+      <Box mt={4}>
+        <Typography variant="h6" gutterBottom>Revenue by Teacher</Typography>
+        <Typography variant="body2" color="text.secondary" mb={1}>
+          Institute commission and teacher share over fully-paid fee details.
+        </Typography>
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Teacher</TableCell>
+                <TableCell align="right">Collected</TableCell>
+                <TableCell align="right">Institute Commission</TableCell>
+                <TableCell align="right">Teacher Share</TableCell>
+                <TableCell align="center">Paid Details</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {teacherSummaries.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                    <Typography color="text.secondary">No paid fee details with teacher attribution yet.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                teacherSummaries.map(s => (
+                  <TableRow key={s.teacherId} hover>
+                    <TableCell>{s.teacherName || teacherName(s.teacherId)}</TableCell>
+                    <TableCell align="right">{formatCurrency(s.collected)}</TableCell>
+                    <TableCell align="right" sx={{ color: 'primary.main' }}>{formatCurrency(s.instituteShare)}</TableCell>
+                    <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(s.teacherShare)}</TableCell>
+                    <TableCell align="center">{s.paidDetailCount}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
     </Box>
   );
 };

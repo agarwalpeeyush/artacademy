@@ -3,17 +3,22 @@ package com.artacademy.userservice.service;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.ParentCreatedEvent;
 import com.artacademy.common.events.ParentDeletedEvent;
+import com.artacademy.common.events.PersonRoleChangedEvent;
 import com.artacademy.common.exception.ApiException;
-import com.artacademy.userservice.domain.Parent;
-import com.artacademy.userservice.domain.Student;
+import com.artacademy.common.security.RoleName;
+import com.artacademy.userservice.domain.Guardianship;
+import com.artacademy.userservice.domain.ParentProfile;
+import com.artacademy.userservice.domain.Person;
+import com.artacademy.userservice.domain.Relationship;
 import com.artacademy.userservice.dto.ChildRef;
 import com.artacademy.userservice.dto.ParentRef;
 import com.artacademy.userservice.dto.ParentRequest;
 import com.artacademy.userservice.dto.ParentResponse;
 import com.artacademy.userservice.dto.ParentSelfUpdateRequest;
-import com.artacademy.userservice.mapper.ParentMapper;
-import com.artacademy.userservice.repository.ParentRepository;
-import com.artacademy.userservice.repository.StudentRepository;
+import com.artacademy.userservice.repository.GuardianshipRepository;
+import com.artacademy.userservice.repository.ParentProfileRepository;
+import com.artacademy.userservice.repository.PersonRepository;
+import com.artacademy.userservice.repository.StudentProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,169 +45,244 @@ public class ParentService {
     @Value("${artacademy.user.default-temporary-password}")
     private String defaultTemporaryPassword;
 
-    private final ParentRepository parentRepository;
-    private final StudentRepository studentRepository;
-    private final ParentMapper parentMapper;
+    private final PersonRepository personRepository;
+    private final ParentProfileRepository parentProfileRepository;
+    private final StudentProfileRepository studentProfileRepository;
+    private final GuardianshipRepository guardianshipRepository;
+    private final PersonRoleService personRoleService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final EmailUniquenessValidator emailUniquenessValidator;
 
     @Transactional(readOnly = true)
     public Page<ParentResponse> getAllParents(Pageable pageable) {
-        return parentRepository.findAll(pageable).map(this::toResponse);
+        return parentProfileRepository.findAll(pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
     public ParentResponse getParentById(UUID id) {
-        return toResponse(findById(id));
+        return toResponse(findProfile(id));
     }
 
     @Transactional(readOnly = true)
-    public ParentResponse getParentByLoginId(String loginId) {
-        Parent parent = parentRepository.findByLoginId(loginId)
-                .orElseThrow(() -> ApiException.notFound("Parent not found with login ID: " + loginId));
-        return toResponse(parent);
+    public ParentResponse getParentByPersonId(UUID personId) {
+        return toResponse(findProfile(personId));
     }
 
     @Transactional(readOnly = true)
-    public List<ChildRef> getMyChildren(String loginId) {
-        Parent parent = parentRepository.findByLoginId(loginId)
-                .orElseThrow(() -> ApiException.notFound("Parent not found with login ID: " + loginId));
-        return toChildRefs(parent);
+    public List<ChildRef> getChildrenOf(UUID personId) {
+        findProfile(personId);
+        return toChildRefs(personId);
     }
 
-    public ParentResponse updateMyProfile(String loginId, ParentSelfUpdateRequest request) {
-        Parent parent = parentRepository.findByLoginId(loginId)
-                .orElseThrow(() -> ApiException.notFound("Parent not found with login ID: " + loginId));
-        parent.setFirstName(request.getFirstName());
-        parent.setLastName(request.getLastName());
-        emailUniquenessValidator.assertEmailAvailable(request.getEmail(), parent.getId());
-        parent.setEmail(request.getEmail());
-        parent.setPhone(request.getPhone());
-        parent.setAddress(request.getAddress());
-        parent.setOccupation(request.getOccupation());
-        parent.setRelationship(parentMapper.toRelationship(request.getRelationship()));
-        return toResponse(parentRepository.save(parent));
+    public ParentResponse updateMyProfile(UUID personId, ParentSelfUpdateRequest request) {
+        ParentProfile profile = findProfile(personId);
+        Person person = profile.getPerson();
+        person.setFirstName(request.getFirstName());
+        person.setLastName(request.getLastName());
+        person.setEmail(request.getEmail());
+        person.setPhoneNumber(request.getPhone());
+        profile.setOccupation(request.getOccupation());
+        personRepository.save(person);
+        return toResponse(parentProfileRepository.save(profile));
     }
 
     public ParentResponse createParent(ParentRequest request) {
-        if (parentRepository.existsByLoginId(request.getLoginId())) {
+        if (personRepository.existsByLoginId(request.getLoginId())) {
             throw ApiException.conflict("Parent with login ID '" + request.getLoginId() + "' already exists");
         }
-        emailUniquenessValidator.assertEmailAvailable(request.getEmail());
 
-        Parent parent = parentMapper.toEntity(request);
-        parent.getChildren().addAll(resolveChildren(request.getChildStudentIds()));
-        Parent saved = parentRepository.save(parent);
-
-        List<String> roles = new ArrayList<>(List.of("PARENT"));
+        Person person = Person.builder()
+                .loginId(request.getLoginId())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .email(request.getEmail())
+                .phoneNumber(request.getPhone())
+                .status("ACTIVE")
+                .build();
         if (request.getAdditionalRoles() != null) {
-            request.getAdditionalRoles().forEach(r -> { if (!roles.contains(r)) roles.add(r); });
+            request.getAdditionalRoles().stream()
+                    .filter(r -> r.equals(RoleName.PRINCIPAL) || r.equals(RoleName.ADMIN))
+                    .forEach(person.getElevatedRoles()::add);
         }
-        kafkaTemplate.send(KafkaTopics.PARENT_CREATED, saved.getId().toString(),
+        person = personRepository.save(person);
+
+        parentProfileRepository.save(ParentProfile.builder()
+                .person(person)
+                .occupation(request.getOccupation())
+                .status(request.getStatus())
+                .build());
+
+        linkChildren(person.getId(), request.getChildStudentIds(), toRelationship(request.getRelationship()));
+
+        List<String> roles = personRoleService.effectiveRoles(person.getId());
+        kafkaTemplate.send(KafkaTopics.PARENT_CREATED, person.getId().toString(),
                 ParentCreatedEvent.builder()
-                        .parentId(saved.getId())
-                        .username(saved.getLoginId())
-                        .email(saved.getEmail())
-                        .phone(saved.getPhone())
+                        .parentId(person.getId())
+                        .username(person.getLoginId())
+                        .email(person.getEmail())
+                        .phone(person.getPhoneNumber())
                         .temporaryPassword(resolveTemporaryPassword(request.getTemporaryPassword()))
-                        .firstName(saved.getFirstName())
-                        .lastName(saved.getLastName())
+                        .firstName(person.getFirstName())
+                        .lastName(person.getLastName())
                         .roles(roles)
                         .occurredAt(Instant.now())
                         .build());
-        log.info("Published ParentCreatedEvent for parent id={} roles={}", saved.getId(), roles);
-        return toResponse(saved);
+        log.info("Published ParentCreatedEvent for person id={} roles={}", person.getId(), roles);
+        return toResponse(findProfile(person.getId()));
     }
 
     public ParentResponse updateParent(UUID id, ParentRequest request) {
-        Parent parent = findById(id);
+        ParentProfile profile = findProfile(id);
+        Person person = profile.getPerson();
         if (request.getLoginId() != null
-                && !request.getLoginId().equals(parent.getLoginId())
-                && parentRepository.existsByLoginId(request.getLoginId())) {
+                && !request.getLoginId().equals(person.getLoginId())
+                && personRepository.existsByLoginId(request.getLoginId())) {
             throw ApiException.conflict("Parent with login ID '" + request.getLoginId() + "' already exists");
         }
-        emailUniquenessValidator.assertEmailAvailable(request.getEmail(), parent.getId());
-        parentMapper.updateEntityFromRequest(request, parent);
-        if (request.getChildStudentIds() != null) {
-            parent.getChildren().clear();
-            parent.getChildren().addAll(resolveChildren(request.getChildStudentIds()));
+        if (request.getLoginId() != null) {
+            person.setLoginId(request.getLoginId());
         }
-        return toResponse(parentRepository.save(parent));
+        person.setFirstName(request.getFirstName());
+        person.setLastName(request.getLastName());
+        person.setEmail(request.getEmail());
+        person.setPhoneNumber(request.getPhone());
+        profile.setOccupation(request.getOccupation());
+        if (request.getStatus() != null) {
+            profile.setStatus(request.getStatus());
+        }
+        if (request.getChildStudentIds() != null) {
+            guardianshipRepository.deleteByGuardianPersonId(id);
+            guardianshipRepository.flush();
+            linkChildren(id, request.getChildStudentIds(), toRelationship(request.getRelationship()));
+        }
+        personRepository.save(person);
+        return toResponse(parentProfileRepository.save(profile));
     }
 
     public void deleteParent(UUID id) {
-        Parent parent = findById(id);
-        String loginId = parent.getLoginId();
-        parentRepository.delete(parent);
-        kafkaTemplate.send(KafkaTopics.PARENT_DELETED, id.toString(),
-                ParentDeletedEvent.builder()
-                        .parentId(id)
-                        .username(loginId)
-                        .occurredAt(Instant.now())
-                        .build());
-        log.info("Deleted parent id={}", id);
+        ParentProfile profile = findProfile(id);
+        Person person = profile.getPerson();
+        String loginId = person.getLoginId();
+        guardianshipRepository.deleteByGuardianPersonId(id);
+        parentProfileRepository.delete(profile);
+        parentProfileRepository.flush();
+
+        if (personRoleService.holdsNothing(id)) {
+            personRepository.delete(person);
+            kafkaTemplate.send(KafkaTopics.PARENT_DELETED, id.toString(),
+                    ParentDeletedEvent.builder()
+                            .parentId(id)
+                            .username(loginId)
+                            .occurredAt(Instant.now())
+                            .build());
+            log.info("Deleted person id={} (held no other role after parent delete)", id);
+        } else {
+            kafkaTemplate.send(KafkaTopics.PERSON_ROLE_CHANGED, id.toString(),
+                    PersonRoleChangedEvent.builder()
+                            .personId(id)
+                            .loginId(loginId)
+                            .addedRoles(List.of())
+                            .removedRoles(List.of(RoleName.PARENT))
+                            .renameUsernameTo(null)
+                            .occurredAt(Instant.now())
+                            .build());
+            log.info("Removed parent profile from person id={}; login retained", id);
+        }
     }
 
-    private List<Student> resolveChildren(List<UUID> studentIds) {
+    private void linkChildren(UUID guardianId, List<UUID> studentIds, Relationship relationship) {
         if (studentIds == null || studentIds.isEmpty()) {
-            return List.of();
+            return;
         }
-        return studentIds.stream()
-                .map(sid -> studentRepository.findById(sid)
-                        .orElseThrow(() -> ApiException.notFound("Student not found with id: " + sid)))
-                .toList();
+        for (UUID studentId : studentIds) {
+            if (!studentProfileRepository.existsById(studentId)) {
+                throw ApiException.notFound("Student not found with id: " + studentId);
+            }
+            Guardianship.Key key = new Guardianship.Key(guardianId, studentId);
+            if (!guardianshipRepository.existsById(key)) {
+                guardianshipRepository.save(Guardianship.builder()
+                        .guardianPersonId(guardianId)
+                        .studentPersonId(studentId)
+                        .relationship(relationship)
+                        .build());
+            }
+        }
+    }
+
+    private Relationship toRelationship(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Relationship.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("Invalid relationship: '" + value + "'");
+        }
     }
 
     private String resolveTemporaryPassword(String requested) {
         return (requested == null || requested.isBlank()) ? defaultTemporaryPassword : requested;
     }
 
-    private Parent findById(UUID id) {
-        return parentRepository.findById(id)
-                .orElseThrow(() -> ApiException.notFound("Parent not found with id: " + id));
+    private ParentProfile findProfile(UUID personId) {
+        return parentProfileRepository.findById(personId)
+                .orElseThrow(() -> ApiException.notFound("Parent not found with id: " + personId));
     }
 
-    private ParentResponse toResponse(Parent parent) {
-        ParentResponse response = parentMapper.toResponse(parent);
-        response.setChildren(toChildRefs(parent));
-        response.setOtherParents(toOtherParents(parent));
-        return response;
+    private ParentResponse toResponse(ParentProfile profile) {
+        Person p = profile.getPerson();
+        // Relationship on the parent row is derived from the first guardianship edge, if any.
+        String relationship = guardianshipRepository.findByGuardianPersonId(p.getId()).stream()
+                .map(g -> g.getRelationship() == null ? null : g.getRelationship().name())
+                .filter(java.util.Objects::nonNull)
+                .findFirst().orElse(null);
+        return ParentResponse.builder()
+                .id(p.getId())
+                .loginId(p.getLoginId())
+                .firstName(p.getFirstName())
+                .lastName(p.getLastName())
+                .parentName(fullName(p))
+                .relationship(relationship)
+                .phone(p.getPhoneNumber())
+                .email(p.getEmail())
+                .occupation(profile.getOccupation())
+                .status(profile.getStatus())
+                .children(toChildRefs(p.getId()))
+                .otherParents(toOtherParents(p.getId()))
+                .build();
     }
 
-    /** Collect the other parents (deduped by id) across all of this parent's children. */
-    private List<ParentRef> toOtherParents(Parent self) {
+    /** Other login-holding guardians (deduped by id) across all this parent's wards. */
+    private List<ParentRef> toOtherParents(UUID selfId) {
         Map<UUID, ParentRef> others = new LinkedHashMap<>();
-        for (Student child : self.getChildren()) {
-            for (Parent p : child.getParents()) {
-                if (!p.getId().equals(self.getId())) {
-                    others.putIfAbsent(p.getId(), toParentRef(p));
+        for (Guardianship own : guardianshipRepository.findByGuardianPersonId(selfId)) {
+            for (Guardianship co : guardianshipRepository.findByStudentPersonId(own.getStudentPersonId())) {
+                UUID otherId = co.getGuardianPersonId();
+                if (!otherId.equals(selfId) && !others.containsKey(otherId)) {
+                    personRepository.findById(otherId).ifPresent(op ->
+                            others.put(otherId, ParentRef.builder()
+                                    .id(op.getId())
+                                    .name(fullName(op))
+                                    .relationship(co.getRelationship() == null ? null : co.getRelationship().name())
+                                    .phone(op.getPhoneNumber())
+                                    .build()));
                 }
             }
         }
         return new ArrayList<>(others.values());
     }
 
-    private ParentRef toParentRef(Parent parent) {
-        return ParentRef.builder()
-                .id(parent.getId())
-                .name(parent.getParentName())
-                .relationship(parent.getRelationship() == null ? null : parent.getRelationship().name())
-                .phone(parent.getPhone())
-                .build();
+    private List<ChildRef> toChildRefs(UUID guardianId) {
+        List<ChildRef> children = new ArrayList<>();
+        for (Guardianship g : guardianshipRepository.findByGuardianPersonId(guardianId)) {
+            personRepository.findById(g.getStudentPersonId()).ifPresent(sp ->
+                    children.add(ChildRef.builder().id(sp.getId()).name(fullName(sp)).build()));
+        }
+        return children;
     }
 
-    private List<ChildRef> toChildRefs(Parent parent) {
-        return parent.getChildren().stream()
-                .map(s -> ChildRef.builder()
-                        .id(s.getId())
-                        .name(fullName(s))
-                        .build())
-                .toList();
-    }
-
-    private String fullName(Student student) {
-        String name = (student.getFirstName() == null ? "" : student.getFirstName())
-                + (student.getLastName() == null ? "" : " " + student.getLastName());
+    private String fullName(Person person) {
+        String name = (person.getFirstName() == null ? "" : person.getFirstName())
+                + (person.getLastName() == null ? "" : " " + person.getLastName());
         return name.trim();
     }
 }

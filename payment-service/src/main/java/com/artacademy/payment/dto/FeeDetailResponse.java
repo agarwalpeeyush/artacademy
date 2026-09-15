@@ -23,4 +23,11 @@ public class FeeDetailResponse {
     private BigDecimal allocatedPaidAmount;
     private BigDecimal outstandingAmount;
     private String status;
+
+    private UUID teacherId;
+    // Effective institute/teacher shares (F8): override if present, else resolved/persisted amount,
+    // else a live computation from the frozen rule. Non-null once populated by the read decorator.
+    private BigDecimal instituteShareAmount;
+    private BigDecimal teacherShareAmount;
+    private boolean overridden;
 }

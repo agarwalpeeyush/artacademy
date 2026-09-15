@@ -19,6 +19,7 @@ import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import LoginIdField from '../../components/common/LoginIdField';
+import PhoneLinkField from '../../components/common/PhoneLinkField';
 import { formatDate } from '../../utils/formatters';
 
 const schema = yup.object({
@@ -56,7 +57,7 @@ const TeachersPage: React.FC = () => {
     loginId: '', firstName: '', lastName: '', employeeCode: '',
     email: '', phone: '', qualification: '',
     joiningDate: new Date().toISOString().split('T')[0],
-    status: 'ACTIVE',
+    status: 'ACTIVE', linkPersonId: undefined,
   };
 
   const handleAdd = () => { setEditing(null); reset(emptyForm); setDialogOpen(true); };
@@ -73,6 +74,7 @@ const TeachersPage: React.FC = () => {
       qualification: teacher.qualification || '',
       joiningDate: teacher.joiningDate || '',
       status: teacher.status,
+      linkPersonId: undefined,
     });
     setDialogOpen(true);
   };
@@ -163,7 +165,6 @@ const TeachersPage: React.FC = () => {
                 { name: 'lastName' as const, label: 'Last Name' },
                 { name: 'employeeCode' as const, label: 'Employee Code' },
                 { name: 'email' as const, label: 'Email' },
-                { name: 'phone' as const, label: 'Phone' },
                 { name: 'qualification' as const, label: 'Qualification' },
               ].map(field => (
                 <Grid item xs={12} sm={6} key={field.name}>
@@ -179,6 +180,22 @@ const TeachersPage: React.FC = () => {
                   />
                 </Grid>
               ))}
+              <Grid item xs={12} sm={6}>
+                <Controller name="phone" control={control}
+                  render={({ field }) => (
+                    <Controller name="linkPersonId" control={control}
+                      render={({ field: link }) => (
+                        <PhoneLinkField
+                          label="Phone"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          linkedPersonId={link.value}
+                          onLinkChange={link.onChange}
+                          disabled={!!editing}
+                        />
+                      )} />
+                  )} />
+              </Grid>
               <Grid item xs={12} sm={6}>
                 <Controller name="joiningDate" control={control}
                   render={({ field }) => (

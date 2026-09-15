@@ -4,6 +4,7 @@ import com.artacademy.common.dto.ApiResponse;
 import com.artacademy.userservice.dto.StudentRequest;
 import com.artacademy.userservice.dto.StudentResponse;
 import com.artacademy.userservice.dto.StudentSelfUpdateRequest;
+import com.artacademy.userservice.service.PersonRoleService;
 import com.artacademy.userservice.service.StudentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,12 +27,13 @@ import java.util.UUID;
 public class StudentController {
 
     private final StudentService studentService;
+    private final PersonRoleService personRoleService;
 
     @GetMapping("/me")
     @Operation(summary = "Get currently authenticated student's profile")
     public ResponseEntity<ApiResponse<StudentResponse>> getMyProfile(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(
-                studentService.getStudentByLoginId(authentication.getName())));
+                studentService.getStudentByPersonId(personRoleService.currentPersonId())));
     }
 
     @PutMapping("/me")
@@ -40,7 +42,7 @@ public class StudentController {
             Authentication authentication,
             @Valid @RequestBody StudentSelfUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                studentService.updateMyProfile(authentication.getName(), request)));
+                studentService.updateMyProfile(personRoleService.currentPersonId(), request)));
     }
 
     @GetMapping

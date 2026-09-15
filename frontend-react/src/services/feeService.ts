@@ -1,5 +1,5 @@
 import api from './api';
-import { FeeCycle, FeeDetail } from '../types';
+import { FeeCycle, FeeDetail, TeacherRevenueSummary } from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
 
@@ -35,6 +35,18 @@ const normDetail = (d: any): FeeDetail => ({
   allocatedPaidAmount: Number(d.allocatedPaidAmount ?? 0),
   outstandingAmount: Number(d.outstandingAmount ?? 0),
   status: d.status,
+  teacherId: d.teacherId ?? undefined,
+  instituteShareAmount: d.instituteShareAmount != null ? Number(d.instituteShareAmount) : undefined,
+  teacherShareAmount: d.teacherShareAmount != null ? Number(d.teacherShareAmount) : undefined,
+  overridden: Boolean(d.overridden),
+});
+
+const normTeacherSummary = (s: any): TeacherRevenueSummary => ({
+  teacherId: s.teacherId,
+  collected: Number(s.collected ?? 0),
+  instituteShare: Number(s.instituteShare ?? 0),
+  teacherShare: Number(s.teacherShare ?? 0),
+  paidDetailCount: Number(s.paidDetailCount ?? 0),
 });
 
 const toArray = (d: any): any[] => {
@@ -82,6 +94,26 @@ const feeService = {
   updateFeeCycle: async (id: string, data: Partial<FeeCycle>): Promise<FeeCycle> => {
     const response = await api.put(`/fees/${id}`, data);
     return normCycle(unwrap(response));
+  },
+
+  // F9: per-teacher revenue rollup (principal dashboard).
+  getTeacherSummaries: async (): Promise<TeacherRevenueSummary[]> => {
+    const response = await api.get('/fees/teachers/summary');
+    return toArray(unwrap(response)).map(normTeacherSummary);
+  },
+
+  getTeacherSummary: async (teacherId: string): Promise<TeacherRevenueSummary> => {
+    const response = await api.get(`/fees/teacher/${teacherId}/summary`);
+    return normTeacherSummary(unwrap(response));
+  },
+
+  // F8/F12: principal override of the institute/teacher split on a single detail.
+  overrideShare: async (
+    feeDetailId: string,
+    payload: { instituteShare: number; teacherShare: number; overriddenBy: string }
+  ): Promise<FeeDetail> => {
+    const response = await api.put(`/fees/fee-details/${feeDetailId}/share-override`, payload);
+    return normDetail(unwrap(response));
   },
 };
 

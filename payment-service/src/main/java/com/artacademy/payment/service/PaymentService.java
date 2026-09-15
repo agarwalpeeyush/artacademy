@@ -94,6 +94,16 @@ public class PaymentService {
 
             if (detail.getOutstandingAmount().compareTo(BigDecimal.ZERO) == 0) {
                 detail.setStatus(FeeStatus.PAID);
+                // F6/F7: on transition to fully PAID, resolve the institute share from the frozen
+                // rule against the billed (allocated-paid) amount and persist both shares. The
+                // teacher takes the remainder. A later principal override (F8) supersedes these.
+                BigDecimal institute = ShareResolver.institute(
+                        detail.getInstituteShareType(),
+                        detail.getInstituteShareValue(),
+                        detail.getAllocatedPaidAmount());
+                detail.setInstituteShareAmount(institute);
+                detail.setTeacherShareAmount(
+                        ShareResolver.teacher(detail.getAllocatedPaidAmount(), institute));
             } else {
                 detail.setStatus(FeeStatus.PARTIAL);
             }

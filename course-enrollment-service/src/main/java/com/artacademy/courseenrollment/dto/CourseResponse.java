@@ -2,6 +2,7 @@ package com.artacademy.courseenrollment.dto;
 
 import com.artacademy.common.fee.FeeCadence;
 import com.artacademy.common.fee.FeeType;
+import com.artacademy.common.fee.ShareType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,5 +37,7 @@ public class CourseResponse {
         private FeeType feeType;
         private BigDecimal amount;
         private FeeCadence cadence;
+        private ShareType instituteShareType;
+        private BigDecimal instituteShareValue;
     }
 }

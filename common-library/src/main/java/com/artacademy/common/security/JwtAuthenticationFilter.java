@@ -36,6 +36,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(username, null, authorities);
+            // Expose the stable personId (D5) as the auth details so services resolve the current
+            // user by id, not by the (mutable) username subject.
+            auth.setDetails(jwtUtil.extractPersonId(token));
             SecurityContextHolder.getContext().setAuthentication(auth);
         }
         filterChain.doFilter(request, response);

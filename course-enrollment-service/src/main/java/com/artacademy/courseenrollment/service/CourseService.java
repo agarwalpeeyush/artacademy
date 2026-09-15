@@ -125,16 +125,22 @@ public class CourseService {
         for (CourseRequest.FeeItem item : items) {
             FeeCadence cadence = item.getCadence() != null
                     ? item.getCadence() : item.getFeeType().getCadence();
+            ShareRuleValidator.validate(item.getInstituteShareType(), item.getInstituteShareValue(),
+                    "course fee " + item.getFeeType());
             CourseFee fee = existing.get(item.getFeeType());
             if (fee != null) {
                 fee.setAmount(item.getAmount());
                 fee.setCadence(cadence);
+                fee.setInstituteShareType(item.getInstituteShareType());
+                fee.setInstituteShareValue(item.getInstituteShareValue());
             } else {
                 course.getFees().add(CourseFee.builder()
                         .course(course)
                         .feeType(item.getFeeType())
                         .amount(item.getAmount())
                         .cadence(cadence)
+                        .instituteShareType(item.getInstituteShareType())
+                        .instituteShareValue(item.getInstituteShareValue())
                         .build());
             }
         }

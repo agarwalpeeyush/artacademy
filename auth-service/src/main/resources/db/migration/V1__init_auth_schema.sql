@@ -64,6 +64,16 @@ CREATE TABLE AUDIT_LOGS (
 CREATE INDEX idx_audit_username ON AUDIT_LOGS (USERNAME);
 CREATE INDEX idx_audit_occurred_at ON AUDIT_LOGS (OCCURRED_AT DESC);
 
+-- Tombstones for usernames retired by a promotion (D3/D9). When a parent is promoted to staff their
+-- phone-username is renamed to the staff loginId; the old phone-username is inserted here so it can
+-- never be reassigned to another Person (phone is non-unique per D2). Reserve-only for v1: the old
+-- name simply stops authenticating and is blocked at create time — aliasing is deferred.
+CREATE TABLE RESERVED_USERNAMES (
+    USERNAME    VARCHAR(100) PRIMARY KEY,
+    PERSON_ID   UUID,
+    RESERVED_AT TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
 -- Roles are required by the Kafka consumer (resolveRoles) in EVERY profile, so they are
 -- seeded here in the base migration rather than in the dev-only data seed.
 INSERT INTO ROLES (ID, NAME) VALUES

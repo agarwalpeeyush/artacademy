@@ -18,18 +18,19 @@ import { fetchStudents } from '../../store/slices/studentSlice';
 import { fetchCourses } from '../../store/slices/courseSlice';
 import { fetchTeachers } from '../../store/slices/teacherSlice';
 import { fetchEnrollments, createEnrollment, updateEnrollmentStatus, updateEnrollmentFees, updateEnrollmentTimetables, deleteEnrollment } from '../../store/slices/enrollmentSlice';
-import { Enrollment, Course, Teacher, Timetable, CourseFeeItem, FeeType, FeeCadence } from '../../types';
+import { Enrollment, Course, Teacher, Timetable, CourseFeeItem, FeeType, FeeCadence, ShareType } from '../../types';
 import timetableService from '../../services/timetableService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatDate, feeTypeLabel } from '../../utils/formatters';
+import { formatDate, formatCurrency, feeTypeLabel, instituteShare, teacherShare } from '../../utils/formatters';
 import { buildCourseTeacherMap, resolveTeacherNames, filterEnrollments, formatTimetableSummary, formatSlotLabel } from '../../utils/enrollmentHelpers';
 
 const schema = yup.object({
   studentId: yup.string().required('Student is required'),
   courseId: yup.string().required('Course is required'),
+  teacherId: yup.string().required('Teacher is required'),
   enrollmentDate: yup.string().required('Enrollment date is required'),
   timetableIds: yup.array().of(yup.string().required()).required(),
 });
@@ -37,15 +38,18 @@ const schema = yup.object({
 type EnrollmentFormData = {
   studentId: string;
   courseId: string;
+  teacherId: string;
   enrollmentDate: string;
   timetableIds: string[];
 };
 
-// A row in the Edit Fees dialog: a fee type on this enrollment with its amount.
+// A row in a fee editor: a fee type with its per-child amount and institute-share rule.
 type FeeLine = {
   feeType: FeeType;
   amount: number;
   cadence: FeeCadence;
+  instituteShareType: ShareType | null;
+  instituteShareValue: number | null;
 };
 
 const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
@@ -70,6 +74,7 @@ const EnrollmentsPage: React.FC = () => {
   const [searchCourse, setSearchCourse] = useState<Course | null>(null);
   const [searchTeacher, setSearchTeacher] = useState<Teacher | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [enrollFeeLines, setEnrollFeeLines] = useState<FeeLine[]>([]);
   const [editFeesTarget, setEditFeesTarget] = useState<Enrollment | null>(null);
   const [editFeeLines, setEditFeeLines] = useState<FeeLine[]>([]);
   const [savingFees, setSavingFees] = useState(false);
@@ -81,10 +86,22 @@ const EnrollmentsPage: React.FC = () => {
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<EnrollmentFormData>({
     resolver: yupResolver(schema) as never,
-    defaultValues: { studentId: '', courseId: '', enrollmentDate: new Date().toISOString().split('T')[0], timetableIds: [] },
+    defaultValues: { studentId: '', courseId: '', teacherId: '', enrollmentDate: new Date().toISOString().split('T')[0], timetableIds: [] },
   });
 
   const selectedCourseId = useWatch({ control, name: 'courseId' });
+
+  // Pre-fill the enroll dialog's fee lines from the selected course's template (F3 defaults).
+  const seedFeeLinesFromCourse = (courseId: string): FeeLine[] => {
+    const courseFees = courses.find((c) => c.id === courseId)?.fees ?? [];
+    return courseFees.map((f) => ({
+      feeType: f.feeType,
+      amount: f.amount,
+      cadence: FEE_CADENCE[f.feeType],
+      instituteShareType: f.instituteShareType ?? null,
+      instituteShareValue: f.instituteShareValue ?? null,
+    }));
+  };
 
   const courseTeacherMap = useMemo(() => buildCourseTeacherMap(timetables), [timetables]);
   const timetablesByCourse = useMemo(() => {
@@ -114,16 +131,37 @@ const EnrollmentsPage: React.FC = () => {
     reset({
       studentId: '',
       courseId: searchCourse?.id || '',
+      teacherId: searchTeacher?.id || '',
       enrollmentDate: new Date().toISOString().split('T')[0],
       timetableIds: [],
     });
+    setEnrollFeeLines(searchCourse?.id ? seedFeeLinesFromCourse(searchCourse.id) : []);
     setDialogOpen(true);
   };
 
+  // Re-seed the enroll dialog's fee lines whenever the chosen course changes.
+  useEffect(() => {
+    if (dialogOpen) {
+      setEnrollFeeLines(selectedCourseId ? seedFeeLinesFromCourse(selectedCourseId) : []);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCourseId, dialogOpen]);
+
   const handleSubmitForm = async (data: EnrollmentFormData) => {
+    if (enrollFeeLines.length === 0) {
+      setSnackbar({ open: true, message: 'Add at least one fee line', severity: 'error' });
+      return;
+    }
+    const fees: CourseFeeItem[] = enrollFeeLines.map((f) => ({
+      feeType: f.feeType,
+      amount: f.amount,
+      cadence: f.cadence,
+      instituteShareType: f.instituteShareType,
+      instituteShareValue: f.instituteShareType ? f.instituteShareValue : null,
+    }));
     try {
       await dispatch(createEnrollment({
-        ...data, status: 'ACTIVE',
+        ...data, status: 'ACTIVE', fees,
         studentName: students.find(s => s.id === data.studentId)?.firstName || '',
         courseName: courses.find(c => c.id === data.courseId)?.courseName || '',
       })).unwrap();
@@ -160,19 +198,26 @@ const EnrollmentsPage: React.FC = () => {
     const existing = enrollment.fees ?? [];
     const courseFees = courses.find(c => c.id === enrollment.courseId)?.fees ?? [];
     // Seed from the union of the enrollment's current fee lines and the course's current catalog.
-    // Enrollment amounts win for fee types on both; fee types that exist only on the course (e.g.
-    // a type added to the course after this child enrolled) appear by default with the course
-    // amount. The principal can then delete any line before saving.
+    // Enrollment amounts + share rules win for fee types on both; fee types that exist only on the
+    // course appear by default with the course amount/rule. The principal can delete any line.
     const lines: FeeLine[] = [];
     const seen = new Set<string>();
     existing.forEach(f => {
       seen.add(f.feeType);
-      lines.push({ feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType] });
+      lines.push({
+        feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType],
+        instituteShareType: f.instituteShareType ?? null,
+        instituteShareValue: f.instituteShareValue ?? null,
+      });
     });
     courseFees.forEach(f => {
       if (seen.has(f.feeType)) return;
       seen.add(f.feeType);
-      lines.push({ feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType] });
+      lines.push({
+        feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType],
+        instituteShareType: f.instituteShareType ?? null,
+        instituteShareValue: f.instituteShareValue ?? null,
+      });
     });
     setEditFeeLines(lines);
   };
@@ -189,7 +234,7 @@ const EnrollmentsPage: React.FC = () => {
     setEditFeeLines(prev => {
       const used = new Set(prev.map(f => f.feeType));
       const next = FEE_TYPES.find(t => !used.has(t)) ?? FEE_TYPES[0];
-      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next] }];
+      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next], instituteShareType: null, instituteShareValue: null }];
     });
   };
 
@@ -206,12 +251,20 @@ const EnrollmentsPage: React.FC = () => {
         return;
       }
       seen.add(f.feeType);
+      if (f.instituteShareType === 'PERCENTAGE' && (f.instituteShareValue ?? 0) > 100) {
+        setSnackbar({ open: true, message: `Share % for ${feeTypeLabel(f.feeType)} must be 0–100`, severity: 'error' });
+        return;
+      }
     }
     if (editFeeLines.length === 0) {
       setSnackbar({ open: true, message: 'Add at least one fee type', severity: 'error' });
       return;
     }
-    const fees: CourseFeeItem[] = editFeeLines.map(f => ({ feeType: f.feeType, amount: f.amount, cadence: f.cadence }));
+    const fees: CourseFeeItem[] = editFeeLines.map(f => ({
+      feeType: f.feeType, amount: f.amount, cadence: f.cadence,
+      instituteShareType: f.instituteShareType,
+      instituteShareValue: f.instituteShareType ? f.instituteShareValue : null,
+    }));
     setSavingFees(true);
     try {
       await dispatch(updateEnrollmentFees({ id: editFeesTarget.id, fees })).unwrap();
@@ -223,6 +276,87 @@ const EnrollmentsPage: React.FC = () => {
       setSavingFees(false);
     }
   };
+
+  // Shared fee-line editors for both the enroll dialog (enrollFeeLines) and the Edit Fees dialog
+  // (editFeeLines), parameterized by which state setter to mutate.
+  type FeeLineSetter = React.Dispatch<React.SetStateAction<FeeLine[]>>;
+
+  const mutateLine = (setter: FeeLineSetter, idx: number, patch: Partial<FeeLine>) =>
+    setter(prev => prev.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+
+  const addLine = (setter: FeeLineSetter) =>
+    setter(prev => {
+      const used = new Set(prev.map(f => f.feeType));
+      const next = FEE_TYPES.find(t => !used.has(t)) ?? FEE_TYPES[0];
+      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next], instituteShareType: null, instituteShareValue: null }];
+    });
+
+  const removeLine = (setter: FeeLineSetter, idx: number) =>
+    setter(prev => prev.filter((_, i) => i !== idx));
+
+  // Renders the shared editable fee/share rows with a live institute/teacher preview per line.
+  const renderFeeLineEditor = (lines: FeeLine[], setter: FeeLineSetter) => (
+    lines.length === 0 ? (
+      <Typography variant="body2" color="text.secondary">No fee lines. Use "Add Fee" to add one.</Typography>
+    ) : (
+      lines.map((f, idx) => {
+        const usedElsewhere = new Set(lines.filter((_, i) => i !== idx).map(l => l.feeType));
+        const inst = instituteShare(f.instituteShareType, f.instituteShareValue, f.amount);
+        const teach = teacherShare(f.amount, inst);
+        return (
+          <Box key={idx} sx={{ mb: 1.5, p: 1, border: '1px solid #eee', borderRadius: 1 }}>
+            <Box display="flex" alignItems="center" gap={1}>
+              <TextField
+                select size="small" label="Fee Type" sx={{ flex: 1 }}
+                value={f.feeType}
+                onChange={e => mutateLine(setter, idx, { feeType: e.target.value as FeeType, cadence: FEE_CADENCE[e.target.value as FeeType] })}
+              >
+                {FEE_TYPES.map(ft => (
+                  <MenuItem key={ft} value={ft} disabled={ft !== f.feeType && usedElsewhere.has(ft)}>
+                    {feeTypeLabel(ft)}{FEE_CADENCE[ft] === 'RECURRING' ? ' (monthly)' : ''}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                type="number" size="small" label="Amount" sx={{ width: 110 }}
+                value={f.amount}
+                onChange={e => mutateLine(setter, idx, { amount: Number(e.target.value) })}
+              />
+              <IconButton size="small" color="error" onClick={() => removeLine(setter, idx)} aria-label="remove fee">
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Box display="flex" alignItems="center" gap={1} sx={{ mt: 1 }}>
+              <TextField
+                select size="small" label="Institute Share" sx={{ width: 150 }}
+                value={f.instituteShareType ?? 'NONE'}
+                onChange={e => {
+                  const v = e.target.value;
+                  mutateLine(setter, idx, {
+                    instituteShareType: v === 'NONE' ? null : (v as ShareType),
+                    instituteShareValue: v === 'NONE' ? null : (f.instituteShareValue ?? 0),
+                  });
+                }}
+              >
+                <MenuItem value="NONE">None</MenuItem>
+                <MenuItem value="PERCENTAGE">Percentage</MenuItem>
+                <MenuItem value="AMOUNT">Amount</MenuItem>
+              </TextField>
+              <TextField
+                type="number" size="small" label={f.instituteShareType === 'PERCENTAGE' ? '%' : 'Value'} sx={{ width: 100 }}
+                value={f.instituteShareValue ?? ''}
+                disabled={!f.instituteShareType}
+                onChange={e => mutateLine(setter, idx, { instituteShareValue: e.target.value === '' ? null : Number(e.target.value) })}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                Institute {formatCurrency(inst)} · Teacher {formatCurrency(teach)}
+              </Typography>
+            </Box>
+          </Box>
+        );
+      })
+    )
+  );
 
   const openEditSlots = (enrollment: Enrollment) => {
     setEditSlotsTarget(enrollment);
@@ -378,6 +512,13 @@ const EnrollmentsPage: React.FC = () => {
                 )} />
               </Grid>
               <Grid item xs={12}>
+                <Controller name="teacherId" control={control} render={({ field }) => (
+                  <TextField {...field} select label="Teacher" fullWidth size="small" error={!!errors.teacherId} helperText={errors.teacherId?.message}>
+                    {teachers.map(t => <MenuItem key={t.id} value={t.id}>{`${t.firstName} ${t.lastName}`.trim()}</MenuItem>)}
+                  </TextField>
+                )} />
+              </Grid>
+              <Grid item xs={12}>
                 <Controller name="timetableIds" control={control} render={({ field }) => {
                   const validIds = (field.value ?? []).filter((id) => courseSlots.some((s) => s.id === id));
                   return (
@@ -409,6 +550,19 @@ const EnrollmentsPage: React.FC = () => {
                   <TextField {...field} label="Enrollment Date" type="date" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.enrollmentDate} helperText={errors.enrollmentDate?.message} />
                 )} />
               </Grid>
+              <Grid item xs={12}>
+                <Divider sx={{ my: 1 }} />
+                <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                  <Typography variant="subtitle2">Fees &amp; Institute Share</Typography>
+                  <Button size="small" startIcon={<AddIcon />} onClick={() => addLine(setEnrollFeeLines)} disabled={enrollFeeLines.length >= FEE_TYPES.length}>
+                    Add Fee
+                  </Button>
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  Pre-filled from the course. Edit the per-child amount and institute share; the teacher share updates live.
+                </Typography>
+                <Box sx={{ mt: 1 }}>{renderFeeLineEditor(enrollFeeLines, setEnrollFeeLines)}</Box>
+              </Grid>
             </Grid>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
@@ -426,43 +580,14 @@ const EnrollmentsPage: React.FC = () => {
           </Typography>
           <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="caption" color="text.secondary">
-              Add or remove fee types for this child. The saved fees are final for this enrollment.
+              Add or remove fee types and set the institute share for this child. Saved fees are final for this enrollment.
             </Typography>
-            <Button size="small" startIcon={<AddIcon />} onClick={addFeeLine} disabled={editFeeLines.length >= FEE_TYPES.length}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => addLine(setEditFeeLines)} disabled={editFeeLines.length >= FEE_TYPES.length}>
               Add Fee
             </Button>
           </Box>
           <Divider sx={{ my: 1 }} />
-          {editFeeLines.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No fee lines. Use "Add Fee" to add one.</Typography>
-          ) : (
-            editFeeLines.map((f, idx) => {
-              const usedElsewhere = new Set(editFeeLines.filter((_, i) => i !== idx).map(l => l.feeType));
-              return (
-                <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ mb: 1 }}>
-                  <TextField
-                    select size="small" label="Fee Type" sx={{ flex: 1 }}
-                    value={f.feeType}
-                    onChange={e => changeFeeType(idx, e.target.value as FeeType)}
-                  >
-                    {FEE_TYPES.map(ft => (
-                      <MenuItem key={ft} value={ft} disabled={ft !== f.feeType && usedElsewhere.has(ft)}>
-                        {feeTypeLabel(ft)}{FEE_CADENCE[ft] === 'RECURRING' ? ' (monthly)' : ''}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    type="number" size="small" label="Amount" sx={{ width: 130 }}
-                    value={f.amount}
-                    onChange={e => updateEditFeeLine(idx, e.target.value)}
-                  />
-                  <IconButton size="small" color="error" onClick={() => removeFeeLine(idx)} aria-label="remove fee">
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              );
-            })
-          )}
+          {renderFeeLineEditor(editFeeLines, setEditFeeLines)}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setEditFeesTarget(null)} variant="outlined">Cancel</Button>

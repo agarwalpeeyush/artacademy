@@ -2,6 +2,7 @@ package com.artacademy.courseenrollment.domain;
 
 import com.artacademy.common.fee.FeeCadence;
 import com.artacademy.common.fee.FeeType;
+import com.artacademy.common.fee.ShareType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
@@ -44,4 +45,13 @@ public class EnrollmentFee {
     @Enumerated(EnumType.STRING)
     @Column(name = "CADENCE", length = 20, nullable = false)
     private FeeCadence cadence;
+
+    // F3: per-child institute-share truth. Pre-filled from the course's CourseFee, then editable
+    // per child. This is the rule frozen at enrollment and carried onward (F4/F11). Null = no cut.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "INSTITUTE_SHARE_TYPE", length = 10)
+    private ShareType instituteShareType;
+
+    @Column(name = "INSTITUTE_SHARE_VALUE", precision = 12, scale = 2)
+    private BigDecimal instituteShareValue;
 }

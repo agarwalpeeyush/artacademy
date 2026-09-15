@@ -6,9 +6,6 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../../store/store';
-import { logoutThunk } from '../../store/slices/authSlice';
 import api from '../../services/api';
 import LoginIdField from '../../components/common/LoginIdField';
 
@@ -33,12 +30,11 @@ interface CreatePrincipalForm {
 }
 
 const CreatePrincipalPage: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  const { control, handleSubmit, watch, formState: { errors } } = useForm<CreatePrincipalForm>({
+  const { control, handleSubmit, watch, reset, formState: { errors } } = useForm<CreatePrincipalForm>({
     resolver: yupResolver(schema) as never,
     defaultValues: {
       loginId: '', firstName: '', lastName: '', employeeCode: '',
@@ -53,17 +49,16 @@ const CreatePrincipalPage: React.FC = () => {
     setError(null);
     setSubmitting(true);
     try {
-      await api.post('/teachers', {
+      await api.post('/principals', {
         ...data,
         status: 'ACTIVE',
-        additionalRoles: ['PRINCIPAL'],
       });
       setDone(true);
-      // Creating the first Principal deactivates this bootstrap account server-side, so log out.
-      setTimeout(() => { dispatch(logoutThunk()); }, 2500);
+      reset();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
       setError(e.response?.data?.message || 'Failed to create Principal');
+    } finally {
       setSubmitting(false);
     }
   };
@@ -74,16 +69,16 @@ const CreatePrincipalPage: React.FC = () => {
         <CardContent sx={{ p: 4 }}>
           <Box display="flex" alignItems="center" gap={1.5} mb={1}>
             <PersonAddIcon color="primary" />
-            <Typography variant="h5" fontWeight={700}>Create the first Principal</Typography>
+            <Typography variant="h5" fontWeight={700}>Create a Principal</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            This bootstrap admin account exists only to create the first Principal. Once created, this
-            account is disabled automatically and you will be signed out.
+            Provision a Principal account (a staff member with the PRINCIPAL role). They receive a
+            temporary password and are prompted to change it on first login.
           </Typography>
 
           {done ? (
             <Alert severity="success">
-              Principal created — this bootstrap account is now disabled. Signing you out…
+              Principal created. You can create another or navigate away.
             </Alert>
           ) : (
             <>

@@ -2,15 +2,19 @@ package com.artacademy.auth.consumer;
 
 import com.artacademy.auth.domain.Role;
 import com.artacademy.auth.domain.User;
+import com.artacademy.auth.repository.ReservedUsernameRepository;
 import com.artacademy.auth.repository.RoleRepository;
 import com.artacademy.auth.repository.UserRepository;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.ParentCreatedEvent;
 import com.artacademy.common.events.ParentDeletedEvent;
+import com.artacademy.common.events.PersonRoleChangedEvent;
 import com.artacademy.common.events.StudentCreatedEvent;
 import com.artacademy.common.events.StudentDeletedEvent;
 import com.artacademy.common.events.TeacherCreatedEvent;
 import com.artacademy.common.events.TeacherDeletedEvent;
+import com.artacademy.common.security.RoleName;
+import com.artacademy.auth.domain.ReservedUsername;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +37,7 @@ public class UserCreatedEventConsumer {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final ReservedUsernameRepository reservedUsernameRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
@@ -44,6 +49,10 @@ public class UserCreatedEventConsumer {
         try {
             StudentCreatedEvent event = objectMapper.convertValue(payload, StudentCreatedEvent.class);
             requireIdentity(event.getStudentId(), event.getUsername(), "StudentCreatedEvent");
+            if (isReserved(event.getUsername())) {
+                log.warn("Username {} is reserved (tombstoned), skipping StudentCreatedEvent", event.getUsername());
+                return;
+            }
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
@@ -54,7 +63,7 @@ public class UserCreatedEventConsumer {
                 return;
             }
             List<String> roleNames = (event.getRoles() != null && !event.getRoles().isEmpty())
-                    ? event.getRoles() : List.of("STUDENT");
+                    ? event.getRoles() : List.of(RoleName.STUDENT);
             Set<Role> roles = resolveRoles(roleNames);
             User user = User.builder()
                     .id(event.getStudentId())
@@ -65,7 +74,6 @@ public class UserCreatedEventConsumer {
                     .roles(roles)
                     .build();
             entityManager.persist(user);
-            deactivateBootstrapIfPrincipal(roleNames);
             log.info("Created auth user for student id={} username={} roles={}", event.getStudentId(), event.getUsername(), roleNames);
         } catch (Exception e) {
             log.error("Failed to process StudentCreatedEvent: {}", e.getMessage(), e);
@@ -80,6 +88,10 @@ public class UserCreatedEventConsumer {
         try {
             TeacherCreatedEvent event = objectMapper.convertValue(payload, TeacherCreatedEvent.class);
             requireIdentity(event.getTeacherId(), event.getUsername(), "TeacherCreatedEvent");
+            if (isReserved(event.getUsername())) {
+                log.warn("Username {} is reserved (tombstoned), skipping TeacherCreatedEvent", event.getUsername());
+                return;
+            }
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
@@ -90,7 +102,7 @@ public class UserCreatedEventConsumer {
                 return;
             }
             List<String> roleNames = (event.getRoles() != null && !event.getRoles().isEmpty())
-                    ? event.getRoles() : List.of("TEACHER");
+                    ? event.getRoles() : List.of(RoleName.TEACHER);
             Set<Role> roles = resolveRoles(roleNames);
             User user = User.builder()
                     .id(event.getTeacherId())
@@ -101,7 +113,6 @@ public class UserCreatedEventConsumer {
                     .roles(roles)
                     .build();
             entityManager.persist(user);
-            deactivateBootstrapIfPrincipal(roleNames);
             log.info("Created auth user for teacher id={} username={} roles={}", event.getTeacherId(), event.getUsername(), roleNames);
         } catch (Exception e) {
             log.error("Failed to process TeacherCreatedEvent: {}", e.getMessage(), e);
@@ -116,6 +127,10 @@ public class UserCreatedEventConsumer {
         try {
             ParentCreatedEvent event = objectMapper.convertValue(payload, ParentCreatedEvent.class);
             requireIdentity(event.getParentId(), event.getUsername(), "ParentCreatedEvent");
+            if (isReserved(event.getUsername())) {
+                log.warn("Username {} is reserved (tombstoned), skipping ParentCreatedEvent", event.getUsername());
+                return;
+            }
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
@@ -126,7 +141,7 @@ public class UserCreatedEventConsumer {
                 return;
             }
             List<String> roleNames = (event.getRoles() != null && !event.getRoles().isEmpty())
-                    ? event.getRoles() : List.of("PARENT");
+                    ? event.getRoles() : List.of(RoleName.PARENT);
             Set<Role> roles = resolveRoles(roleNames);
             User user = User.builder()
                     .id(event.getParentId())
@@ -138,7 +153,6 @@ public class UserCreatedEventConsumer {
                     .roles(roles)
                     .build();
             entityManager.persist(user);
-            deactivateBootstrapIfPrincipal(roleNames);
             log.info("Created auth user for parent id={} username={} roles={}", event.getParentId(), event.getUsername(), roleNames);
         } catch (Exception e) {
             log.error("Failed to process ParentCreatedEvent: {}", e.getMessage(), e);
@@ -203,30 +217,86 @@ public class UserCreatedEventConsumer {
         }
     }
 
+    // Role/username change on an EXISTING login (OQ5). Idempotent and keyed on personId, which equals
+    // the auth User.id (the *CreatedEvents mint the login with id = person/teacher/student id). Appends
+    // addedRoles, removes removedRoles, and — if renameUsernameTo is set — promotes the username and
+    // tombstones the old one (D3/D9). No temp password: the login already exists.
+    @KafkaListener(topics = KafkaTopics.PERSON_ROLE_CHANGED, groupId = "auth-service-group",
+            containerFactory = "kafkaListenerContainerFactory")
+    @Transactional
+    public void onPersonRoleChanged(Map<String, Object> payload) {
+        try {
+            PersonRoleChangedEvent event = objectMapper.convertValue(payload, PersonRoleChangedEvent.class);
+            if (event.getPersonId() == null) {
+                throw new IllegalArgumentException("PersonRoleChangedEvent missing personId");
+            }
+            User user = userRepository.findById(event.getPersonId()).orElse(null);
+            if (user == null) {
+                // No login yet for this person (e.g. a student with no auth account). Nothing to change.
+                log.warn("No auth user for personId={}, skipping PersonRoleChangedEvent", event.getPersonId());
+                return;
+            }
+
+            boolean changed = false;
+
+            List<String> added = event.getAddedRoles();
+            if (added != null && !added.isEmpty()) {
+                for (Role role : resolveRoles(added)) {
+                    if (user.getRoles().add(role)) {
+                        changed = true;
+                    }
+                }
+            }
+
+            List<String> removed = event.getRemovedRoles();
+            if (removed != null && !removed.isEmpty()) {
+                Set<String> toRemove = Set.copyOf(removed);
+                changed |= user.getRoles().removeIf(r -> toRemove.contains(r.getName()));
+            }
+
+            String renameTo = event.getRenameUsernameTo();
+            if (renameTo != null && !renameTo.isBlank() && !renameTo.equals(user.getUsername())) {
+                String oldUsername = user.getUsername();
+                user.setUsername(renameTo);
+                reserve(oldUsername, user.getId());
+                changed = true;
+                log.info("Promoted username personId={} {} -> {} (old tombstoned)",
+                        user.getId(), oldUsername, renameTo);
+            }
+
+            if (changed) {
+                user.setUpdatedAt(java.time.Instant.now());
+                entityManager.merge(user);
+                log.info("Applied PersonRoleChangedEvent personId={} added={} removed={} rename={}",
+                        event.getPersonId(), added, removed, renameTo);
+            } else {
+                log.info("PersonRoleChangedEvent personId={} was a no-op (already applied)", event.getPersonId());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process PersonRoleChangedEvent: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    private boolean isReserved(String username) {
+        return username != null && reservedUsernameRepository.existsByUsername(username);
+    }
+
+    private void reserve(String username, UUID personId) {
+        if (username == null || username.isBlank() || reservedUsernameRepository.existsByUsername(username)) {
+            return;
+        }
+        entityManager.persist(ReservedUsername.builder()
+                .username(username)
+                .personId(personId)
+                .build());
+    }
+
     private Set<Role> resolveRoles(List<String> names) {
         return names.stream()
                 .map(name -> roleRepository.findByName(name)
                         .orElseThrow(() -> new IllegalStateException("Role not found: " + name)))
                 .collect(Collectors.toSet());
-    }
-
-    /**
-     * Once a real (non-bootstrap) PRINCIPAL is created, the seeded bootstrap dummy admin has served its
-     * purpose and is permanently deactivated. Re-activation is DB-migration-only (break-glass).
-     */
-    private void deactivateBootstrapIfPrincipal(List<String> roleNames) {
-        if (roleNames == null || !roleNames.contains("PRINCIPAL")) {
-            return;
-        }
-        for (User bootstrap : userRepository.findAllByBootstrapTrue()) {
-            if (!"INACTIVE".equals(bootstrap.getStatus())) {
-                bootstrap.setStatus("INACTIVE");
-                bootstrap.setUpdatedAt(java.time.Instant.now());
-                entityManager.merge(bootstrap);
-                log.info("Deactivated bootstrap dummy admin username={} — a real principal now exists",
-                        bootstrap.getUsername());
-            }
-        }
     }
 
     /**

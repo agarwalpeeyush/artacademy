@@ -31,6 +31,7 @@ import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import LoginIdField from '../../components/common/LoginIdField';
+import PhoneLinkField from '../../components/common/PhoneLinkField';
 import { formatDate } from '../../utils/formatters';
 
 const schema = yup.object({
@@ -73,6 +74,7 @@ const StudentsPage: React.FC = () => {
     loginId: '', firstName: '', lastName: '', dob: '', enrollmentDate: '',
     fatherName: '', fatherPhone: '', motherName: '', motherPhone: '',
     email: '', address: '', schoolName: '', className: '', status: 'ACTIVE',
+    fatherLinkPersonId: undefined, motherLinkPersonId: undefined,
   };
 
   const handleAdd = () => {
@@ -98,6 +100,8 @@ const StudentsPage: React.FC = () => {
       schoolName: student.schoolName || '',
       className: student.className || '',
       status: student.status,
+      fatherLinkPersonId: undefined,
+      motherLinkPersonId: undefined,
     });
     setDialogOpen(true);
   };
@@ -255,22 +259,50 @@ const StudentsPage: React.FC = () => {
                     <TextField {...field} label="Class / Grade" fullWidth size="small" />
                   )} />
               </Grid>
-              {[
-                { name: 'fatherName', label: "Father's Name" },
-                { name: 'fatherPhone', label: "Father's Phone" },
-                { name: 'motherName', label: "Mother's Name" },
-                { name: 'motherPhone', label: "Mother's Phone" },
-              ].map(field => (
-                <Grid item xs={12} sm={6} key={field.name}>
-                  <Controller
-                    name={field.name as keyof StudentFormData}
-                    control={control}
-                    render={({ field: f }) => (
-                      <TextField {...f} label={field.label} fullWidth size="small" />
-                    )}
-                  />
-                </Grid>
-              ))}
+              <Grid item xs={12} sm={6}>
+                <Controller name="fatherName" control={control}
+                  render={({ field }) => (
+                    <TextField {...field} label="Father's Name" fullWidth size="small" />
+                  )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="fatherPhone" control={control}
+                  render={({ field }) => (
+                    <Controller name="fatherLinkPersonId" control={control}
+                      render={({ field: link }) => (
+                        <PhoneLinkField
+                          label="Father's Phone"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          linkedPersonId={link.value}
+                          onLinkChange={link.onChange}
+                          disabled={!!editing}
+                        />
+                      )} />
+                  )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="motherName" control={control}
+                  render={({ field }) => (
+                    <TextField {...field} label="Mother's Name" fullWidth size="small" />
+                  )} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Controller name="motherPhone" control={control}
+                  render={({ field }) => (
+                    <Controller name="motherLinkPersonId" control={control}
+                      render={({ field: link }) => (
+                        <PhoneLinkField
+                          label="Mother's Phone"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          linkedPersonId={link.value}
+                          onLinkChange={link.onChange}
+                          disabled={!!editing}
+                        />
+                      )} />
+                  )} />
+              </Grid>
               <Grid item xs={12}>
                 <Controller name="address" control={control}
                   render={({ field }) => (

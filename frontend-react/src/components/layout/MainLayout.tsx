@@ -7,6 +7,8 @@ import {
   IconButton,
   Avatar,
   Badge,
+  Button,
+  Chip,
   Menu,
   MenuItem,
   Divider,
@@ -23,12 +25,14 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import PersonIcon from '@mui/icons-material/Person';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { Outlet, useNavigate } from 'react-router-dom';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { logoutThunk } from '../../store/slices/authSlice';
 import { fetchNotifications, fetchUnreadCount, markAsRead } from '../../store/slices/notificationSlice';
 import { formatDate } from '../../utils/formatters';
+import { workspacesForRoles, workspaceForPath } from '../../utils/workspaces';
 
 const DRAWER_WIDTH = 240;
 
@@ -43,10 +47,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ sidebar, title }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notifAnchorEl, setNotifAnchorEl] = useState<null | HTMLElement>(null);
+  const [switchAnchorEl, setSwitchAnchorEl] = useState<null | HTMLElement>(null);
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const location = useLocation();
+  const { user, roles } = useSelector((state: RootState) => state.auth);
   const { unreadCount, list } = useSelector((state: RootState) => state.notifications);
+
+  const workspaces = workspacesForRoles(roles);
+  const activeWorkspace = workspaceForPath(roles, location.pathname);
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
@@ -62,14 +71,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ sidebar, title }) => {
     navigate('/login');
   };
 
-  const roleBase = (() => {
-    const roles = user?.roles ?? [];
-    if (roles.includes('ROLE_PRINCIPAL')) return '/principal';
-    if (roles.includes('ROLE_TEACHER')) return '/teacher';
-    if (roles.includes('ROLE_STUDENT')) return '/student';
-    if (roles.includes('ROLE_PARENT')) return '/parent';
-    return null;
-  })();
+  const handleSwitchOpen = (event: React.MouseEvent<HTMLElement>) => setSwitchAnchorEl(event.currentTarget);
+  const handleSwitchClose = () => setSwitchAnchorEl(null);
+  const handleSwitchTo = (home: string) => {
+    handleSwitchClose();
+    navigate(home);
+  };
+
+  // Profile/notifications resolve within the *active* workspace (the route tree the user
+  // is currently in), falling back to their highest-precedence workspace.
+  const roleBase = (activeWorkspace ?? workspaces[0])?.base ?? null;
 
   const profilePath = roleBase ? `${roleBase}/profile` : null;
   const notificationsPath = roleBase ? `${roleBase}/notifications` : null;
@@ -122,6 +133,42 @@ const MainLayout: React.FC<MainLayoutProps> = ({ sidebar, title }) => {
           <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 700 }}>
             {title}
           </Typography>
+          {workspaces.length > 1 && (
+            <>
+              <Button
+                color="inherit"
+                size="small"
+                startIcon={<SwapHorizIcon />}
+                onClick={handleSwitchOpen}
+                sx={{ mr: 1, textTransform: 'none' }}
+              >
+                {activeWorkspace?.label ?? 'Switch role'}
+              </Button>
+              <Menu
+                anchorEl={switchAnchorEl}
+                open={Boolean(switchAnchorEl)}
+                onClose={handleSwitchClose}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+              >
+                <MenuItem disabled>
+                  <Typography variant="caption" color="text.secondary">Switch workspace</Typography>
+                </MenuItem>
+                {workspaces.map(ws => (
+                  <MenuItem
+                    key={ws.base}
+                    selected={activeWorkspace?.base === ws.base}
+                    onClick={() => handleSwitchTo(ws.home)}
+                  >
+                    {ws.label}
+                    {activeWorkspace?.base === ws.base && (
+                      <Chip label="current" size="small" sx={{ ml: 1 }} />
+                    )}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
           <IconButton color="inherit" sx={{ mr: 1 }} onClick={handleNotifOpen}>
             <Badge badgeContent={unreadCount} color="error">
               <NotificationsIcon />

@@ -6,10 +6,12 @@ import com.artacademy.common.events.FeeGeneratedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.common.fee.FeeType;
+import com.artacademy.payment.domain.EnrollmentCache;
 import com.artacademy.payment.domain.FeeCycleKind;
 import com.artacademy.payment.domain.FeeStatus;
 import com.artacademy.payment.domain.StudentFeeCycle;
 import com.artacademy.payment.domain.StudentFeeDetail;
+import com.artacademy.payment.repository.EnrollmentCacheRepository;
 import com.artacademy.payment.repository.StudentFeeCycleRepository;
 import com.artacademy.payment.repository.StudentFeeDetailRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class AdmissionFeeService {
 
     private final StudentFeeCycleRepository feeCycleRepository;
     private final StudentFeeDetailRepository feeDetailRepository;
+    private final EnrollmentCacheRepository enrollmentCacheRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /**
@@ -88,6 +91,9 @@ public class AdmissionFeeService {
                 .allocatedPaidAmount(BigDecimal.ZERO)
                 .outstandingAmount(amount)
                 .status(FeeStatus.UNPAID)
+                .teacherId(event.getTeacherId())
+                .instituteShareType(fee.getInstituteShareType())
+                .instituteShareValue(fee.getInstituteShareValue())
                 .build();
 
         feeDetailRepository.save(detail);
@@ -149,6 +155,9 @@ public class AdmissionFeeService {
 
         cycle = feeCycleRepository.save(cycle);
 
+        // Teacher attribution + share rule for the exam line come from the enrollment cache (F5/F3).
+        EnrollmentCache cache = enrollmentCacheRepository.findById(student.getEnrollmentId()).orElse(null);
+
         StudentFeeDetail detail = StudentFeeDetail.builder()
                 .feeCycle(cycle)
                 .studentId(student.getStudentId())
@@ -158,6 +167,9 @@ public class AdmissionFeeService {
                 .allocatedPaidAmount(BigDecimal.ZERO)
                 .outstandingAmount(amount)
                 .status(FeeStatus.UNPAID)
+                .teacherId(cache != null ? cache.getTeacherId() : null)
+                .instituteShareType(cache != null ? cache.getInstituteShareType() : null)
+                .instituteShareValue(cache != null ? cache.getInstituteShareValue() : null)
                 .build();
 
         feeDetailRepository.save(detail);

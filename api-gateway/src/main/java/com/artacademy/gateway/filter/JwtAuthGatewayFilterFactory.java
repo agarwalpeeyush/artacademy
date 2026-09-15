@@ -38,10 +38,16 @@ public class JwtAuthGatewayFilterFactory extends AbstractGatewayFilterFactory<Jw
                 SecretKey key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
                 Claims claims = Jwts.parser().verifyWith(key).build()
                         .parseSignedClaims(token).getPayload();
-                exchange.getRequest().mutate()
+                String personId = claims.get("personId", String.class);
+                var mutate = exchange.getRequest().mutate()
                         .header("X-Auth-User", claims.getSubject())
-                        .header("X-Auth-Roles", String.join(",", (Iterable<String>) claims.get("roles", java.util.List.class)))
-                        .build();
+                        .header("X-Auth-Roles", String.join(",", (Iterable<String>) claims.get("roles", java.util.List.class)));
+                // Id-based identity header (D5/A.7): downstream identity use should key on this stable id,
+                // not the mutable username in X-Auth-User.
+                if (personId != null) {
+                    mutate.header("X-Auth-Person-Id", personId);
+                }
+                mutate.build();
             } catch (JwtException e) {
                 log.warn("Invalid JWT: {}", e.getMessage());
                 exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);

@@ -9,6 +9,9 @@ public final class KafkaTopics {
     public static final String STUDENT_DELETED = "student-deleted";
     public static final String TEACHER_DELETED = "teacher-deleted";
     public static final String PARENT_DELETED = "parent-deleted";
+    // Emitted when an existing person's roles change or their login is renamed (OQ5). Distinct from
+    // the *-created events, which mint a brand-new login carrying a temp password.
+    public static final String PERSON_ROLE_CHANGED = "person-role-changed";
     public static final String ENROLLMENT_CREATED = "enrollment-created";
     public static final String ENROLLMENT_CANCELLED = "enrollment-cancelled";
 

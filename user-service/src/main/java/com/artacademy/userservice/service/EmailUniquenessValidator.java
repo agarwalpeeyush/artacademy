@@ -1,7 +1,7 @@
 package com.artacademy.userservice.service;
 
 import com.artacademy.common.exception.ApiException;
-import com.artacademy.userservice.repository.UserRepository;
+import com.artacademy.userservice.repository.PersonRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -11,13 +11,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EmailUniquenessValidator {
 
-    private final UserRepository userRepository;
+    private final PersonRepository personRepository;
 
     public void assertEmailAvailable(String email) {
         if (email == null || email.isBlank()) {
             return;
         }
-        if (userRepository.existsByEmail(email)) {
+        if (personRepository.existsByEmail(email)) {
             throw ApiException.conflict("Email '" + email + "' is already in use");
         }
     }
@@ -27,7 +27,7 @@ public class EmailUniquenessValidator {
         if (email == null || email.isBlank()) {
             return;
         }
-        if (userRepository.existsByEmailAndIdNot(email, selfId)) {
+        if (personRepository.existsByEmailAndIdNot(email, selfId)) {
             throw ApiException.conflict("Email '" + email + "' is already in use");
         }
     }

@@ -128,3 +128,26 @@ const FEE_TYPE_LABELS: Record<string, string> = {
 /** Human label for a course fee type. */
 export const feeTypeLabel = (feeType: string | null | undefined): string =>
   feeType ? FEE_TYPE_LABELS[feeType] ?? feeType : '';
+
+/**
+ * Institute cut of a billed amount under a frozen share rule (mirrors backend F6):
+ * AMOUNT -> min(value, billed); PERCENTAGE -> round(billed * value / 100, 2). Institute never
+ * exceeds billed. A null/absent type means "no institute cut" and yields 0.
+ */
+export const instituteShare = (
+  type: 'AMOUNT' | 'PERCENTAGE' | null | undefined,
+  value: number | null | undefined,
+  billed: number | null | undefined,
+): number => {
+  const base = billed ?? 0;
+  if (!type || value == null) return 0;
+  const raw = type === 'AMOUNT' ? Math.min(value, base) : (base * value) / 100;
+  const capped = Math.min(Math.max(raw, 0), base);
+  return Math.round(capped * 100) / 100;
+};
+
+/** Teacher remainder = billed - institute (mirrors backend F6). */
+export const teacherShare = (
+  billed: number | null | undefined,
+  institute: number | null | undefined,
+): number => Math.round((Math.max((billed ?? 0) - (institute ?? 0), 0)) * 100) / 100;

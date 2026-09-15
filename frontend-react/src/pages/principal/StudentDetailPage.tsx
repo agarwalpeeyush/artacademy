@@ -121,7 +121,13 @@ const StudentDetailPage: React.FC = () => {
             <Info label="Address" value={student?.address} />
             <Info label="Father" value={student?.fatherName ? `${student.fatherName}${student.fatherPhone ? ` (${student.fatherPhone})` : ''}` : '-'} />
             <Info label="Mother" value={student?.motherName ? `${student.motherName}${student.motherPhone ? ` (${student.motherPhone})` : ''}` : '-'} />
-            <Info label="Parents" value={(student?.parents ?? []).map(p => p.name).filter(Boolean).join(', ') || '-'} />
+            <Info label="Linked Parents" value={
+              (student?.parents ?? []).length
+                ? (student!.parents!).map(p =>
+                    `${p.name}${p.relationship ? ` — ${p.relationship}` : ''}${p.phone ? ` (${p.phone})` : ''}`
+                  ).join(', ')
+                : '-'
+            } />
             <Info label="Enrolled On" value={student?.enrollmentDate ? formatDate(student.enrollmentDate) : '-'} />
           </Grid>
         </CardContent>

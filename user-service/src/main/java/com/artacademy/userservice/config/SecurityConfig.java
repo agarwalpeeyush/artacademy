@@ -5,9 +5,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.authorization.AuthorizationManager;
-import org.springframework.security.authorization.AuthorizationManagers;
-import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -15,7 +12,6 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 
 @Configuration
 @EnableWebSecurity
@@ -24,15 +20,6 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    // PRINCIPAL but NOT the bootstrap dummy admin. The bootstrap admin holds the PRINCIPAL role but
-    // is scoped to creating the first principal only (a POST /teachers carrying additionalRoles
-    // PRINCIPAL, body-checked in TeacherController) — every other mutation is denied here.
-    private static AuthorizationManager<RequestAuthorizationContext> principalNotBootstrap() {
-        return AuthorizationManagers.allOf(
-                AuthorityAuthorizationManager.hasRole("PRINCIPAL"),
-                AuthorizationManagers.not(AuthorityAuthorizationManager.hasRole("BOOTSTRAP")));
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -49,41 +36,48 @@ public class SecurityConfig {
                             "/swagger-ui.html"
                     ).permitAll()
 
-                    // Self-service profile updates – owning role only. Must precede the
-                    // PRINCIPAL wildcards below, otherwise "/teachers/**" captures "/teachers/me".
+                    // Self-service profile updates – owning role only. Must precede the wildcards
+                    // below, otherwise "/teachers/**" captures "/teachers/me".
                     .requestMatchers(HttpMethod.PUT, "/teachers/me").hasRole("TEACHER")
                     .requestMatchers(HttpMethod.PUT, "/students/me").hasRole("STUDENT")
                     .requestMatchers(HttpMethod.PUT, "/parents/me").hasRole("PARENT")
 
-                    // Teacher creation – PRINCIPAL (incl. the bootstrap admin, which may create the
-                    // first principal). The bootstrap-vs-body rule is enforced in TeacherController.
-                    .requestMatchers(HttpMethod.POST, "/teachers").hasRole("PRINCIPAL")
+                    // Principal creation (A.6 / D8) – ADMIN only. A Principal is a teacher Person plus the
+                    // elevated PRINCIPAL role; the standing seeded ADMIN provisions them.
+                    .requestMatchers(HttpMethod.POST, "/principals").hasRole("ADMIN")
 
-                    // All other mutating teacher endpoints – PRINCIPAL, but never the bootstrap admin
-                    .requestMatchers(HttpMethod.POST,   "/teachers/**").access(principalNotBootstrap())
-                    .requestMatchers(HttpMethod.PUT,    "/teachers/**").access(principalNotBootstrap())
-                    .requestMatchers(HttpMethod.DELETE, "/teachers/**").access(principalNotBootstrap())
+                    // Teacher creation – PRINCIPAL (or ADMIN, who sits above). Other teacher mutations
+                    // are PRINCIPAL/ADMIN.
+                    .requestMatchers(HttpMethod.POST,   "/teachers").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST,   "/teachers/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT,    "/teachers/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/teachers/**").hasAnyRole("ADMIN", "PRINCIPAL")
 
-                    // Mutating student endpoints – PRINCIPAL, but never the bootstrap admin
-                    .requestMatchers(HttpMethod.POST,   "/students/**").access(principalNotBootstrap())
-                    .requestMatchers(HttpMethod.PUT,    "/students/**").access(principalNotBootstrap())
-                    .requestMatchers(HttpMethod.DELETE, "/students/**").access(principalNotBootstrap())
+                    // Student creation – PRINCIPAL or TEACHER (A.6); other student mutations PRINCIPAL/ADMIN.
+                    .requestMatchers(HttpMethod.POST,   "/students").hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.PUT,    "/students/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/students/**").hasAnyRole("ADMIN", "PRINCIPAL")
 
-                    // Mutating parent endpoints – PRINCIPAL, but never the bootstrap admin
-                    .requestMatchers(HttpMethod.POST,   "/parents/**").access(principalNotBootstrap())
-                    .requestMatchers(HttpMethod.PUT,    "/parents/**").access(principalNotBootstrap())
-                    .requestMatchers(HttpMethod.DELETE, "/parents/**").access(principalNotBootstrap())
+                    // Parent creation – PRINCIPAL or TEACHER (A.6); other parent mutations PRINCIPAL/ADMIN.
+                    .requestMatchers(HttpMethod.POST,   "/parents").hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.PUT,    "/parents/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/parents/**").hasAnyRole("ADMIN", "PRINCIPAL")
 
-                    // Login ID availability check – PRINCIPAL only (used at create time)
-                    .requestMatchers(HttpMethod.GET, "/users/login-id/available").hasRole("PRINCIPAL")
+                    // Login ID availability check – used at create time by the provisioning tiers.
+                    .requestMatchers(HttpMethod.GET, "/users/login-id/available")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
 
-                    // Read endpoints – PRINCIPAL, TEACHER, STUDENT, or PARENT
+                    // Phone lookup for confirm-and-link (OQ1) – the provisioning tiers.
+                    .requestMatchers(HttpMethod.GET, "/persons/lookup")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+
+                    // Read endpoints – any authenticated staff/family role.
                     .requestMatchers(HttpMethod.GET, "/teachers/**")
-                            .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER", "STUDENT")
                     .requestMatchers(HttpMethod.GET, "/students/**")
-                            .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
                     .requestMatchers(HttpMethod.GET, "/parents/**")
-                            .hasAnyRole("PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
 
                     .anyRequest().authenticated()
             )

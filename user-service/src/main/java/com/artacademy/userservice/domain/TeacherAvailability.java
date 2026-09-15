@@ -23,7 +23,7 @@ public class TeacherAvailability {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "TEACHER_ID", nullable = false)
-    private Teacher teacher;
+    private Person teacher;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "DAY_OF_WEEK")

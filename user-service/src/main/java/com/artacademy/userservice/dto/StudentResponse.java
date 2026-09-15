@@ -27,4 +27,7 @@ public class StudentResponse {
     private LocalDate enrollmentDate;
     private String status;
     private List<ParentRef> parents;
+    private String otherParentName;
+    private String otherParentPhone;
+    private String otherParentRelationship;
 }

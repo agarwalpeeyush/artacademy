@@ -1,9 +1,11 @@
 package com.artacademy.payment.domain;
 
+import com.artacademy.common.fee.ShareType;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -51,4 +53,36 @@ public class StudentFeeDetail {
     @Enumerated(EnumType.STRING)
     @Column(name = "STATUS", nullable = false, length = 20)
     private FeeStatus status;
+
+    @Column(name = "TEACHER_ID")
+    private UUID teacherId;
+
+    // Frozen share rule copied from the enrollment (F3/F4). Used to resolve the shares on the
+    // fly before PAID, and persisted into the amounts below when the detail becomes fully PAID.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "INSTITUTE_SHARE_TYPE", length = 10)
+    private ShareType instituteShareType;
+
+    @Column(name = "INSTITUTE_SHARE_VALUE", precision = 12, scale = 2)
+    private BigDecimal instituteShareValue;
+
+    // Resolved amounts (F7): null until the detail becomes fully PAID, then persisted from the rule.
+    @Column(name = "INSTITUTE_SHARE_AMOUNT", precision = 12, scale = 2)
+    private BigDecimal instituteShareAmount;
+
+    @Column(name = "TEACHER_SHARE_AMOUNT", precision = 12, scale = 2)
+    private BigDecimal teacherShareAmount;
+
+    // Principal override (F8/F12): auditable, wins over the resolved amounts when present.
+    @Column(name = "OVERRIDE_INSTITUTE_SHARE", precision = 12, scale = 2)
+    private BigDecimal overrideInstituteShare;
+
+    @Column(name = "OVERRIDE_TEACHER_SHARE", precision = 12, scale = 2)
+    private BigDecimal overrideTeacherShare;
+
+    @Column(name = "OVERRIDDEN_BY")
+    private UUID overriddenBy;
+
+    @Column(name = "OVERRIDDEN_AT")
+    private LocalDateTime overriddenAt;
 }

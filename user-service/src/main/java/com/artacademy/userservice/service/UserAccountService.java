@@ -1,6 +1,6 @@
 package com.artacademy.userservice.service;
 
-import com.artacademy.userservice.repository.UserRepository;
+import com.artacademy.userservice.repository.PersonRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,11 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserAccountService {
 
-    private final UserRepository userRepository;
+    private final PersonRepository personRepository;
 
-    /** True when no user (student, teacher or parent) already owns this login ID. */
+    /** True when no Person already owns this login ID. */
     @Transactional(readOnly = true)
     public boolean isLoginIdAvailable(String loginId) {
-        return !userRepository.existsByLoginId(loginId);
+        return !personRepository.existsByLoginId(loginId);
     }
 }

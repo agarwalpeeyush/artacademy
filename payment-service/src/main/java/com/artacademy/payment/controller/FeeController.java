@@ -4,6 +4,8 @@ import com.artacademy.payment.dto.FeeCycleResponse;
 import com.artacademy.payment.dto.FeeDetailResponse;
 import com.artacademy.payment.dto.GenerateFeesRequest;
 import com.artacademy.payment.dto.RevenueSummaryResponse;
+import com.artacademy.payment.dto.ShareOverrideRequest;
+import com.artacademy.payment.dto.TeacherRevenueSummary;
 import com.artacademy.payment.service.FeeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,5 +84,28 @@ public class FeeController {
     @Operation(summary = "Get revenue summary grouped by billing year and month")
     public ResponseEntity<List<RevenueSummaryResponse>> getRevenueSummary() {
         return ResponseEntity.ok(feeService.getRevenueSummary());
+    }
+
+    @GetMapping("/teachers/summary")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "Per-teacher revenue rollup (collected, institute commission, teacher share)")
+    public ResponseEntity<List<TeacherRevenueSummary>> getTeacherSummaries() {
+        return ResponseEntity.ok(feeService.getTeacherSummaries());
+    }
+
+    @GetMapping("/teacher/{teacherId}/summary")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Revenue rollup for a single teacher")
+    public ResponseEntity<TeacherRevenueSummary> getTeacherSummary(@PathVariable("teacherId") UUID teacherId) {
+        return ResponseEntity.ok(feeService.getTeacherSummary(teacherId));
+    }
+
+    @PutMapping("/fee-details/{feeDetailId}/share-override")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Operation(summary = "Principal override of the institute/teacher split on a fee detail")
+    public ResponseEntity<FeeDetailResponse> overrideShare(
+            @PathVariable("feeDetailId") UUID feeDetailId,
+            @Valid @RequestBody ShareOverrideRequest request) {
+        return ResponseEntity.ok(feeService.overrideShare(feeDetailId, request));
     }
 }

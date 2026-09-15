@@ -37,6 +37,11 @@ public class Enrollment {
     @Column(name = "COURSE_ID", nullable = false)
     private UUID courseId;
 
+    // F5: the teacher this enrollment is attributed to. One course = one teacher; stored directly
+    // (not derived from timetables) and carried on the created event for per-teacher accounting.
+    @Column(name = "TEACHER_ID", nullable = false)
+    private UUID teacherId;
+
     @Column(name = "ENROLLMENT_DATE", nullable = false)
     private LocalDate enrollmentDate;
 

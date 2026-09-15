@@ -23,6 +23,9 @@ public class EnrollmentRequest {
     @NotNull(message = "Course ID is required")
     private UUID courseId;
 
+    @NotNull(message = "Teacher ID is required")
+    private UUID teacherId;
+
     private LocalDate enrollmentDate;
 
     /**

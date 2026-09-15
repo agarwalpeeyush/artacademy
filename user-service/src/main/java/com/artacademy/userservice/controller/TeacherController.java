@@ -1,7 +1,6 @@
 package com.artacademy.userservice.controller;
 
 import com.artacademy.common.dto.ApiResponse;
-import com.artacademy.common.exception.ApiException;
 import com.artacademy.userservice.dto.TeacherAvailabilityExceptionRequest;
 import com.artacademy.userservice.dto.TeacherAvailabilityExceptionResponse;
 import com.artacademy.userservice.dto.TeacherAvailabilityRequest;
@@ -9,6 +8,7 @@ import com.artacademy.userservice.dto.TeacherAvailabilityResponse;
 import com.artacademy.userservice.dto.TeacherRequest;
 import com.artacademy.userservice.dto.TeacherResponse;
 import com.artacademy.userservice.dto.TeacherSelfUpdateRequest;
+import com.artacademy.userservice.service.PersonRoleService;
 import com.artacademy.userservice.service.TeacherService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,12 +32,13 @@ import java.util.UUID;
 public class TeacherController {
 
     private final TeacherService teacherService;
+    private final PersonRoleService personRoleService;
 
     @GetMapping("/me")
     @Operation(summary = "Get currently authenticated teacher's profile")
     public ResponseEntity<ApiResponse<TeacherResponse>> getMyProfile(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(
-                teacherService.getTeacherByLoginId(authentication.getName())));
+                teacherService.getTeacherByPersonId(personRoleService.currentPersonId())));
     }
 
     @PutMapping("/me")
@@ -46,7 +47,7 @@ public class TeacherController {
             Authentication authentication,
             @Valid @RequestBody TeacherSelfUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                teacherService.updateMyProfile(authentication.getName(), request)));
+                teacherService.updateMyProfile(personRoleService.currentPersonId(), request)));
     }
 
     @GetMapping
@@ -65,19 +66,7 @@ public class TeacherController {
     @PostMapping
     @Operation(summary = "Create a new teacher")
     public ResponseEntity<ApiResponse<TeacherResponse>> createTeacher(
-            Authentication authentication,
             @Valid @RequestBody TeacherRequest request) {
-        // The bootstrap admin holds PRINCIPAL but is scoped to creating the first real Principal only.
-        // URL matchers can't express that body rule, so enforce it here: a bootstrap caller may create
-        // only a teacher whose additionalRoles include PRINCIPAL.
-        boolean isBootstrap = authentication.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_BOOTSTRAP".equals(a.getAuthority()));
-        if (isBootstrap) {
-            List<String> additionalRoles = request.getAdditionalRoles();
-            if (additionalRoles == null || !additionalRoles.contains("PRINCIPAL")) {
-                throw ApiException.forbidden("Bootstrap admin may only create a Principal");
-            }
-        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(teacherService.createTeacher(request)));
     }

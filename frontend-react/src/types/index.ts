@@ -40,6 +40,8 @@ export interface Teacher {
   qualification?: string;
   joiningDate?: string;
   status: string;
+  // Confirm-and-link (OQ1): link an existing Person rather than minting a new one.
+  linkPersonId?: string;
 }
 
 export interface ChildRef {
@@ -71,6 +73,10 @@ export interface Student {
   enrollmentDate?: string;
   status: string;
   parents?: ParentRef[];
+  // Confirm-and-link (OQ1): when the provisioner links an existing Person as a
+  // parent instead of creating a fresh one, these carry that Person's id.
+  motherLinkPersonId?: string;
+  fatherLinkPersonId?: string;
 }
 
 export interface Parent {
@@ -88,16 +94,22 @@ export interface Parent {
   children?: ChildRef[];
   otherParents?: ParentRef[];
   status: string;
+  // Confirm-and-link (OQ1): link this Parent to an existing Person on create.
+  linkPersonId?: string;
 }
 
 export type FeeType = 'ADMISSION' | 'MONTHLY' | 'EXAM' | 'ONE_TIME_SHORT_TERM';
 export type FeeCadence = 'RECURRING' | 'ONE_TIME';
+export type ShareType = 'AMOUNT' | 'PERCENTAGE';
 
 export interface CourseFeeItem {
   id?: string;
   feeType: FeeType;
   amount: number;
   cadence?: FeeCadence;
+  // Institute's cut of this fee line (F10): AMOUNT (absolute) or PERCENTAGE (0–100).
+  instituteShareType?: ShareType | null;
+  instituteShareValue?: number | null;
 }
 
 export interface Course {
@@ -136,6 +148,8 @@ export interface Enrollment {
   studentName?: string;
   courseId: string;
   courseName?: string;
+  teacherId?: string;
+  teacherName?: string;
   enrollmentDate: string;
   status: 'ACTIVE' | 'COMPLETED' | 'DROPPED' | 'SUSPENDED';
   fees?: CourseFeeItem[];
@@ -312,6 +326,21 @@ export interface FeeDetail {
   outstandingAmount?: number;
   allocatedPaidAmount?: number;
   status?: string;
+  // Revenue share (F8/F9): teacher attribution + effective institute/teacher split.
+  teacherId?: string;
+  instituteShareAmount?: number;
+  teacherShareAmount?: number;
+  overridden?: boolean;
+}
+
+/** Per-teacher revenue rollup over fully-PAID details (F9). */
+export interface TeacherRevenueSummary {
+  teacherId: string;
+  teacherName?: string;
+  collected: number;
+  instituteShare: number;
+  teacherShare: number;
+  paidDetailCount: number;
 }
 
 export interface Payment {

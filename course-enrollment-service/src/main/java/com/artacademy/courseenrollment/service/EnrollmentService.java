@@ -5,8 +5,10 @@ import com.artacademy.common.events.EnrollmentCreatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.common.fee.FeeType;
+import com.artacademy.common.fee.ShareType;
 import com.artacademy.courseenrollment.client.UserServiceClient;
 import com.artacademy.courseenrollment.domain.Course;
+import com.artacademy.courseenrollment.domain.CourseFee;
 import com.artacademy.courseenrollment.domain.Enrollment;
 import com.artacademy.courseenrollment.domain.EnrollmentFee;
 import com.artacademy.courseenrollment.domain.Timetable;
@@ -25,11 +27,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -140,11 +145,10 @@ public class EnrollmentService {
     }
 
     /**
-     * Override the fee lines on an existing enrollment (R8). Persists the new amounts so future
-     * recurring cycles and not-yet-generated dues bill from them. Does not re-publish
-     * {@link EnrollmentCreatedEvent} — the consumer bills ONE_TIME fees on every such event, so
-     * re-publishing would double-bill admission. The enroll-time publish already billed from the
-     * original (possibly overridden) lines.
+     * Override the fee lines on an existing enrollment (R8/F3). Persists the new per-child amounts
+     * and institute-share rules, then re-publishes {@link EnrollmentCreatedEvent} so payment-service
+     * updates the not-yet-paid details (F13). The consumer is idempotent and leaves PAID details
+     * frozen (F4) — those change only via a principal override (F8).
      */
     public EnrollmentResponse updateFees(UUID id, List<EnrollmentFeeDto> fees) {
         if (fees == null || fees.isEmpty()) {
@@ -154,12 +158,18 @@ public class EnrollmentService {
                 .orElseThrow(() -> ApiException.notFound("Enrollment not found with id: " + id));
 
         List<EnrollmentFee> lines = fees.stream()
-                .map(enrollmentMapper::toFeeEntity)
+                .map(dto -> {
+                    ShareRuleValidator.validate(dto.getInstituteShareType(), dto.getInstituteShareValue(),
+                            "enrollment fee " + dto.getFeeType());
+                    return enrollmentMapper.toFeeEntity(dto);
+                })
                 .toList();
         applyFees(enrollment, lines);
 
         Enrollment updated = enrollmentRepository.save(enrollment);
         log.info("Updated {} fee line(s) on enrollment id={}", lines.size(), id);
+
+        publishCreatedEvent(updated);
 
         return enrollmentMapper.toResponse(updated);
     }
@@ -182,21 +192,46 @@ public class EnrollmentService {
     }
 
     /**
-     * Resolve the fee lines for an enrollment: the teacher's overrides when supplied, otherwise a
-     * verbatim copy of the course's {@link Course#getFees()}.
+     * Resolve the fee lines for an enrollment. Course fees are the template of defaults (F3): each
+     * line is pre-filled from the matching {@link CourseFee} (amount + institute-share rule). When
+     * the teacher supplies overrides, those per-child amounts and share rules win; a line's share
+     * rule falls back to the course default only when the override omits it. Validated per F10.
      */
     private List<EnrollmentFee> resolveFees(EnrollmentRequest request, Course course) {
-        if (request.getFees() != null && !request.getFees().isEmpty()) {
-            return request.getFees().stream()
-                    .map(enrollmentMapper::toFeeEntity)
+        Map<FeeType, CourseFee> template = course.getFees().stream()
+                .collect(Collectors.toMap(CourseFee::getFeeType, f -> f, (a, b) -> a, LinkedHashMap::new));
+
+        if (request.getFees() == null || request.getFees().isEmpty()) {
+            return template.values().stream()
+                    .map(f -> EnrollmentFee.builder()
+                            .feeType(f.getFeeType())
+                            .amount(f.getAmount())
+                            .cadence(f.getCadence())
+                            .instituteShareType(f.getInstituteShareType())
+                            .instituteShareValue(f.getInstituteShareValue())
+                            .build())
                     .toList();
         }
-        return course.getFees().stream()
-                .map(f -> EnrollmentFee.builder()
-                        .feeType(f.getFeeType())
-                        .amount(f.getAmount())
-                        .cadence(f.getCadence())
-                        .build())
+
+        return request.getFees().stream()
+                .map(dto -> {
+                    CourseFee def = template.get(dto.getFeeType());
+                    ShareType shareType = dto.getInstituteShareType() != null
+                            ? dto.getInstituteShareType()
+                            : (def != null ? def.getInstituteShareType() : null);
+                    BigDecimal shareValue = dto.getInstituteShareType() != null
+                            ? dto.getInstituteShareValue()
+                            : (def != null ? def.getInstituteShareValue() : null);
+                    ShareRuleValidator.validate(shareType, shareValue,
+                            "enrollment fee " + dto.getFeeType());
+                    return EnrollmentFee.builder()
+                            .feeType(dto.getFeeType())
+                            .amount(dto.getAmount())
+                            .cadence(dto.getCadence())
+                            .instituteShareType(shareType)
+                            .instituteShareValue(shareValue)
+                            .build();
+                })
                 .toList();
     }
 
@@ -244,6 +279,8 @@ public class EnrollmentService {
                         .feeType(f.getFeeType())
                         .amount(f.getAmount())
                         .cadence(f.getCadence())
+                        .instituteShareType(f.getInstituteShareType())
+                        .instituteShareValue(f.getInstituteShareValue())
                         .build())
                 .toList();
 
@@ -251,12 +288,14 @@ public class EnrollmentService {
                 .enrollmentId(saved.getId())
                 .studentId(saved.getStudentId())
                 .courseId(saved.getCourseId())
+                .teacherId(saved.getTeacherId())
                 .fees(feeItems)
                 .occurredAt(Instant.now())
                 .build();
 
         kafkaTemplate.send(KafkaTopics.ENROLLMENT_CREATED, String.valueOf(saved.getId()), event);
-        log.info("Published EnrollmentCreatedEvent for enrollment id={}", saved.getId());
+        log.info("Published EnrollmentCreatedEvent for enrollment id={} teacherId={}",
+                saved.getId(), saved.getTeacherId());
     }
 
     @Transactional(readOnly = true)
@@ -298,22 +337,22 @@ public class EnrollmentService {
     }
 
     /**
-     * Populate display names from user-service: {@code studentName} on each enrollment and
-     * {@code teacherName} on each nested timetable slot. Uses one bulk lookup per name domain,
-     * not per row.
+     * Populate display names from user-service: {@code studentName} and {@code teacherName} on each
+     * enrollment (F5), and {@code teacherName} on each nested timetable slot. Uses one bulk lookup
+     * per name domain, not per row.
      */
     private List<EnrollmentResponse> enrich(List<EnrollmentResponse> responses) {
         if (responses.isEmpty()) {
             return responses;
         }
         Map<UUID, String> studentNames = userServiceClient.fetchStudentNames();
-        Map<UUID, String> teacherNames = null;
+        Map<UUID, String> teacherNames = userServiceClient.fetchTeacherNames();
         for (EnrollmentResponse r : responses) {
             r.setStudentName(studentNames.get(r.getStudentId()));
+            if (r.getTeacherId() != null) {
+                r.setTeacherName(teacherNames.get(r.getTeacherId()));
+            }
             if (r.getTimetables() != null && !r.getTimetables().isEmpty()) {
-                if (teacherNames == null) {
-                    teacherNames = userServiceClient.fetchTeacherNames();
-                }
                 for (var t : r.getTimetables()) {
                     t.setTeacherName(teacherNames.get(t.getTeacherId()));
                 }

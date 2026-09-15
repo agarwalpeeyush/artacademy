@@ -24,6 +24,8 @@ const norm = (e: any): Enrollment => ({
   studentName: e.studentName ?? '',
   courseId: e.courseId,
   courseName: e.courseName ?? '',
+  teacherId: e.teacherId ?? undefined,
+  teacherName: e.teacherName ?? '',
   enrollmentDate: e.enrollmentDate,
   status: e.status,
   fees: (e.fees ?? []).map((f: any) => ({
@@ -31,6 +33,8 @@ const norm = (e: any): Enrollment => ({
     feeType: f.feeType,
     amount: Number(f.amount),
     cadence: f.cadence,
+    instituteShareType: f.instituteShareType ?? null,
+    instituteShareValue: f.instituteShareValue != null ? Number(f.instituteShareValue) : null,
   })),
   timetables: (e.timetables ?? []).map(normTimetable),
   timetableIds: (e.timetables ?? []).map((t: any) => t.id),

@@ -2,10 +2,13 @@ package com.artacademy.payment.service;
 
 import com.artacademy.common.events.FeeGeneratedEvent;
 import com.artacademy.common.events.KafkaTopics;
+import com.artacademy.common.exception.ApiException;
 import com.artacademy.payment.domain.*;
 import com.artacademy.payment.dto.FeeCycleResponse;
 import com.artacademy.payment.dto.FeeDetailResponse;
 import com.artacademy.payment.dto.RevenueSummaryResponse;
+import com.artacademy.payment.dto.ShareOverrideRequest;
+import com.artacademy.payment.dto.TeacherRevenueSummary;
 import com.artacademy.payment.mapper.PaymentMapper;
 import com.artacademy.payment.repository.EnrollmentCacheRepository;
 import com.artacademy.payment.repository.StudentFeeCycleRepository;
@@ -13,6 +16,7 @@ import com.artacademy.payment.repository.StudentFeeDetailRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +39,10 @@ public class FeeService {
     private final EnrollmentCacheRepository enrollmentCacheRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final PaymentMapper paymentMapper;
+
+    /** F12: allowed drift between (institute + teacher) and billed on an override. Default 10. */
+    @Value("${payment.share.override-tolerance:10}")
+    private BigDecimal overrideTolerance;
 
     @Transactional
     public List<FeeCycleResponse> generateMonthlyFees(int month, int year) {
@@ -97,6 +105,9 @@ public class FeeService {
                         .allocatedPaidAmount(BigDecimal.ZERO)
                         .outstandingAmount(enrollment.getCourseFee())
                         .status(FeeStatus.UNPAID)
+                        .teacherId(enrollment.getTeacherId())
+                        .instituteShareType(enrollment.getInstituteShareType())
+                        .instituteShareValue(enrollment.getInstituteShareValue())
                         .build();
                 details.add(detail);
             }
@@ -145,7 +156,7 @@ public class FeeService {
     @Transactional(readOnly = true)
     public List<FeeDetailResponse> getFeeDetailsByCycle(UUID feeCycleId) {
         return feeDetailRepository.findByFeeCycle_Id(feeCycleId).stream()
-                .map(paymentMapper::toDetailResponse)
+                .map(this::toDetailDto)
                 .collect(Collectors.toList());
     }
 
@@ -224,7 +235,103 @@ public class FeeService {
     @Transactional(readOnly = true)
     public List<FeeDetailResponse> getFeeDetails(UUID studentId) {
         return feeDetailRepository.findByStudentId(studentId).stream()
-                .map(paymentMapper::toDetailResponse)
+                .map(this::toDetailDto)
                 .collect(Collectors.toList());
+    }
+
+    /** Maps a detail to its DTO and fills the effective (override-aware) shares (F8/F9). */
+    private FeeDetailResponse toDetailDto(StudentFeeDetail detail) {
+        FeeDetailResponse dto = paymentMapper.toDetailResponse(detail);
+        dto.setTeacherId(detail.getTeacherId());
+        dto.setInstituteShareAmount(ShareResolver.effectiveInstitute(detail));
+        dto.setTeacherShareAmount(ShareResolver.effectiveTeacher(detail));
+        dto.setOverridden(detail.getOverriddenAt() != null);
+        return dto;
+    }
+
+    /**
+     * Per-teacher revenue rollup (F9) over fully-PAID details. "collected" is the sum of
+     * allocatedPaidAmount on PAID details; institute/teacher shares use effective (override-aware)
+     * amounts. Details without a teacherId are skipped.
+     */
+    @Transactional(readOnly = true)
+    public List<TeacherRevenueSummary> getTeacherSummaries() {
+        Map<UUID, TeacherRevenueSummary.TeacherRevenueSummaryBuilder> byTeacher = new LinkedHashMap<>();
+        Map<UUID, long[]> counts = new HashMap<>();
+        Map<UUID, BigDecimal[]> sums = new HashMap<>();
+
+        for (StudentFeeDetail detail : paidDetailsWithTeacher()) {
+            UUID teacherId = detail.getTeacherId();
+            counts.computeIfAbsent(teacherId, k -> new long[1])[0]++;
+            BigDecimal[] agg = sums.computeIfAbsent(teacherId,
+                    k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+            agg[0] = agg[0].add(detail.getAllocatedPaidAmount());
+            agg[1] = agg[1].add(ShareResolver.effectiveInstitute(detail));
+            agg[2] = agg[2].add(ShareResolver.effectiveTeacher(detail));
+        }
+
+        return sums.entrySet().stream()
+                .map(e -> TeacherRevenueSummary.builder()
+                        .teacherId(e.getKey())
+                        .collected(e.getValue()[0])
+                        .instituteShare(e.getValue()[1])
+                        .teacherShare(e.getValue()[2])
+                        .paidDetailCount(counts.get(e.getKey())[0])
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    /** Single-teacher rollup (F9), zeros if the teacher has no fully-PAID details. */
+    @Transactional(readOnly = true)
+    public TeacherRevenueSummary getTeacherSummary(UUID teacherId) {
+        return getTeacherSummaries().stream()
+                .filter(s -> teacherId.equals(s.getTeacherId()))
+                .findFirst()
+                .orElse(TeacherRevenueSummary.builder()
+                        .teacherId(teacherId)
+                        .collected(BigDecimal.ZERO)
+                        .instituteShare(BigDecimal.ZERO)
+                        .teacherShare(BigDecimal.ZERO)
+                        .paidDetailCount(0)
+                        .build());
+    }
+
+    private List<StudentFeeDetail> paidDetailsWithTeacher() {
+        return feeDetailRepository.findAll().stream()
+                .filter(d -> d.getStatus() == FeeStatus.PAID)
+                .filter(d -> d.getTeacherId() != null)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Principal override of a single detail's institute/teacher split (F8/F12/F14). Auditable:
+     * records who and when, keeps the originally resolved amounts intact. Valid when both shares
+     * are ≥ 0 and |(institute + teacher) − billed| ≤ tolerance.
+     */
+    @Transactional
+    public FeeDetailResponse overrideShare(UUID feeDetailId, ShareOverrideRequest request) {
+        StudentFeeDetail detail = feeDetailRepository.findById(feeDetailId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Fee detail not found with id: " + feeDetailId));
+
+        BigDecimal institute = request.getInstituteShare();
+        BigDecimal teacher = request.getTeacherShare();
+        BigDecimal billed = detail.getAllocatedPaidAmount() != null
+                ? detail.getAllocatedPaidAmount() : BigDecimal.ZERO;
+        BigDecimal drift = institute.add(teacher).subtract(billed).abs();
+        if (drift.compareTo(overrideTolerance) > 0) {
+            throw ApiException.badRequest("Override institute + teacher share (" + institute.add(teacher)
+                    + ") must be within " + overrideTolerance + " of the billed amount (" + billed + ")");
+        }
+
+        detail.setOverrideInstituteShare(institute);
+        detail.setOverrideTeacherShare(teacher);
+        detail.setOverriddenBy(request.getOverriddenBy());
+        detail.setOverriddenAt(LocalDateTime.now());
+        feeDetailRepository.save(detail);
+        log.info("Principal {} overrode share on feeDetailId={} (institute={}, teacher={})",
+                request.getOverriddenBy(), feeDetailId, institute, teacher);
+
+        return toDetailDto(detail);
     }
 }

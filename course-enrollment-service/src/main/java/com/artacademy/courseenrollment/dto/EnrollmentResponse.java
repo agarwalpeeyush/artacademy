@@ -20,6 +20,8 @@ public class EnrollmentResponse {
     private String studentName;
     private UUID courseId;
     private String courseName;
+    private UUID teacherId;
+    private String teacherName;
     private LocalDate enrollmentDate;
     private String status;
     private List<EnrollmentFeeDto> fees;

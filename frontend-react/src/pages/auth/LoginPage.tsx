@@ -24,6 +24,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';import { AppDispatch, RootState } from '../../store/store';
 import { loginThunk, clearError } from '../../store/slices/authSlice';
 import { LoginRequest } from '../../types';
+import { defaultWorkspace } from '../../utils/workspaces';
 
 const schema = yup.object({
   username: yup.string().required('Username is required'),
@@ -33,7 +34,7 @@ const schema = yup.object({
 const LoginPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { isAuthenticated, loading, error, roles, user } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, loading, error, roles } = useSelector((state: RootState) => state.auth);
   const [showPassword, setShowPassword] = React.useState(false);
 
   const {
@@ -47,19 +48,10 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      if (user?.bootstrap) {
-        navigate('/principal/create-principal', { replace: true });
-      } else if (roles.includes('ROLE_PRINCIPAL')) {
-        navigate('/principal/dashboard', { replace: true });
-      } else if (roles.includes('ROLE_TEACHER')) {
-        navigate('/teacher/dashboard', { replace: true });
-      } else if (roles.includes('ROLE_PARENT')) {
-        navigate('/parent/dashboard', { replace: true });
-      } else {
-        navigate('/student/dashboard', { replace: true });
-      }
+      const ws = defaultWorkspace(roles);
+      navigate(ws?.home ?? '/student/dashboard', { replace: true });
     }
-  }, [isAuthenticated, roles, user, navigate]);
+  }, [isAuthenticated, roles, navigate]);
 
   useEffect(() => {
     return () => { dispatch(clearError()); };

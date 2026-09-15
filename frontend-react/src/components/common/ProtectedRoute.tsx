@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
+import { defaultWorkspace } from '../../utils/workspaces';
 
 interface ProtectedRouteProps {
   children: React.ReactElement;
@@ -9,28 +10,21 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
-  const { isAuthenticated, roles, user } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, roles } = useSelector((state: RootState) => state.auth);
   const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // The bootstrap admin can reach exactly one page: the create-principal form. Any other route
-  // (including the rest of the principal console) redirects there.
-  if (user?.bootstrap && location.pathname !== '/principal/create-principal') {
-    return <Navigate to="/principal/create-principal" replace />;
-  }
+  // ADMIN provisions Principals from the Principal console (D8), so it may enter the
+  // principal route tree even without ROLE_PRINCIPAL.
+  const adminInPrincipalConsole =
+    requiredRole === 'ROLE_PRINCIPAL' && roles.includes('ROLE_ADMIN');
 
-  if (requiredRole && !roles.includes(requiredRole)) {
-    const defaultPath = roles.includes('ROLE_PRINCIPAL')
-      ? '/principal/dashboard'
-      : roles.includes('ROLE_TEACHER')
-      ? '/teacher/dashboard'
-      : roles.includes('ROLE_PARENT')
-      ? '/parent/dashboard'
-      : '/student/dashboard';
-    return <Navigate to={defaultPath} replace />;
+  if (requiredRole && !roles.includes(requiredRole) && !adminInPrincipalConsole) {
+    const fallback = defaultWorkspace(roles);
+    return <Navigate to={fallback?.home ?? '/login'} replace />;
   }
 
   return children;

@@ -25,18 +25,26 @@ public class JwtUtil {
     }
 
     public String generateToken(String username, List<String> roles) {
-        return generateToken(username, roles, false);
+        return generateToken(username, roles, false, null);
     }
 
     public String generateToken(String username, List<String> roles, boolean bootstrap) {
-        return Jwts.builder()
+        return generateToken(username, roles, bootstrap, null);
+    }
+
+    // personId (D5): the stable identity key. Username may change on staff promotion (D3), so services
+    // resolve the current user by this claim, not the subject. Null-safe for tokens minted pre-upgrade.
+    public String generateToken(String username, List<String> roles, boolean bootstrap, String personId) {
+        var builder = Jwts.builder()
                 .subject(username)
                 .claim("roles", roles)
                 .claim("bootstrap", bootstrap)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expirationMs))
-                .signWith(signingKey())
-                .compact();
+                .expiration(new Date(System.currentTimeMillis() + expirationMs));
+        if (personId != null) {
+            builder.claim("personId", personId);
+        }
+        return builder.signWith(signingKey()).compact();
     }
 
     public boolean validateToken(String token) {
@@ -50,6 +58,11 @@ public class JwtUtil {
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    // Stable identity key (D5). Null for tokens minted before the personId claim existed.
+    public String extractPersonId(String token) {
+        return extractClaim(token, c -> c.get("personId", String.class));
     }
 
     @SuppressWarnings("unchecked")

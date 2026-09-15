@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -38,6 +39,14 @@ public class StudentRequest {
     private String motherName;
 
     private String motherPhone;
+
+    /**
+     * Confirmed link to an existing Person (OQ1) for the login-holding parent. When set, that Person's
+     * account is reused (a ParentProfile + Guardianship are added) instead of minting a new login.
+     */
+    private UUID motherLinkPersonId;
+
+    private UUID fatherLinkPersonId;
 
     @Email(message = "Email must be valid")
     private String email;

@@ -11,7 +11,8 @@ import { fetchFeeCycles } from '../../store/slices/feeSlice';
 import { recordPayment, fetchPaymentsByFeeCycle } from '../../store/slices/paymentSlice';
 import studentService from '../../services/studentService';
 import paymentService from '../../services/paymentService';
-import { Student, FeeCycle, Payment } from '../../types';
+import feeService from '../../services/feeService';
+import { Student, FeeCycle, Payment, FeeDetail } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatCurrency, formatDateDMY, parseDMYtoISO, todayDMY, cycleKindLabel, cycleKindColor } from '../../utils/formatters';
@@ -42,6 +43,8 @@ const PaymentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { feeCycles } = useSelector((state: RootState) => state.fees);
   const { cyclePayments } = useSelector((state: RootState) => state.payments);
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+  const isPrincipal = !!currentUser?.roles?.includes('PRINCIPAL');
 
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -50,6 +53,15 @@ const PaymentsPage: React.FC = () => {
   const [form, setForm] = useState<PayForm>(emptyForm(0));
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Fee-detail drill-down + principal share override (F8/F12).
+  const [detailCycle, setDetailCycle] = useState<FeeCycle | null>(null);
+  const [details, setDetails] = useState<FeeDetail[]>([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [overrideDetail, setOverrideDetail] = useState<FeeDetail | null>(null);
+  const [overrideForm, setOverrideForm] = useState<{ institute: string; teacher: string }>({ institute: '', teacher: '' });
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
 
   useEffect(() => {
     studentService.getAll().then(setStudents).catch(() => setStudents([]));
@@ -103,8 +115,54 @@ const PaymentsPage: React.FC = () => {
     }
   };
 
-  const latestPaymentDate = (cycleId: string): string => {
-    const dates = cyclePayments.filter(p => p.feeCycleId === cycleId).map(p => p.paymentDate).filter(Boolean);
+  const openDetails = async (cycle: FeeCycle) => {
+    setDetailCycle(cycle);
+    setDetailsLoading(true);
+    try {
+      setDetails(await feeService.getFeeDetails(cycle.id));
+    } catch {
+      setDetails([]);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const isPaidDetail = (d: FeeDetail): boolean =>
+    (d.status ?? '').toUpperCase() === 'PAID' || (d.outstandingAmount ?? 0) <= 0;
+
+  const openOverride = (d: FeeDetail) => {
+    const billed = d.allocatedPaidAmount ?? d.courseFee ?? d.amount ?? 0;
+    const inst = d.instituteShareAmount ?? 0;
+    setOverrideDetail(d);
+    setOverrideForm({ institute: String(inst), teacher: String(d.teacherShareAmount ?? Math.max(billed - inst, 0)) });
+    setOverrideError(null);
+  };
+
+  const handleOverride = async () => {
+    if (!overrideDetail || !currentUser?.id) return;
+    const institute = Number(overrideForm.institute);
+    const teacher = Number(overrideForm.teacher);
+    if (Number.isNaN(institute) || Number.isNaN(teacher) || institute < 0 || teacher < 0) {
+      setOverrideError('Institute and teacher shares must be non-negative numbers');
+      return;
+    }
+    setOverrideSubmitting(true);
+    try {
+      const updated = await feeService.overrideShare(overrideDetail.id, {
+        instituteShare: institute,
+        teacherShare: teacher,
+        overriddenBy: currentUser.id,
+      });
+      setDetails(prev => prev.map(d => (d.id === updated.id ? updated : d)));
+      setOverrideDetail(null);
+    } catch (e: any) {
+      setOverrideError(typeof e === 'string' ? e : e?.response?.data?.message ?? 'Failed to override share');
+    } finally {
+      setOverrideSubmitting(false);
+    }
+  };
+
+  const latestPaymentDate = (cycleId: string): string => {    const dates = cyclePayments.filter(p => p.feeCycleId === cycleId).map(p => p.paymentDate).filter(Boolean);
     if (!dates.length) return '-';
     return formatDateDMY(dates.sort().slice(-1)[0]);
   };
@@ -156,6 +214,9 @@ const PaymentsPage: React.FC = () => {
                   <Box display="flex" gap={1} justifyContent="center">
                     <Button size="small" variant="outlined" disabled={display === 'PAID'} onClick={() => openPayDialog(cycle)}>
                       Record Payment
+                    </Button>
+                    <Button size="small" variant="text" onClick={() => openDetails(cycle)}>
+                      Details
                     </Button>
                     <Tooltip title="Online payment coming soon">
                       <span>
@@ -271,6 +332,104 @@ const PaymentsPage: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setPayCycle(null)}>Cancel</Button>
           <Button variant="contained" onClick={handleSubmit} disabled={submitting}>Record Payment</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!detailCycle} onClose={() => setDetailCycle(null)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Fee Details
+          {detailCycle && (
+            <Typography variant="body2" color="text.secondary">
+              {`${detailCycle.month ?? detailCycle.billingMonth}/${detailCycle.year ?? detailCycle.billingYear}`}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {detailsLoading ? (
+            <LoadingSpinner />
+          ) : details.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 2 }}>No fee details for this cycle.</Typography>
+          ) : (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Course</TableCell>
+                    <TableCell align="right">Billed</TableCell>
+                    <TableCell align="right">Paid</TableCell>
+                    <TableCell align="right">Institute Share</TableCell>
+                    <TableCell align="right">Teacher Share</TableCell>
+                    <TableCell align="center">Status</TableCell>
+                    {isPrincipal && <TableCell align="center">Actions</TableCell>}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {details.map(d => {
+                    const paid = isPaidDetail(d);
+                    return (
+                      <TableRow key={d.id} hover>
+                        <TableCell>{d.courseName ?? d.courseId ?? '-'}</TableCell>
+                        <TableCell align="right">{formatCurrency(d.courseFee ?? d.amount ?? 0)}</TableCell>
+                        <TableCell align="right">{formatCurrency(d.allocatedPaidAmount ?? 0)}</TableCell>
+                        <TableCell align="right" sx={{ color: 'primary.main' }}>
+                          {paid ? formatCurrency(d.instituteShareAmount ?? 0) : '-'}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: 'success.main' }}>
+                          {paid ? formatCurrency(d.teacherShareAmount ?? 0) : '-'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip label={paid ? 'PAID' : (d.status ?? 'UNPAID')} color={paid ? 'success' : 'default'} size="small" />
+                          {d.overridden && <Chip label="Overridden" color="info" size="small" variant="outlined" sx={{ ml: 0.5 }} />}
+                        </TableCell>
+                        {isPrincipal && (
+                          <TableCell align="center">
+                            <Button size="small" variant="outlined" disabled={!paid} onClick={() => openOverride(d)}>
+                              Override
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailCycle(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!overrideDetail} onClose={() => setOverrideDetail(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Override Revenue Share</DialogTitle>
+        <DialogContent>
+          {overrideDetail && (
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid item xs={12}>
+                <Typography variant="body2" color="text.secondary">
+                  Billed (paid): {formatCurrency(overrideDetail.allocatedPaidAmount ?? overrideDetail.courseFee ?? overrideDetail.amount ?? 0)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <TextField label="Institute Share" type="number" fullWidth size="small"
+                  value={overrideForm.institute}
+                  onChange={e => setOverrideForm({ ...overrideForm, institute: e.target.value })} />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField label="Teacher Share" type="number" fullWidth size="small"
+                  value={overrideForm.teacher}
+                  onChange={e => setOverrideForm({ ...overrideForm, teacher: e.target.value })} />
+              </Grid>
+              {overrideError && (
+                <Grid item xs={12}><Typography color="error" variant="body2">{overrideError}</Typography></Grid>
+              )}
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOverrideDetail(null)}>Cancel</Button>
+          <Button variant="contained" onClick={handleOverride} disabled={overrideSubmitting}>Save Override</Button>
         </DialogActions>
       </Dialog>
     </Box>

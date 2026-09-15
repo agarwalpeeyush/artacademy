@@ -2,6 +2,7 @@ package com.artacademy.courseenrollment.dto;
 
 import com.artacademy.common.fee.FeeCadence;
 import com.artacademy.common.fee.FeeType;
+import com.artacademy.common.fee.ShareType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -57,5 +58,14 @@ public class CourseRequest {
 
         /** Optional — defaults to the fee type's intrinsic cadence when omitted. */
         private FeeCadence cadence;
+
+        /**
+         * Institute-share template default for this line (F2). Optional — null type means no cut.
+         * Range validated in the service (PERCENTAGE ∈ [0,100], AMOUNT ≥ 0, F10).
+         */
+        private ShareType instituteShareType;
+
+        @DecimalMin(value = "0.0", message = "Institute share value must be non-negative")
+        private BigDecimal instituteShareValue;
     }
 }

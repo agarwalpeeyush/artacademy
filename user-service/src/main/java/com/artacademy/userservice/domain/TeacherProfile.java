@@ -4,16 +4,27 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
+// Zero-or-one per Person. Shares the Person PK (@MapsId): PERSON_ID is both PK and FK. Holding this
+// profile derives the TEACHER role (OQ2).
 @Entity
-@Table(name = "TEACHERS")
-@DiscriminatorValue("TEACHER")
-@PrimaryKeyJoinColumn(name = "ID")
+@Table(name = "TEACHER_PROFILES")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Teacher extends User {
+@Builder
+public class TeacherProfile {
+
+    @Id
+    @Column(name = "PERSON_ID")
+    private UUID personId;
+
+    @MapsId
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "PERSON_ID")
+    private Person person;
 
     @Column(name = "EMPLOYEE_CODE", length = 50, unique = true)
     private String employeeCode;

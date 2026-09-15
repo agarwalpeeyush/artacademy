@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -20,6 +21,13 @@ public class TeacherRequest {
 
     @NotBlank(message = "Login ID is required")
     private String loginId;
+
+    /**
+     * Confirmed link to an existing Person (OQ1). When set, that Person's account is reused — a
+     * TeacherProfile is added and, if the request carries PRINCIPAL, the role is granted via
+     * PERSON_ROLE_CHANGED — instead of minting a brand-new login.
+     */
+    private UUID linkPersonId;
 
     /** Optional. Blank/absent from the UI; the service defaults it before publishing the auth event. */
     private String temporaryPassword;

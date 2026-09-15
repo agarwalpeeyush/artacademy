@@ -23,7 +23,7 @@ public class TeacherAvailabilityException {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "TEACHER_ID", nullable = false)
-    private Teacher teacher;
+    private Person teacher;
 
     @Column(name = "EXCEPTION_DATE", nullable = false)
     private LocalDate date;

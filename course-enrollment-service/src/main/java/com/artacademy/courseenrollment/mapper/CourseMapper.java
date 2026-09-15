@@ -17,6 +17,8 @@ public class CourseMapper {
                                 .feeType(f.getFeeType())
                                 .amount(f.getAmount())
                                 .cadence(f.getCadence())
+                                .instituteShareType(f.getInstituteShareType())
+                                .instituteShareValue(f.getInstituteShareValue())
                                 .build())
                         .toList();
 
