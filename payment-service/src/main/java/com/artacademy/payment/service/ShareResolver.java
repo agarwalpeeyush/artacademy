@@ -1,14 +1,14 @@
 package com.artacademy.payment.service;
 
 import com.artacademy.common.fee.ShareType;
-import com.artacademy.payment.domain.StudentFeeDetail;
+import com.artacademy.payment.domain.FeeBill;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
  * Resolves the institute/teacher split of a billed amount from a frozen share rule (F6), and
- * exposes the <em>effective</em> shares of a detail (F8): a principal override wins over the
+ * exposes the <em>effective</em> shares of a bill (F8): a principal override wins over the
  * resolved amounts when present.
  *
  * <p>F6: AMOUNT rule → institute = min(value, billed); PERCENTAGE rule →
@@ -43,29 +43,28 @@ final class ShareResolver {
     }
 
     /**
-     * Effective institute share of a detail (F8): the override when present, otherwise the
-     * persisted resolved amount, otherwise a live computation from the frozen rule against the
-     * amount paid so far. Used by both the dashboard read and the persistence-on-PAID path.
+     * Effective institute share of a bill (F8): the override when present, otherwise the persisted
+     * resolved amount, otherwise a live computation from the frozen rule against the amount paid.
      */
-    static BigDecimal effectiveInstitute(StudentFeeDetail detail) {
-        if (detail.getOverrideInstituteShare() != null) {
-            return detail.getOverrideInstituteShare();
+    static BigDecimal effectiveInstitute(FeeBill bill) {
+        if (bill.getOverrideInstituteShare() != null) {
+            return bill.getOverrideInstituteShare();
         }
-        if (detail.getInstituteShareAmount() != null) {
-            return detail.getInstituteShareAmount();
+        if (bill.getInstituteShareAmount() != null) {
+            return bill.getInstituteShareAmount();
         }
-        return institute(detail.getInstituteShareType(), detail.getInstituteShareValue(),
-                detail.getAllocatedPaidAmount());
+        return institute(bill.getInstituteShareType(), bill.getInstituteShareValue(),
+                bill.getPaidAmount());
     }
 
-    /** Effective teacher share of a detail (F8), mirroring {@link #effectiveInstitute}. */
-    static BigDecimal effectiveTeacher(StudentFeeDetail detail) {
-        if (detail.getOverrideTeacherShare() != null) {
-            return detail.getOverrideTeacherShare();
+    /** Effective teacher share of a bill (F8), mirroring {@link #effectiveInstitute}. */
+    static BigDecimal effectiveTeacher(FeeBill bill) {
+        if (bill.getOverrideTeacherShare() != null) {
+            return bill.getOverrideTeacherShare();
         }
-        if (detail.getTeacherShareAmount() != null) {
-            return detail.getTeacherShareAmount();
+        if (bill.getTeacherShareAmount() != null) {
+            return bill.getTeacherShareAmount();
         }
-        return teacher(detail.getAllocatedPaidAmount(), effectiveInstitute(detail));
+        return teacher(bill.getPaidAmount(), effectiveInstitute(bill));
     }
 }

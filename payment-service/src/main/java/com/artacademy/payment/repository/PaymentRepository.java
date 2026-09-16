@@ -13,7 +13,5 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     List<Payment> findByStudentId(UUID studentId);
 
-    List<Payment> findByFeeCycle_Id(UUID feeCycleId);
-
     List<Payment> findByPaymentDateBetween(LocalDateTime start, LocalDateTime end);
 }

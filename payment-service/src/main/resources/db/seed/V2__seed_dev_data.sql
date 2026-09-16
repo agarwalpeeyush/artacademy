@@ -1,3 +1,0 @@
--- Seed for payment_db.
--- All dev data removed (R17): enrollment cache, fee cycles/details, and payments are populated at
--- runtime via Kafka events and the payment flow. Fresh DB — nothing to seed here.

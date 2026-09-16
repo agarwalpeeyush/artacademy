@@ -3,7 +3,6 @@ package com.artacademy.courseenrollment.service;
 import com.artacademy.common.events.ExamScheduledEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.CourseFee;
 import com.artacademy.courseenrollment.domain.Exam;
@@ -57,7 +56,7 @@ public class ExamService {
 
         // The course must carry an EXAM fee for the trigger to bill anything (R19 / M2).
         BigDecimal examFee = course.getFees().stream()
-                .filter(f -> f.getFeeType() == FeeType.EXAM)
+                .filter(f -> "EXAM".equals(f.getFeeType().getCode()))
                 .map(CourseFee::getAmount)
                 .findFirst()
                 .orElseThrow(() -> ApiException.badRequest(

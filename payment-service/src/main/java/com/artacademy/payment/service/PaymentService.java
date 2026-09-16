@@ -3,12 +3,18 @@ package com.artacademy.payment.service;
 import com.artacademy.common.events.FeeStatusUpdatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.events.PaymentReceivedEvent;
-import com.artacademy.payment.domain.*;
+import com.artacademy.common.exception.ApiException;
+import com.artacademy.payment.domain.FeeBill;
+import com.artacademy.payment.domain.FeeStatus;
+import com.artacademy.payment.domain.FeeType;
+import com.artacademy.payment.domain.Payment;
+import com.artacademy.payment.domain.StudentCredit;
 import com.artacademy.payment.dto.PaymentRequest;
 import com.artacademy.payment.dto.PaymentResponse;
 import com.artacademy.payment.mapper.PaymentMapper;
-import com.artacademy.payment.repository.*;
-import jakarta.persistence.EntityNotFoundException;
+import com.artacademy.payment.repository.FeeBillRepository;
+import com.artacademy.payment.repository.PaymentRepository;
+import com.artacademy.payment.repository.StudentCreditRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -16,43 +22,42 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Student-level payments (§5). A single tendered amount, plus any carried credit, settles the
+ * student's outstanding bills in a fixed waterfall — ADMISSION → MONTHLY (oldest first) → EXAM →
+ * ONE_TIME_SHORT_TERM. Over-payment lands in {@link StudentCredit}. A bill that flips to PAID
+ * stamps its payment date and resolves the institute/teacher share.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
-    private final StudentFeeCycleRepository feeCycleRepository;
-    private final StudentFeeDetailRepository feeDetailRepository;
-    private final PaymentAllocationRepository paymentAllocationRepository;
+    private final FeeBillRepository feeBillRepository;
+    private final StudentCreditRepository studentCreditRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final PaymentMapper paymentMapper;
+    private final Clock clock;
 
     @Transactional
     public PaymentResponse recordPayment(PaymentRequest request) {
-        log.info("Recording payment for feeCycleId={}, studentId={}, amount={}",
-                request.getFeeCycleId(), request.getStudentId(), request.getAmount());
+        log.info("Recording student-level payment: studentId={}, amount={}",
+                request.getStudentId(), request.getAmount());
 
-        // 1. Fetch fee cycle
-        StudentFeeCycle cycle = feeCycleRepository.findById(request.getFeeCycleId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Fee cycle not found with id: " + request.getFeeCycleId()));
+        LocalDateTime paymentDate = request.getPaymentDate().atStartOfDay();
 
-        // 2. Create Payment record
-        LocalDateTime paymentDate = request.getPaymentDate() != null
-                ? request.getPaymentDate().atStartOfDay()
-                : LocalDateTime.now();
+        // 1. Persist the payment (total tendered).
         Payment payment = Payment.builder()
-                .feeCycle(cycle)
                 .studentId(request.getStudentId())
                 .amount(request.getAmount())
                 .paymentMode(request.getPaymentMode())
@@ -60,145 +65,99 @@ public class PaymentService {
                 .paymentDate(paymentDate)
                 .remarks(request.getRemarks())
                 .build();
-
         payment = paymentRepository.save(payment);
 
-        // 3. Fetch all fee details for this cycle, sorted FIFO by courseId (ascending)
-        List<StudentFeeDetail> details = feeDetailRepository.findByFeeCycle_Id(cycle.getId()).stream()
-                .filter(d -> d.getStatus() != FeeStatus.PAID)
-                .sorted(Comparator.comparing(StudentFeeDetail::getCourseId))
+        // 2. remaining = carried credit + tendered amount.
+        StudentCredit credit = studentCreditRepository.findById(request.getStudentId())
+                .orElse(StudentCredit.builder()
+                        .studentId(request.getStudentId())
+                        .balance(BigDecimal.ZERO)
+                        .build());
+        BigDecimal remaining = nz(credit.getBalance()).add(request.getAmount());
+
+        // 3. Outstanding bills in waterfall order.
+        List<FeeBill> outstanding = feeBillRepository
+                .findByStudentIdAndOutstandingBillTrue(request.getStudentId()).stream()
+                .sorted(WATERFALL)
                 .collect(Collectors.toList());
 
-        // 4. Allocate payment proportionally using FIFO
-        BigDecimal remaining = request.getAmount();
-        List<PaymentAllocation> allocations = new ArrayList<>();
-
-        for (StudentFeeDetail detail : details) {
+        // 4. Settle.
+        List<UUID> settledBillIds = new java.util.ArrayList<>();
+        for (FeeBill bill : outstanding) {
             if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
                 break;
             }
-
-            BigDecimal detailOutstanding = detail.getOutstandingAmount();
-            BigDecimal allocationAmount = remaining.min(detailOutstanding);
-
-            PaymentAllocation allocation = PaymentAllocation.builder()
-                    .payment(payment)
-                    .feeDetail(detail)
-                    .allocatedAmount(allocationAmount)
-                    .build();
-            allocations.add(allocation);
-
-            // 5. Update StudentFeeDetail
-            detail.setAllocatedPaidAmount(detail.getAllocatedPaidAmount().add(allocationAmount));
-            detail.setOutstandingAmount(detail.getOutstandingAmount().subtract(allocationAmount));
-
-            if (detail.getOutstandingAmount().compareTo(BigDecimal.ZERO) == 0) {
-                detail.setStatus(FeeStatus.PAID);
-                // F6/F7: on transition to fully PAID, resolve the institute share from the frozen
-                // rule against the billed (allocated-paid) amount and persist both shares. The
-                // teacher takes the remainder. A later principal override (F8) supersedes these.
-                BigDecimal institute = ShareResolver.institute(
-                        detail.getInstituteShareType(),
-                        detail.getInstituteShareValue(),
-                        detail.getAllocatedPaidAmount());
-                detail.setInstituteShareAmount(institute);
-                detail.setTeacherShareAmount(
-                        ShareResolver.teacher(detail.getAllocatedPaidAmount(), institute));
-            } else {
-                detail.setStatus(FeeStatus.PARTIAL);
+            BigDecimal billOutstanding = nz(bill.getOutstandingAmount());
+            if (billOutstanding.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
             }
-            feeDetailRepository.save(detail);
+            BigDecimal applied = remaining.min(billOutstanding);
 
-            remaining = remaining.subtract(allocationAmount);
+            bill.setPaidAmount(nz(bill.getPaidAmount()).add(applied));
+            bill.setOutstandingAmount(billOutstanding.subtract(applied));
+            bill.setPaymentDate(paymentDate);
+
+            if (bill.getOutstandingAmount().compareTo(BigDecimal.ZERO) == 0) {
+                bill.setStatus(FeeStatus.PAID);
+                bill.setOutstandingBill(Boolean.FALSE);
+                BigDecimal institute = ShareResolver.institute(
+                        bill.getInstituteShareType(), bill.getInstituteShareValue(), bill.getPaidAmount());
+                bill.setInstituteShareAmount(institute);
+                bill.setTeacherShareAmount(ShareResolver.teacher(bill.getPaidAmount(), institute));
+            } else {
+                bill.setStatus(FeeStatus.PARTIAL);
+            }
+            feeBillRepository.save(bill);
+            settledBillIds.add(bill.getId());
+
+            remaining = remaining.subtract(applied);
+            publishSettlement(payment.getId(), bill);
         }
 
-        paymentAllocationRepository.saveAll(allocations);
-        payment.setAllocations(allocations);
+        // 5. Leftover → credit.
+        credit.setBalance(remaining.max(BigDecimal.ZERO));
+        credit.setUpdatedAt(LocalDateTime.now(clock));
+        studentCreditRepository.save(credit);
 
-        // 5. Validate SUM(allocations) == payment.amount
-        BigDecimal allocatedSum = allocations.stream()
-                .map(PaymentAllocation::getAllocatedAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        log.info("Payment {} settled {} bill(s); credit balance now {}",
+                payment.getId(), settledBillIds.size(), credit.getBalance());
 
-        if (allocatedSum.compareTo(request.getAmount()) != 0) {
-            log.warn("Allocation mismatch: requested={}, allocated={}. Possible overpayment or all details settled.",
-                    request.getAmount(), allocatedSum);
-        }
+        PaymentResponse response = paymentMapper.toPaymentResponse(payment);
+        response.setSettledBillIds(settledBillIds);
+        response.setCreditBalance(credit.getBalance());
+        return response;
+    }
 
-        // 6. Update StudentFeeCycle: recalculate from all details
-        List<StudentFeeDetail> allDetails = feeDetailRepository.findByFeeCycle_Id(cycle.getId());
-        BigDecimal totalPaid = allDetails.stream()
-                .map(StudentFeeDetail::getAllocatedPaidAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        cycle.setPaidAmount(totalPaid);
-        cycle.setOutstandingAmount(cycle.getTotalAmount().subtract(totalPaid));
-
-        boolean allPaid = allDetails.stream().allMatch(d -> d.getStatus() == FeeStatus.PAID);
-        boolean anyPaid = allDetails.stream().anyMatch(d -> d.getStatus() != FeeStatus.UNPAID);
-
-        if (allPaid) {
-            cycle.setStatus(FeeStatus.PAID);
-        } else if (anyPaid || totalPaid.compareTo(BigDecimal.ZERO) > 0) {
-            cycle.setStatus(FeeStatus.PARTIAL);
-        } else {
-            cycle.setStatus(FeeStatus.UNPAID);
-        }
-
-        feeCycleRepository.save(cycle);
-
-        // 7. Publish PaymentReceivedEvent
+    /** Publishes the per-bill payment + status events (bill id reuses the {@code feeCycleId} field). */
+    private void publishSettlement(UUID paymentId, FeeBill bill) {
         PaymentReceivedEvent paymentEvent = PaymentReceivedEvent.builder()
-                .paymentId(payment.getId())
-                .feeCycleId(cycle.getId())
-                .studentId(request.getStudentId())
-                .amount(request.getAmount())
+                .paymentId(paymentId)
+                .feeCycleId(bill.getId())
+                .studentId(bill.getStudentId())
+                .amount(bill.getPaidAmount())
                 .occurredAt(Instant.now())
                 .build();
-        kafkaTemplate.send(KafkaTopics.PAYMENT_RECEIVED,
-                request.getStudentId().toString(), paymentEvent);
+        kafkaTemplate.send(KafkaTopics.PAYMENT_RECEIVED, bill.getStudentId().toString(), paymentEvent);
 
-        // 8. Publish FeeStatusUpdatedEvent
         FeeStatusUpdatedEvent statusEvent = FeeStatusUpdatedEvent.builder()
-                .feeCycleId(cycle.getId())
-                .studentId(request.getStudentId())
-                .status(cycle.getStatus().name())
+                .feeCycleId(bill.getId())
+                .studentId(bill.getStudentId())
+                .status(bill.getStatus().name())
                 .occurredAt(Instant.now())
                 .build();
-        kafkaTemplate.send(KafkaTopics.FEE_STATUS_UPDATED,
-                request.getStudentId().toString(), statusEvent);
-
-        log.info("Payment recorded: paymentId={}, cycleId={}, cycleStatus={}",
-                payment.getId(), cycle.getId(), cycle.getStatus());
-
-        return paymentMapper.toPaymentResponseWithAllocations(payment);
+        kafkaTemplate.send(KafkaTopics.FEE_STATUS_UPDATED, bill.getStudentId().toString(), statusEvent);
     }
 
     @Transactional(readOnly = true)
     public List<PaymentResponse> getPayments(UUID studentId) {
         return paymentRepository.findByStudentId(studentId).stream()
-                .map(p -> {
-                    List<PaymentAllocation> allocs = paymentAllocationRepository.findByPayment_Id(p.getId());
-                    p.setAllocations(allocs);
-                    return paymentMapper.toPaymentResponseWithAllocations(p);
-                })
+                .map(paymentMapper::toPaymentResponse)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentById(UUID paymentId) {
-        Payment payment = loadPaymentWithAllocations(paymentId);
-        return paymentMapper.toPaymentResponseWithAllocations(payment);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PaymentResponse> getPaymentsByFeeCycle(UUID feeCycleId) {
-        return paymentRepository.findByFeeCycle_Id(feeCycleId).stream()
-                .map(p -> {
-                    p.setAllocations(paymentAllocationRepository.findByPayment_Id(p.getId()));
-                    return paymentMapper.toPaymentResponseWithAllocations(p);
-                })
-                .collect(Collectors.toList());
+        return paymentMapper.toPaymentResponse(loadPayment(paymentId));
     }
 
     @Transactional(readOnly = true)
@@ -211,20 +170,47 @@ public class PaymentService {
             payments = paymentRepository.findAll();
         }
         return payments.stream()
-                .map(p -> {
-                    p.setAllocations(paymentAllocationRepository.findByPayment_Id(p.getId()));
-                    return paymentMapper.toPaymentResponseWithAllocations(p);
-                })
+                .map(paymentMapper::toPaymentResponse)
                 .collect(Collectors.toList());
     }
 
-    /** Loads a payment together with its allocations (used for receipt generation). */
+    /** Loads a payment for receipt generation. */
     @Transactional(readOnly = true)
-    public Payment loadPaymentWithAllocations(UUID paymentId) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Payment not found with id: " + paymentId));
-        payment.setAllocations(paymentAllocationRepository.findByPayment_Id(payment.getId()));
-        return payment;
+    public Payment loadPayment(UUID paymentId) {
+        return paymentRepository.findById(paymentId)
+                .orElseThrow(() -> ApiException.notFound("Payment not found with id: " + paymentId));
+    }
+
+    /**
+     * The bills a payment touched, for the receipt. Payments aren't persisted against bills, so we
+     * approximate: the student's bills stamped with this payment's date. Good enough for a receipt.
+     */
+    @Transactional(readOnly = true)
+    public List<FeeBill> billsSettledBy(Payment payment) {
+        return feeBillRepository.findByStudentId(payment.getStudentId()).stream()
+                .filter(b -> payment.getPaymentDate() != null
+                        && payment.getPaymentDate().equals(b.getPaymentDate()))
+                .sorted(WATERFALL)
+                .collect(Collectors.toList());
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
+    }
+
+    /** ADMISSION → MONTHLY (oldest year, then month) → EXAM → ONE_TIME_SHORT_TERM. */
+    private static final Comparator<FeeBill> WATERFALL = Comparator
+            .comparingInt((FeeBill b) -> waterfallRank(b.getFeeType()))
+            .thenComparingInt(b -> b.getBillingYear() != null ? b.getBillingYear() : 0)
+            .thenComparingInt(b -> b.getBillingMonth() != null ? b.getBillingMonth() : 0)
+            .thenComparing(FeeBill::getGeneratedDate, Comparator.nullsFirst(Comparator.naturalOrder()));
+
+    private static int waterfallRank(FeeType type) {
+        return switch (type) {
+            case ADMISSION -> 0;
+            case MONTHLY -> 1;
+            case EXAM -> 2;
+            case ONE_TIME_SHORT_TERM -> 3;
+        };
     }
 }

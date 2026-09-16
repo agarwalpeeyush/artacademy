@@ -1,67 +1,92 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { FeeCycle, FeeDetail } from '../../types';
+import { FeeBill, FeeDetailLine, FeeGenerateResponse, ScopedStudent, TeacherRevenueSummary } from '../../types';
 import feeService from '../../services/feeService';
 
 interface FeeState {
-  feeCycles: FeeCycle[];
-  feeDetails: FeeDetail[];
-  outstanding: FeeCycle[];
+  students: ScopedStudent[];
+  details: FeeDetailLine[];
+  bills: FeeBill[];
+  teacherSummaries: TeacherRevenueSummary[];
   loading: boolean;
   error: string | null;
 }
 
 const initialState: FeeState = {
-  feeCycles: [],
-  feeDetails: [],
-  outstanding: [],
+  students: [],
+  details: [],
+  bills: [],
+  teacherSummaries: [],
   loading: false,
   error: null,
 };
 
-export const fetchFeeCycles = createAsyncThunk<FeeCycle[], { studentId?: string; month?: number; year?: number }>(
-  'fees/fetchCycles',
-  async (params, { rejectWithValue }) => {
+const errMsg = (error: unknown, fallback: string): string => {
+  const err = error as { response?: { data?: { message?: string } }; message?: string };
+  return err.response?.data?.message || fallback;
+};
+
+export const fetchScopedStudents = createAsyncThunk<ScopedStudent[], string | undefined>(
+  'fees/fetchStudents',
+  async (teacherId, { rejectWithValue }) => {
     try {
-      return await feeService.getFeeCycles(params);
+      return await feeService.getStudents(teacherId);
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch fee cycles');
+      return rejectWithValue(errMsg(error, 'Failed to fetch students'));
     }
   }
 );
 
-export const fetchOutstanding = createAsyncThunk<FeeCycle[]>(
-  'fees/fetchOutstanding',
+export const fetchFeeDetails = createAsyncThunk<FeeDetailLine[], string>(
+  'fees/fetchDetails',
+  async (enrollmentId, { rejectWithValue }) => {
+    try {
+      return await feeService.getDetails(enrollmentId);
+    } catch (error: unknown) {
+      return rejectWithValue(errMsg(error, 'Failed to fetch fee lines'));
+    }
+  }
+);
+
+export const fetchStudentBills = createAsyncThunk<FeeBill[], string>(
+  'fees/fetchBills',
+  async (studentId, { rejectWithValue }) => {
+    try {
+      return await feeService.getBills(studentId);
+    } catch (error: unknown) {
+      return rejectWithValue(errMsg(error, 'Failed to fetch bills'));
+    }
+  }
+);
+
+export const generateBills = createAsyncThunk<FeeGenerateResponse, { enrollmentId: string; generateMissing: boolean }>(
+  'fees/generate',
+  async ({ enrollmentId, generateMissing }, { rejectWithValue }) => {
+    try {
+      return await feeService.generate(enrollmentId, generateMissing);
+    } catch (error: unknown) {
+      return rejectWithValue(errMsg(error, 'Failed to generate bills'));
+    }
+  }
+);
+
+export const generateExamBills = createAsyncThunk<FeeBill[], string>(
+  'fees/generateExam',
+  async (courseId, { rejectWithValue }) => {
+    try {
+      return await feeService.generateExam(courseId);
+    } catch (error: unknown) {
+      return rejectWithValue(errMsg(error, 'Failed to generate exam bills'));
+    }
+  }
+);
+
+export const fetchTeacherSummaries = createAsyncThunk<TeacherRevenueSummary[]>(
+  'fees/fetchTeacherSummaries',
   async (_, { rejectWithValue }) => {
     try {
-      return await feeService.getOutstanding();
+      return await feeService.getTeacherSummaries();
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch outstanding fees');
-    }
-  }
-);
-
-export const fetchFeeDetails = createAsyncThunk<FeeDetail[], string>(
-  'fees/fetchDetails',
-  async (feeCycleId, { rejectWithValue }) => {
-    try {
-      return await feeService.getFeeDetails(feeCycleId);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch fee details');
-    }
-  }
-);
-
-export const generateFees = createAsyncThunk<FeeCycle[], { month: number; year: number }>(
-  'fees/generate',
-  async (params, { rejectWithValue }) => {
-    try {
-      return await feeService.generateFees(params.month, params.year);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to generate fees');
+      return rejectWithValue(errMsg(error, 'Failed to fetch teacher summaries'));
     }
   }
 );
@@ -71,19 +96,24 @@ const feeSlice = createSlice({
   initialState,
   reducers: {
     clearError(state) { state.error = null; },
+    clearDetails(state) { state.details = []; },
+    clearBills(state) { state.bills = []; },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchFeeCycles.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchFeeCycles.fulfilled, (state, action) => { state.loading = false; state.feeCycles = action.payload; })
-      .addCase(fetchFeeCycles.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
-      .addCase(fetchOutstanding.fulfilled, (state, action) => { state.outstanding = action.payload; })
-      .addCase(fetchFeeDetails.fulfilled, (state, action) => { state.feeDetails = action.payload; })
-      .addCase(generateFees.fulfilled, (state, action) => {
-        state.feeCycles = [...state.feeCycles, ...action.payload];
-      });
+      .addCase(fetchScopedStudents.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchScopedStudents.fulfilled, (state, action) => { state.loading = false; state.students = action.payload; })
+      .addCase(fetchScopedStudents.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
+      .addCase(fetchFeeDetails.fulfilled, (state, action) => { state.details = action.payload; })
+      .addCase(fetchStudentBills.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchStudentBills.fulfilled, (state, action) => { state.loading = false; state.bills = action.payload; })
+      .addCase(fetchStudentBills.rejected, (state, action) => { state.loading = false; state.bills = []; state.error = action.payload as string; })
+      .addCase(generateBills.fulfilled, (state, action) => {
+        state.bills = [...state.bills, ...action.payload.generated];
+      })
+      .addCase(fetchTeacherSummaries.fulfilled, (state, action) => { state.teacherSummaries = action.payload; });
   },
 });
 
-export const { clearError } = feeSlice.actions;
+export const { clearError, clearDetails, clearBills } = feeSlice.actions;
 export default feeSlice.reducer;

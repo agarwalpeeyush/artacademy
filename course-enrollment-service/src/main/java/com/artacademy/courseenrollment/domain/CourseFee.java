@@ -1,7 +1,6 @@
 package com.artacademy.courseenrollment.domain;
 
 import com.artacademy.common.fee.FeeCadence;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.common.fee.ShareType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -34,8 +33,8 @@ public class CourseFee {
     @JoinColumn(name = "COURSE_ID", nullable = false)
     private Course course;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "FEE_TYPE", length = 50, nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @JoinColumn(name = "FEE_TYPE", referencedColumnName = "CODE", nullable = false)
     private FeeType feeType;
 
     @Column(name = "AMOUNT", precision = 12, scale = 2, nullable = false)

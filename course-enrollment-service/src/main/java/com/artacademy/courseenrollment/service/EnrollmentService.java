@@ -4,13 +4,13 @@ import com.artacademy.common.events.EnrollmentCancelledEvent;
 import com.artacademy.common.events.EnrollmentCreatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.common.fee.ShareType;
 import com.artacademy.courseenrollment.client.UserServiceClient;
 import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.CourseFee;
 import com.artacademy.courseenrollment.domain.Enrollment;
 import com.artacademy.courseenrollment.domain.EnrollmentFee;
+import com.artacademy.courseenrollment.domain.FeeType;
 import com.artacademy.courseenrollment.domain.Timetable;
 import com.artacademy.courseenrollment.dto.EnrollmentFeeDto;
 import com.artacademy.courseenrollment.dto.EnrollmentRequest;
@@ -18,6 +18,7 @@ import com.artacademy.courseenrollment.dto.EnrollmentResponse;
 import com.artacademy.courseenrollment.mapper.EnrollmentMapper;
 import com.artacademy.courseenrollment.repository.CourseRepository;
 import com.artacademy.courseenrollment.repository.EnrollmentRepository;
+import com.artacademy.courseenrollment.repository.FeeTypeRepository;
 import com.artacademy.courseenrollment.repository.TimetableRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +51,7 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
     private final TimetableRepository timetableRepository;
+    private final FeeTypeRepository feeTypeRepository;
     private final EnrollmentMapper enrollmentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final UserServiceClient userServiceClient;
@@ -85,7 +87,7 @@ public class EnrollmentService {
 
         // R8: the enrollment carries its own fee lines. Copy from the course by default, or use
         // the teacher's overrides when supplied. Replace any existing lines (reactivation path).
-        applyFees(enrollment, resolveFees(request, course));
+        applyFees(enrollment, resolveFees(request, course, enrollment.getEnrollmentDate()));
 
         // R9: assign the child to the requested course timetable slots (optional).
         if (request.getTimetableIds() != null) {
@@ -161,7 +163,16 @@ public class EnrollmentService {
                 .map(dto -> {
                     ShareRuleValidator.validate(dto.getInstituteShareType(), dto.getInstituteShareValue(),
                             "enrollment fee " + dto.getFeeType());
-                    return enrollmentMapper.toFeeEntity(dto);
+                    return EnrollmentFee.builder()
+                            .feeType(resolveFeeType(dto.getFeeType()))
+                            .amount(dto.getAmount())
+                            .cadence(dto.getCadence())
+                            .dueDate(dto.getDueDate() != null
+                                    ? dto.getDueDate()
+                                    : defaultDueDate(enrollment.getEnrollmentDate()))
+                            .instituteShareType(dto.getInstituteShareType())
+                            .instituteShareValue(dto.getInstituteShareValue())
+                            .build();
                 })
                 .toList();
         applyFees(enrollment, lines);
@@ -197,9 +208,9 @@ public class EnrollmentService {
      * the teacher supplies overrides, those per-child amounts and share rules win; a line's share
      * rule falls back to the course default only when the override omits it. Validated per F10.
      */
-    private List<EnrollmentFee> resolveFees(EnrollmentRequest request, Course course) {
-        Map<FeeType, CourseFee> template = course.getFees().stream()
-                .collect(Collectors.toMap(CourseFee::getFeeType, f -> f, (a, b) -> a, LinkedHashMap::new));
+    private List<EnrollmentFee> resolveFees(EnrollmentRequest request, Course course, LocalDate enrollmentDate) {
+        Map<String, CourseFee> template = course.getFees().stream()
+                .collect(Collectors.toMap(f -> f.getFeeType().getCode(), f -> f, (a, b) -> a, LinkedHashMap::new));
 
         if (request.getFees() == null || request.getFees().isEmpty()) {
             return template.values().stream()
@@ -207,6 +218,7 @@ public class EnrollmentService {
                             .feeType(f.getFeeType())
                             .amount(f.getAmount())
                             .cadence(f.getCadence())
+                            .dueDate(defaultDueDate(enrollmentDate))
                             .instituteShareType(f.getInstituteShareType())
                             .instituteShareValue(f.getInstituteShareValue())
                             .build())
@@ -224,15 +236,36 @@ public class EnrollmentService {
                             : (def != null ? def.getInstituteShareValue() : null);
                     ShareRuleValidator.validate(shareType, shareValue,
                             "enrollment fee " + dto.getFeeType());
+                    LocalDate dueDate = dto.getDueDate() != null
+                            ? dto.getDueDate()
+                            : defaultDueDate(enrollmentDate);
                     return EnrollmentFee.builder()
-                            .feeType(dto.getFeeType())
+                            .feeType(def != null ? def.getFeeType() : resolveFeeType(dto.getFeeType()))
                             .amount(dto.getAmount())
                             .cadence(dto.getCadence())
+                            .dueDate(dueDate)
                             .instituteShareType(shareType)
                             .instituteShareValue(shareValue)
                             .build();
                 })
                 .toList();
+    }
+
+    /**
+     * Default due date at enroll time (overridable by teacher/principal). Both ONE_TIME and the
+     * first MONTHLY due date land on the enrollment date; subsequent monthly cycles are billed on
+     * the 1st by payment-service.
+     */
+    private LocalDate defaultDueDate(LocalDate enrollmentDate) {
+        return enrollmentDate != null ? enrollmentDate : LocalDate.now();
+    }
+
+    private FeeType resolveFeeType(String code) {
+        if (code == null || code.isBlank()) {
+            throw ApiException.badRequest("Fee type code is required");
+        }
+        return feeTypeRepository.findById(code)
+                .orElseThrow(() -> ApiException.badRequest("Unknown fee type code: " + code));
     }
 
     /** Replace the enrollment's fee collection in place, wiring each line's back-reference. */
@@ -244,9 +277,9 @@ public class EnrollmentService {
             enrollment.getFees().clear();
             enrollmentRepository.flush();
         }
-        Set<FeeType> seen = new LinkedHashSet<>();
+        Set<String> seen = new LinkedHashSet<>();
         for (EnrollmentFee line : lines) {
-            if (!seen.add(line.getFeeType())) {
+            if (!seen.add(line.getFeeType().getCode())) {
                 continue; // guard against a payload carrying the same fee type twice
             }
             line.setEnrollment(enrollment);
@@ -276,9 +309,10 @@ public class EnrollmentService {
     private void publishCreatedEvent(Enrollment saved) {
         List<EnrollmentCreatedEvent.FeeItem> feeItems = saved.getFees().stream()
                 .map(f -> EnrollmentCreatedEvent.FeeItem.builder()
-                        .feeType(f.getFeeType())
+                        .feeType(f.getFeeType().getCode())
                         .amount(f.getAmount())
                         .cadence(f.getCadence())
+                        .dueDate(f.getDueDate())
                         .instituteShareType(f.getInstituteShareType())
                         .instituteShareValue(f.getInstituteShareValue())
                         .build())
@@ -317,6 +351,21 @@ public class EnrollmentService {
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> getEnrollmentsByCourseId(UUID courseId) {
         return enrich(enrollmentRepository.findByCourseId(courseId)
+                .stream()
+                .map(enrollmentMapper::toResponse)
+                .toList());
+    }
+
+    @Transactional(readOnly = true)
+    public EnrollmentResponse getById(UUID id) {
+        Enrollment enrollment = enrollmentRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Enrollment not found with id: " + id));
+        return enrich(List.of(enrollmentMapper.toResponse(enrollment))).get(0);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EnrollmentResponse> getEnrollmentsByTeacherId(UUID teacherId) {
+        return enrich(enrollmentRepository.findByTeacherId(teacherId)
                 .stream()
                 .map(enrollmentMapper::toResponse)
                 .toList());

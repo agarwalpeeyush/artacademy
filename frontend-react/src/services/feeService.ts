@@ -1,53 +1,13 @@
 import api from './api';
-import { FeeCycle, FeeDetail, TeacherRevenueSummary } from '../types';
+import {
+  FeeBill,
+  FeeDetailLine,
+  FeeGenerateResponse,
+  ScopedStudent,
+  TeacherRevenueSummary,
+} from '../types';
 
 const unwrap = (r: any) => r.data?.data ?? r.data;
-
-const normCycle = (c: any): FeeCycle => ({
-  id: c.id,
-  studentId: c.studentId,
-  studentName: c.studentName,
-  billingMonth: c.billingMonth,
-  billingYear: c.billingYear,
-  cycleKind: c.cycleKind ?? 'MONTHLY',
-  month: c.billingMonth ?? c.month,
-  year: c.billingYear ?? c.year,
-  totalAmount: Number(c.totalAmount ?? 0),
-  paidAmount: Number(c.paidAmount ?? 0),
-  outstandingAmount: Number(c.outstandingAmount ?? c.dueAmount ?? 0),
-  dueAmount: Number(c.outstandingAmount ?? c.dueAmount ?? 0),
-  dueDate: c.dueDate,
-  generatedDate: c.generatedDate,
-  status: c.status ?? 'UNPAID',
-  overdue: Boolean(c.overdue),
-  displayStatus: c.displayStatus ?? c.status ?? 'UNPAID',
-  excessAmount: Number(c.excessAmount ?? 0),
-  shortAmount: Number(c.shortAmount ?? 0),
-});
-
-const normDetail = (d: any): FeeDetail => ({
-  id: d.id,
-  feeCycleId: d.feeCycleId,
-  enrollmentId: d.enrollmentId,
-  courseId: d.courseId,
-  courseFee: Number(d.courseFee ?? d.amount ?? 0),
-  amount: Number(d.courseFee ?? d.amount ?? 0),
-  allocatedPaidAmount: Number(d.allocatedPaidAmount ?? 0),
-  outstandingAmount: Number(d.outstandingAmount ?? 0),
-  status: d.status,
-  teacherId: d.teacherId ?? undefined,
-  instituteShareAmount: d.instituteShareAmount != null ? Number(d.instituteShareAmount) : undefined,
-  teacherShareAmount: d.teacherShareAmount != null ? Number(d.teacherShareAmount) : undefined,
-  overridden: Boolean(d.overridden),
-});
-
-const normTeacherSummary = (s: any): TeacherRevenueSummary => ({
-  teacherId: s.teacherId,
-  collected: Number(s.collected ?? 0),
-  instituteShare: Number(s.instituteShare ?? 0),
-  teacherShare: Number(s.teacherShare ?? 0),
-  paidDetailCount: Number(s.paidDetailCount ?? 0),
-});
 
 const toArray = (d: any): any[] => {
   if (Array.isArray(d)) return d;
@@ -55,48 +15,120 @@ const toArray = (d: any): any[] => {
   return [];
 };
 
+const normScopedStudent = (s: any): ScopedStudent => ({
+  studentId: s.studentId,
+  enrollmentId: s.enrollmentId,
+  courseId: s.courseId ?? undefined,
+  teacherId: s.teacherId ?? undefined,
+  studentName: s.studentName ?? undefined,
+  courseName: s.courseName ?? undefined,
+});
+
+const normDetail = (d: any): FeeDetailLine => ({
+  id: d.id,
+  enrollmentId: d.enrollmentId,
+  feeType: d.feeType,
+  amount: Number(d.amount ?? 0),
+  cadence: d.cadence ?? undefined,
+  dueDate: d.dueDate ?? null,
+  instituteShareType: d.instituteShareType ?? null,
+  instituteShareValue: d.instituteShareValue != null ? Number(d.instituteShareValue) : null,
+});
+
+const normBill = (b: any): FeeBill => ({
+  id: b.id,
+  enrollmentId: b.enrollmentId,
+  studentId: b.studentId,
+  billingMonth: b.billingMonth ?? undefined,
+  billingYear: b.billingYear ?? undefined,
+  feeType: b.feeType,
+  cadence: b.cadence ?? undefined,
+  amountDue: Number(b.amountDue ?? 0),
+  paidAmount: Number(b.paidAmount ?? 0),
+  outstandingAmount: Number(b.outstandingAmount ?? 0),
+  status: b.status ?? 'UNPAID',
+  generatedDate: b.generatedDate,
+  dueDate: b.dueDate,
+  paymentDate: b.paymentDate ?? undefined,
+  outstandingBill: Boolean(b.outstandingBill),
+  teacherId: b.teacherId ?? undefined,
+  instituteShareAmount: b.instituteShareAmount != null ? Number(b.instituteShareAmount) : undefined,
+  teacherShareAmount: b.teacherShareAmount != null ? Number(b.teacherShareAmount) : undefined,
+  overridden: Boolean(b.overridden),
+  overdue: Boolean(b.overdue),
+  displayStatus: b.displayStatus ?? b.status ?? 'UNPAID',
+  excessAmount: Number(b.excessAmount ?? 0),
+  shortAmount: Number(b.shortAmount ?? 0),
+});
+
+const normGenerate = (g: any): FeeGenerateResponse => ({
+  generated: toArray(g?.generated).map(normBill),
+  alreadyBilled: Array.isArray(g?.alreadyBilled) ? g.alreadyBilled : [],
+  missingMonths: Array.isArray(g?.missingMonths) ? g.missingMonths : [],
+});
+
+const normTeacherSummary = (s: any): TeacherRevenueSummary => ({
+  teacherId: s.teacherId,
+  teacherName: s.teacherName ?? undefined,
+  collected: Number(s.collected ?? 0),
+  instituteShare: Number(s.instituteShare ?? 0),
+  teacherShare: Number(s.teacherShare ?? 0),
+  paidDetailCount: Number(s.paidDetailCount ?? 0),
+});
+
 const feeService = {
-  getFeeCycles: async (params: { studentId?: string; month?: number; year?: number }): Promise<FeeCycle[]> => {
-    const { studentId, ...rest } = params;
-    if (studentId) {
-      const response = await api.get(`/fees/student/${studentId}`, { params: rest });
-      return toArray(unwrap(response)).map(normCycle);
-    }
-    const response = await api.get('/fees/outstanding', { params: rest });
-    return toArray(unwrap(response)).map(normCycle);
+  // Scoped, name-resolved student picker (optionally filtered to a teacher).
+  getStudents: async (teacherId?: string): Promise<ScopedStudent[]> => {
+    const response = await api.get('/fees/students', { params: teacherId ? { teacherId } : {} });
+    return toArray(unwrap(response)).map(normScopedStudent);
   },
 
-  getFeeCycleById: async (id: string): Promise<FeeCycle> => {
-    const response = await api.get(`/fees/cycle/${id}`);
-    return normCycle(unwrap(response));
-  },
-
-  getFeeDetails: async (feeCycleId: string): Promise<FeeDetail[]> => {
-    const response = await api.get(`/fees/cycle/${feeCycleId}/details`);
+  // Editable fee catalogue lines for an enrollment.
+  getDetails: async (enrollmentId: string): Promise<FeeDetailLine[]> => {
+    const response = await api.get(`/fees/detail/enrollment/${enrollmentId}`);
     return toArray(unwrap(response)).map(normDetail);
   },
 
-  getOutstanding: async (): Promise<FeeCycle[]> => {
-    const response = await api.get('/fees/defaulters');
-    return toArray(unwrap(response)).map(normCycle);
+  updateDetail: async (
+    id: string,
+    payload: { amount: number; dueDate?: string | null; instituteShareType?: string | null; instituteShareValue?: number | null }
+  ): Promise<FeeDetailLine> => {
+    const response = await api.put(`/fees/detail/${id}`, payload);
+    return normDetail(unwrap(response));
   },
 
-  getStudentOutstanding: async (studentId: string): Promise<FeeCycle[]> => {
-    const response = await api.get(`/fees/outstanding/${studentId}`);
-    return toArray(unwrap(response)).map(normCycle);
+  // Generate bills for an enrollment (current month + optional missing back-fill).
+  generate: async (enrollmentId: string, generateMissing: boolean): Promise<FeeGenerateResponse> => {
+    const response = await api.post(`/fees/generate/${enrollmentId}`, null, { params: { generateMissing } });
+    return normGenerate(unwrap(response));
   },
 
-  generateFees: async (month: number, year: number): Promise<FeeCycle[]> => {
-    const response = await api.post('/fees/generate', { billingMonth: month, billingYear: year });
-    return toArray(unwrap(response)).map(normCycle);
+  // Batch-bill the EXAM cohort of a course (principal only).
+  generateExam: async (courseId: string): Promise<FeeBill[]> => {
+    const response = await api.post('/fees/generate/exam', null, { params: { courseId } });
+    return toArray(unwrap(response)).map(normBill);
   },
 
-  updateFeeCycle: async (id: string, data: Partial<FeeCycle>): Promise<FeeCycle> => {
-    const response = await api.put(`/fees/${id}`, data);
-    return normCycle(unwrap(response));
+  getBills: async (studentId: string): Promise<FeeBill[]> => {
+    const response = await api.get(`/fees/bills/student/${studentId}`);
+    return toArray(unwrap(response)).map(normBill);
   },
 
-  // F9: per-teacher revenue rollup (principal dashboard).
+  updateBill: async (
+    id: string,
+    payload: {
+      amountDue?: number;
+      dueDate?: string | null;
+      status?: string;
+      instituteShare?: number | null;
+      teacherShare?: number | null;
+      overriddenBy?: string | null;
+    }
+  ): Promise<FeeBill> => {
+    const response = await api.put(`/fees/bill/${id}`, payload);
+    return normBill(unwrap(response));
+  },
+
   getTeacherSummaries: async (): Promise<TeacherRevenueSummary[]> => {
     const response = await api.get('/fees/teachers/summary');
     return toArray(unwrap(response)).map(normTeacherSummary);
@@ -105,15 +137,6 @@ const feeService = {
   getTeacherSummary: async (teacherId: string): Promise<TeacherRevenueSummary> => {
     const response = await api.get(`/fees/teacher/${teacherId}/summary`);
     return normTeacherSummary(unwrap(response));
-  },
-
-  // F8/F12: principal override of the institute/teacher split on a single detail.
-  overrideShare: async (
-    feeDetailId: string,
-    payload: { instituteShare: number; teacherShare: number; overriddenBy: string }
-  ): Promise<FeeDetail> => {
-    const response = await api.put(`/fees/fee-details/${feeDetailId}/share-override`, payload);
-    return normDetail(unwrap(response));
   },
 };
 

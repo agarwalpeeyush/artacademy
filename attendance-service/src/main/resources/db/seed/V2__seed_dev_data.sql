@@ -1,3 +1,0 @@
--- Seed for attendance_db.
--- All dev data removed (R17): class sessions and student/teacher attendance are recorded at runtime.
--- Fresh DB — nothing to seed here.

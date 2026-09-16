@@ -1,7 +1,6 @@
 package com.artacademy.attendance.repository;
 
 import com.artacademy.attendance.domain.AttendanceCorrection;
-import com.artacademy.attendance.domain.AttendanceRecordType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,7 +13,4 @@ public interface AttendanceCorrectionRepository extends JpaRepository<Attendance
     List<AttendanceCorrection> findByAttendanceId(UUID attendanceId);
 
     List<AttendanceCorrection> findBySubjectId(UUID subjectId);
-
-    List<AttendanceCorrection> findByAttendanceTypeAndClassIdAndAttendanceDate(
-            AttendanceRecordType attendanceType, UUID classId, java.time.LocalDate attendanceDate);
 }

@@ -64,15 +64,9 @@ Manages courses, course types, fees, enrollments, exams, and weekly timetable sl
 
 | Version | Description |
 |---------|-------------|
-| V1 | course_types, courses, course_fees, enrollments |
-| V3 | exams |
-| V4 | timetables (no status col) |
-| V5 | enrollment_fees |
-| V6 | enrollment_timetables join |
-| V7 | drop ADMISSION_FEE_PAID |
-| V2 | `db/seed` — docker only |
+| V1 | course_types, course_fee_types, courses, course_fees, enrollments, enrollment_fees, exams, timetables, enrollment_timetables |
 
-Latest: V7.
+Latest: V1. No seed data — courses/enrollments are created at runtime by an authenticated principal.
 
 ## Kafka
 

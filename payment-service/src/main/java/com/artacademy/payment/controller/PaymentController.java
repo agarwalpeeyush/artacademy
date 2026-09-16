@@ -1,5 +1,6 @@
 package com.artacademy.payment.controller;
 
+import com.artacademy.payment.domain.FeeBill;
 import com.artacademy.payment.domain.Payment;
 import com.artacademy.payment.dto.PaymentRequest;
 import com.artacademy.payment.dto.PaymentResponse;
@@ -32,7 +33,7 @@ public class PaymentController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
-    @Operation(summary = "Record a payment against a student fee cycle")
+    @Operation(summary = "Record a student-level payment (settled against outstanding bills)")
     public ResponseEntity<PaymentResponse> recordPayment(
             @Valid @RequestBody PaymentRequest request) {
         PaymentResponse response = paymentService.recordPayment(request);
@@ -51,33 +52,26 @@ public class PaymentController {
     }
 
     @GetMapping("/student/{studentId}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Get all payments for a student")
     public ResponseEntity<List<PaymentResponse>> getPayments(@PathVariable("studentId") UUID studentId) {
         return ResponseEntity.ok(paymentService.getPayments(studentId));
     }
 
-    @GetMapping("/fee-cycle/{feeCycleId}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Get all payments for a fee cycle")
-    public ResponseEntity<List<PaymentResponse>> getPaymentsByFeeCycle(
-            @PathVariable("feeCycleId") UUID feeCycleId) {
-        return ResponseEntity.ok(paymentService.getPaymentsByFeeCycle(feeCycleId));
-    }
-
     @GetMapping("/{paymentId}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Get a single payment by id")
     public ResponseEntity<PaymentResponse> getPayment(@PathVariable("paymentId") UUID paymentId) {
         return ResponseEntity.ok(paymentService.getPaymentById(paymentId));
     }
 
     @GetMapping("/{paymentId}/receipt")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Download a PDF receipt for a payment")
     public ResponseEntity<byte[]> downloadReceipt(@PathVariable("paymentId") UUID paymentId) {
-        Payment payment = paymentService.loadPaymentWithAllocations(paymentId);
-        byte[] pdf = receiptService.generateReceipt(payment);
+        Payment payment = paymentService.loadPayment(paymentId);
+        List<FeeBill> settled = paymentService.billsSettledBy(payment);
+        byte[] pdf = receiptService.generateReceipt(payment, settled);
         String filename = "receipt-" + paymentId + ".pdf";
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")

@@ -1,7 +1,6 @@
 package com.artacademy.payment.dto;
 
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,14 +11,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
+/** A student-level payment: the tendered amount is settled against outstanding bills by waterfall. */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PaymentRequest {
-
-    @NotNull(message = "Fee cycle ID is required")
-    private UUID feeCycleId;
 
     @NotNull(message = "Student ID is required")
     private UUID studentId;
@@ -28,13 +25,13 @@ public class PaymentRequest {
     @DecimalMin(value = "0.01", message = "Amount must be greater than zero")
     private BigDecimal amount;
 
-    @NotBlank(message = "Payment mode is required")
     private String paymentMode;
 
     private String transactionReference;
 
     private String remarks;
 
-    /** Optional. When set, used as the fee-paid date; otherwise the server stamps the current time. */
+    /** The date the fee was paid, entered when marking payment complete. */
+    @NotNull(message = "Payment date is required")
     private LocalDate paymentDate;
 }

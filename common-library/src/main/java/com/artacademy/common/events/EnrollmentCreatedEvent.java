@@ -1,7 +1,6 @@
 package com.artacademy.common.events;
 
 import com.artacademy.common.fee.FeeCadence;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.common.fee.ShareType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,9 +41,17 @@ public class EnrollmentCreatedEvent {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class FeeItem {
-        private FeeType feeType;
+        /** Fee-type CODE from the COURSE_FEE_TYPES catalog (e.g. "ADMISSION", "MONTHLY"). */
+        private String feeType;
         private BigDecimal amount;
         private FeeCadence cadence;
+
+        /**
+         * When this fee falls due, computed at enroll time (ONE_TIME → enrollment date; MONTHLY →
+         * the first billing date) and possibly overridden by teacher/principal. payment-service
+         * stamps this onto the generated cycle's due date.
+         */
+        private LocalDate dueDate;
 
         /**
          * The institute-share <b>rule</b> frozen from the per-child enrollment values (F11).

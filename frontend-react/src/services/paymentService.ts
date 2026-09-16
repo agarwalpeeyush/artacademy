@@ -15,6 +15,8 @@ const normPayment = (p: any): Payment => ({
   receiptNumber: p.receiptNumber,
   remarks: p.remarks,
   collectedBy: p.collectedBy,
+  settledBillIds: Array.isArray(p.settledBillIds) ? p.settledBillIds : undefined,
+  creditBalance: p.creditBalance != null ? Number(p.creditBalance) : undefined,
 });
 
 const toArray = (d: any): any[] => {
@@ -39,12 +41,14 @@ const paymentService = {
     return toArray(unwrap(response)).map(normPayment);
   },
 
-  getByFeeCycle: async (feeCycleId: string): Promise<Payment[]> => {
-    const response = await api.get(`/payments/fee-cycle/${feeCycleId}`);
-    return toArray(unwrap(response)).map(normPayment);
-  },
-
-  record: async (data: Omit<Payment, 'id'>): Promise<Payment> => {
+  record: async (data: {
+    studentId: string;
+    amount: number;
+    paymentMode?: string;
+    transactionReference?: string;
+    remarks?: string;
+    paymentDate: string;
+  }): Promise<Payment> => {
     const response = await api.post('/payments', data);
     return normPayment(unwrap(response));
   },

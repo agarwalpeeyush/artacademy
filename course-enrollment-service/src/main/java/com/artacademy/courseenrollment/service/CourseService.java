@@ -2,15 +2,16 @@ package com.artacademy.courseenrollment.service;
 
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.common.fee.FeeCadence;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.CourseFee;
 import com.artacademy.courseenrollment.domain.CourseType;
+import com.artacademy.courseenrollment.domain.FeeType;
 import com.artacademy.courseenrollment.dto.CourseRequest;
 import com.artacademy.courseenrollment.dto.CourseResponse;
 import com.artacademy.courseenrollment.mapper.CourseMapper;
 import com.artacademy.courseenrollment.repository.CourseRepository;
 import com.artacademy.courseenrollment.repository.CourseTypeRepository;
+import com.artacademy.courseenrollment.repository.FeeTypeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final CourseTypeRepository courseTypeRepository;
+    private final FeeTypeRepository feeTypeRepository;
     private final CourseMapper courseMapper;
 
     @Transactional(readOnly = true)
@@ -105,6 +107,14 @@ public class CourseService {
                 .orElseThrow(() -> ApiException.badRequest("Unknown course type code: " + code));
     }
 
+    private FeeType resolveFeeType(String code) {
+        if (code == null || code.isBlank()) {
+            throw ApiException.badRequest("Fee type code is required");
+        }
+        return feeTypeRepository.findById(code)
+                .orElseThrow(() -> ApiException.badRequest("Unknown fee type code: " + code));
+    }
+
     /**
      * Reconcile the course's fee set with the request in place: update surviving lines, add new
      * ones, drop absent ones. Reconciling (rather than clear-and-re-add) avoids INSERTing a
@@ -114,17 +124,18 @@ public class CourseService {
     private void applyFees(Course course, CourseRequest request) {
         List<CourseRequest.FeeItem> items = request.getFees() != null ? request.getFees() : List.of();
 
-        Map<FeeType, CourseFee> existing = course.getFees().stream()
-                .collect(Collectors.toMap(CourseFee::getFeeType, f -> f));
-        Set<FeeType> incoming = items.stream()
+        Map<String, CourseFee> existing = course.getFees().stream()
+                .collect(Collectors.toMap(f -> f.getFeeType().getCode(), f -> f));
+        Set<String> incoming = items.stream()
                 .map(CourseRequest.FeeItem::getFeeType)
                 .collect(Collectors.toSet());
 
-        course.getFees().removeIf(f -> !incoming.contains(f.getFeeType()));
+        course.getFees().removeIf(f -> !incoming.contains(f.getFeeType().getCode()));
 
         for (CourseRequest.FeeItem item : items) {
+            FeeType feeType = resolveFeeType(item.getFeeType());
             FeeCadence cadence = item.getCadence() != null
-                    ? item.getCadence() : item.getFeeType().getCadence();
+                    ? item.getCadence() : feeType.getFrequency();
             ShareRuleValidator.validate(item.getInstituteShareType(), item.getInstituteShareValue(),
                     "course fee " + item.getFeeType());
             CourseFee fee = existing.get(item.getFeeType());
@@ -136,7 +147,7 @@ public class CourseService {
             } else {
                 course.getFees().add(CourseFee.builder()
                         .course(course)
-                        .feeType(item.getFeeType())
+                        .feeType(feeType)
                         .amount(item.getAmount())
                         .cadence(cadence)
                         .instituteShareType(item.getInstituteShareType())

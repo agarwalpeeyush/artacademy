@@ -66,6 +66,21 @@ public class EnrollmentController {
                 enrollmentService.getEnrollmentsByTimetableId(timetableId)));
     }
 
+    @GetMapping("/teacher/{teacherId}")
+    @Operation(summary = "Get all enrollments for a teacher")
+    public ResponseEntity<ApiResponse<List<EnrollmentResponse>>> getEnrollmentsByTeacher(
+            @PathVariable("teacherId") UUID teacherId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                enrollmentService.getEnrollmentsByTeacherId(teacherId)));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get a single enrollment by id")
+    public ResponseEntity<ApiResponse<EnrollmentResponse>> getEnrollmentById(
+            @PathVariable("id") UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(enrollmentService.getById(id)));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
     @Operation(summary = "Cancel (delete) an enrollment (PRINCIPAL or TEACHER)")

@@ -5,7 +5,6 @@ import paymentService from '../../services/paymentService';
 interface PaymentState {
   list: Payment[];
   studentPayments: Payment[];
-  cyclePayments: Payment[];
   loading: boolean;
   error: string | null;
 }
@@ -13,10 +12,18 @@ interface PaymentState {
 const initialState: PaymentState = {
   list: [],
   studentPayments: [],
-  cyclePayments: [],
   loading: false,
   error: null,
 };
+
+export interface RecordPaymentInput {
+  studentId: string;
+  amount: number;
+  paymentMode?: string;
+  transactionReference?: string;
+  remarks?: string;
+  paymentDate: string;
+}
 
 export const fetchPayments = createAsyncThunk<Payment[], { startDate?: string; endDate?: string }>(
   'payments/fetchAll',
@@ -42,19 +49,7 @@ export const fetchStudentPayments = createAsyncThunk<Payment[], string>(
   }
 );
 
-export const fetchPaymentsByFeeCycle = createAsyncThunk<Payment[], string>(
-  'payments/fetchByFeeCycle',
-  async (feeCycleId, { rejectWithValue }) => {
-    try {
-      return await paymentService.getByFeeCycle(feeCycleId);
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      return rejectWithValue(err.response?.data?.message || 'Failed to fetch payments');
-    }
-  }
-);
-
-export const recordPayment = createAsyncThunk<Payment, Omit<Payment, 'id'>>(
+export const recordPayment = createAsyncThunk<Payment, RecordPaymentInput>(
   'payments/record',
   async (data, { rejectWithValue }) => {
     try {
@@ -78,7 +73,6 @@ const paymentSlice = createSlice({
       .addCase(fetchPayments.fulfilled, (state, action) => { state.loading = false; state.list = action.payload; })
       .addCase(fetchPayments.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
       .addCase(fetchStudentPayments.fulfilled, (state, action) => { state.studentPayments = action.payload; })
-      .addCase(fetchPaymentsByFeeCycle.fulfilled, (state, action) => { state.cyclePayments = action.payload; })
       .addCase(recordPayment.fulfilled, (state, action) => {
         state.list.unshift(action.payload);
         state.studentPayments.unshift(action.payload);

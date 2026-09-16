@@ -1,7 +1,6 @@
 package com.artacademy.courseenrollment.dto;
 
 import com.artacademy.common.fee.FeeCadence;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.common.fee.ShareType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,7 +33,7 @@ public class CourseResponse {
     @AllArgsConstructor
     public static class FeeItem {
         private UUID id;
-        private FeeType feeType;
+        private String feeType;
         private BigDecimal amount;
         private FeeCadence cadence;
         private ShareType instituteShareType;

@@ -17,6 +17,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
 
     List<Enrollment> findByCourseId(UUID courseId);
 
+    List<Enrollment> findByTeacherId(UUID teacherId);
+
     Optional<Enrollment> findByStudentIdAndCourseId(UUID studentId, UUID courseId);
 
     @Query("SELECT DISTINCT e FROM Enrollment e JOIN e.timetables t WHERE t.id = :timetableId")

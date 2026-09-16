@@ -1,11 +1,14 @@
 package com.artacademy.payment.controller;
 
-import com.artacademy.payment.dto.FeeCycleResponse;
-import com.artacademy.payment.dto.FeeDetailResponse;
-import com.artacademy.payment.dto.GenerateFeesRequest;
-import com.artacademy.payment.dto.RevenueSummaryResponse;
-import com.artacademy.payment.dto.ShareOverrideRequest;
+import com.artacademy.payment.domain.FeeBill;
+import com.artacademy.payment.dto.FeeBillResponse;
+import com.artacademy.payment.dto.FeeBillUpdateRequest;
+import com.artacademy.payment.dto.FeeDetailDto;
+import com.artacademy.payment.dto.FeeDetailUpdateRequest;
+import com.artacademy.payment.dto.FeeGenerateResponse;
+import com.artacademy.payment.dto.ScopedStudent;
 import com.artacademy.payment.dto.TeacherRevenueSummary;
+import com.artacademy.payment.service.BillGenerationService;
 import com.artacademy.payment.service.FeeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,73 +25,86 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/fees")
 @RequiredArgsConstructor
-@Tag(name = "Fee Management", description = "APIs for managing student fee cycles")
+@Tag(name = "Fee Management", description = "Fee catalogue, bill generation, and revenue rollups")
 public class FeeController {
 
     private final FeeService feeService;
+    private final BillGenerationService billGenerationService;
 
-    @PostMapping("/generate")
+    // --- Scoped picker ---
+
+    @GetMapping("/students")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Name-resolved students for the fee picker (optionally scoped to a teacher)")
+    public ResponseEntity<List<ScopedStudent>> getStudents(
+            @RequestParam(value = "teacherId", required = false) UUID teacherId) {
+        return ResponseEntity.ok(feeService.getStudents(teacherId));
+    }
+
+    // --- Fee catalogue lines ---
+
+    @GetMapping("/detail/enrollment/{enrollmentId}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Fee catalogue lines for an enrollment")
+    public ResponseEntity<List<FeeDetailDto>> getDetails(@PathVariable("enrollmentId") UUID enrollmentId) {
+        return ResponseEntity.ok(feeService.getDetailsByEnrollment(enrollmentId));
+    }
+
+    @PutMapping("/detail/{id}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Edit an unbilled fee catalogue line")
+    public ResponseEntity<FeeDetailDto> updateDetail(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody FeeDetailUpdateRequest request) {
+        return ResponseEntity.ok(feeService.updateDetail(id, request));
+    }
+
+    // --- Bill generation ---
+
+    @PostMapping("/generate/{enrollmentId}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "Generate bills for an enrollment (current month + optional missing back-fill)")
+    public ResponseEntity<FeeGenerateResponse> generate(
+            @PathVariable("enrollmentId") UUID enrollmentId,
+            @RequestParam(value = "generateMissing", defaultValue = "false") boolean generateMissing) {
+        FeeGenerateResponse response = billGenerationService.generateOnEnroll(enrollmentId, generateMissing);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/generate/exam")
     @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Generate monthly fees for all active students")
-    public ResponseEntity<List<FeeCycleResponse>> generateFees(
-            @Valid @RequestBody GenerateFeesRequest request) {
-        List<FeeCycleResponse> cycles = feeService.generateMonthlyFees(
-                request.getBillingMonth(), request.getBillingYear());
-        return ResponseEntity.status(HttpStatus.CREATED).body(cycles);
+    @Operation(summary = "Batch-bill the EXAM cohort of a course")
+    public ResponseEntity<List<FeeBillResponse>> generateExam(@RequestParam("courseId") UUID courseId) {
+        List<FeeBill> bills = billGenerationService.generateExamBills(courseId);
+        List<FeeBillResponse> response = bills.stream()
+                .map(b -> feeService.getBill(b.getId()))
+                .toList();
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping("/student/{studentId}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Get all fee cycles for a student")
-    public ResponseEntity<List<FeeCycleResponse>> getFeeCycles(@PathVariable("studentId") UUID studentId) {
-        return ResponseEntity.ok(feeService.getFeeCycles(studentId));
+    // --- Bills ---
+
+    @GetMapping("/bills/student/{studentId}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER')")
+    @Operation(summary = "All bills for a student")
+    public ResponseEntity<List<FeeBillResponse>> getBills(@PathVariable("studentId") UUID studentId) {
+        return ResponseEntity.ok(feeService.getBillsByStudent(studentId));
     }
 
-    @GetMapping("/student/{studentId}/courses")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Get fee details (per course) for a student")
-    public ResponseEntity<List<FeeDetailResponse>> getFeeDetails(@PathVariable("studentId") UUID studentId) {
-        return ResponseEntity.ok(feeService.getFeeDetails(studentId));
-    }
-
-    @GetMapping("/cycle/{feeCycleId}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Get a fee cycle with its details")
-    public ResponseEntity<FeeCycleResponse> getFeeCycleDetails(@PathVariable("feeCycleId") UUID feeCycleId) {
-        return ResponseEntity.ok(feeService.getFeeCycleDetails(feeCycleId));
-    }
-
-    @GetMapping("/cycle/{feeCycleId}/details")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Get per-course fee details for a fee cycle")
-    public ResponseEntity<List<FeeDetailResponse>> getFeeDetailsByCycle(@PathVariable("feeCycleId") UUID feeCycleId) {
-        return ResponseEntity.ok(feeService.getFeeDetailsByCycle(feeCycleId));
-    }
-
-    @GetMapping("/outstanding/{studentId}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Get outstanding (UNPAID or PARTIAL) fee cycles for a student")
-    public ResponseEntity<List<FeeCycleResponse>> getOutstanding(@PathVariable("studentId") UUID studentId) {
-        return ResponseEntity.ok(feeService.getOutstanding(studentId));
-    }
-
-    @GetMapping("/defaulters")
+    @PutMapping("/bill/{id}")
     @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Get all students with outstanding fees (defaulters)")
-    public ResponseEntity<List<FeeCycleResponse>> getDefaulters() {
-        return ResponseEntity.ok(feeService.getDefaulters());
+    @Operation(summary = "Principal edit of a bill (amount / due / status / share override)")
+    public ResponseEntity<FeeBillResponse> updateBill(
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody FeeBillUpdateRequest request) {
+        return ResponseEntity.ok(feeService.updateBill(id, request));
     }
 
-    @GetMapping("/revenue-summary")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Get revenue summary grouped by billing year and month")
-    public ResponseEntity<List<RevenueSummaryResponse>> getRevenueSummary() {
-        return ResponseEntity.ok(feeService.getRevenueSummary());
-    }
+    // --- Revenue rollups ---
 
     @GetMapping("/teachers/summary")
     @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Per-teacher revenue rollup (collected, institute commission, teacher share)")
+    @Operation(summary = "Per-teacher revenue rollup")
     public ResponseEntity<List<TeacherRevenueSummary>> getTeacherSummaries() {
         return ResponseEntity.ok(feeService.getTeacherSummaries());
     }
@@ -98,14 +114,5 @@ public class FeeController {
     @Operation(summary = "Revenue rollup for a single teacher")
     public ResponseEntity<TeacherRevenueSummary> getTeacherSummary(@PathVariable("teacherId") UUID teacherId) {
         return ResponseEntity.ok(feeService.getTeacherSummary(teacherId));
-    }
-
-    @PutMapping("/fee-details/{feeDetailId}/share-override")
-    @PreAuthorize("hasRole('PRINCIPAL')")
-    @Operation(summary = "Principal override of the institute/teacher split on a fee detail")
-    public ResponseEntity<FeeDetailResponse> overrideShare(
-            @PathVariable("feeDetailId") UUID feeDetailId,
-            @Valid @RequestBody ShareOverrideRequest request) {
-        return ResponseEntity.ok(feeService.overrideShare(feeDetailId, request));
     }
 }

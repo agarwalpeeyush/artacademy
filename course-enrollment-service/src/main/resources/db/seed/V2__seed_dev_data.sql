@@ -1,3 +1,0 @@
--- Seed for academic_db.
--- All dev data removed (R17): courses, classes, and enrollments are created at runtime by an
--- authenticated principal. Fresh DB — nothing to seed here.

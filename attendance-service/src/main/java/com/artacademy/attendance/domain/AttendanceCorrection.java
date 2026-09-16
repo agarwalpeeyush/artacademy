@@ -39,8 +39,9 @@ public class AttendanceCorrection {
     @Column(name = "SUBJECT_ID", nullable = false)
     private UUID subjectId;
 
-    @Column(name = "CLASS_ID", nullable = false)
-    private UUID classId;
+    /** The timetable slot the edited attendance row belongs to. */
+    @Column(name = "TIMETABLE_ID", nullable = false)
+    private UUID timetableId;
 
     @Column(name = "ATTENDANCE_DATE", nullable = false)
     private LocalDate attendanceDate;

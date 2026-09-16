@@ -21,7 +21,7 @@ import enrollmentService from '../../services/enrollmentService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDate, formatTime, getDayName, feeTypeLabel } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatTime, getDayName, feeTypeLabel, instituteShareLabel } from '../../utils/formatters';
 
 const Info: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <Grid item xs={12} sm={6} md={4}>
@@ -112,7 +112,7 @@ const CourseDetailPage: React.FC = () => {
                 {course.fees.map((f, i) => (
                   <Chip
                     key={f.id ?? i}
-                    label={`${feeTypeLabel(f.feeType)}: ${formatCurrency(f.amount)}`}
+                    label={`${feeTypeLabel(f.feeType)}: ${formatCurrency(f.amount)} · Institute: ${instituteShareLabel(f.instituteShareType, f.instituteShareValue)}`}
                     size="small"
                     variant="outlined"
                   />

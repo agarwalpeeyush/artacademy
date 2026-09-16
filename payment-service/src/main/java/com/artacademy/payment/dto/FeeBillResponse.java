@@ -7,30 +7,38 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
+/** A materialised FEE_BILLS row plus read-derived fields (overdue, displayStatus, excess/short). */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class FeeCycleResponse {
+public class FeeBillResponse {
 
     private UUID id;
+    private UUID enrollmentId;
     private UUID studentId;
     private Integer billingMonth;
     private Integer billingYear;
-    private String cycleKind;
-    private BigDecimal totalAmount;
+    private String feeType;
+    private String cadence;
+    private BigDecimal amountDue;
     private BigDecimal paidAmount;
     private BigDecimal outstandingAmount;
     private String status;
     private LocalDateTime generatedDate;
     private LocalDateTime dueDate;
-    private List<FeeDetailResponse> details;
+    private LocalDateTime paymentDate;
+    private Boolean outstandingBill;
+    private UUID teacherId;
 
-    // Derived on read (not persisted)
-    private boolean overdue;
+    private BigDecimal instituteShareAmount;
+    private BigDecimal teacherShareAmount;
+    private Boolean overridden;
+
+    // Read-derived
+    private Boolean overdue;
     private String displayStatus;
     private BigDecimal excessAmount;
     private BigDecimal shortAmount;

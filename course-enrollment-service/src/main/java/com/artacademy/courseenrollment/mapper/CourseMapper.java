@@ -14,7 +14,7 @@ public class CourseMapper {
                 : course.getFees().stream()
                         .map(f -> CourseResponse.FeeItem.builder()
                                 .id(f.getId())
-                                .feeType(f.getFeeType())
+                                .feeType(f.getFeeType() != null ? f.getFeeType().getCode() : null)
                                 .amount(f.getAmount())
                                 .cadence(f.getCadence())
                                 .instituteShareType(f.getInstituteShareType())

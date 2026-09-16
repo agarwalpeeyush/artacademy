@@ -1,123 +1,118 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Box, Card, CardContent, Typography, Chip, MenuItem, TextField, Grid,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Box, Autocomplete, TextField, Grid, Chip, Typography, Paper, Alert,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
-import { fetchFeeCycles } from '../../store/slices/feeSlice';
-import studentService from '../../services/studentService';
-import { Student, FeeCycle } from '../../types';
+import { fetchScopedStudents, fetchStudentBills, clearBills } from '../../store/slices/feeSlice';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatMonthYear, cycleKindLabel, cycleKindColor } from '../../utils/formatters';
+import { formatCurrency, formatDateDMY, feeTypeLabel } from '../../utils/formatters';
+import { ScopedStudent } from '../../types';
+
+const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+  PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', UNPAID: 'default',
+};
 
 const FeeStatusPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
-  const { feeCycles } = useSelector((state: RootState) => state.fees);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(false);
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
+  const { students, bills, loading, error } = useSelector((state: RootState) => state.fees);
+
+  const [selected, setSelected] = useState<ScopedStudent | null>(null);
 
   useEffect(() => {
-    if (user?.id) dispatch(fetchTeacherTimetables(user.id));
+    if (user?.id) dispatch(fetchScopedStudents(user.id));
   }, [dispatch, user]);
 
   useEffect(() => {
-    if (selectedCourseId) {
-      setLoading(true);
-      studentService.getByCourse(selectedCourseId)
-        .then(data => {
-          setStudents(data);
-          data.forEach(s => dispatch(fetchFeeCycles({ studentId: s.id, month: currentMonth, year: currentYear })));
-        })
-        .catch(() => setStudents([]))
-        .finally(() => setLoading(false));
-    }
-  }, [selectedCourseId, dispatch, currentMonth, currentYear]);
+    if (selected) dispatch(fetchStudentBills(selected.studentId));
+    else dispatch(clearBills());
+  }, [dispatch, selected]);
 
-  const getStudentFeeStatus = (studentId: string): FeeCycle | undefined => {
-    return feeCycles.find(f => f.studentId === studentId && f.month === currentMonth && f.year === currentYear);
-  };
-
-  const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-    PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', PENDING: 'default',
-  };
-
-  const uniqueCourses = [...new Map(teacherTimetables.map(s => [s.courseId, s])).values()];
+  const totals = useMemo(() => ({
+    due: bills.reduce((s, b) => s + (b.amountDue ?? 0), 0),
+    paid: bills.reduce((s, b) => s + (b.paidAmount ?? 0), 0),
+    outstanding: bills.reduce((s, b) => s + (b.outstandingAmount ?? 0), 0),
+  }), [bills]);
 
   return (
     <Box>
       <PageHeader
         title="Fee Status"
-        subtitle={`Student fee status for ${formatMonthYear(currentMonth, currentYear)}`}
+        subtitle="Bill status for students in your courses"
         breadcrumbs={[{ label: 'Teacher' }, { label: 'Fee Status' }]}
       />
 
-      <Box mb={3}>
-        <TextField
-          select label="Select Course" size="small" sx={{ minWidth: 300 }}
-          value={selectedCourseId}
-          onChange={e => setSelectedCourseId(e.target.value)}
-        >
-          <MenuItem value="">-- Select a course --</MenuItem>
-          {uniqueCourses.map(s => (
-            <MenuItem key={s.courseId} value={s.courseId}>{s.courseName}</MenuItem>
-          ))}
-        </TextField>
-      </Box>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={12} sm={6} md={5}>
+          <Autocomplete
+            options={students}
+            value={selected}
+            onChange={(_, v) => setSelected(v)}
+            getOptionLabel={(o) => `${o.studentName ?? o.studentId}${o.courseName ? ` — ${o.courseName}` : ''}`}
+            isOptionEqualToValue={(a, b) => a.enrollmentId === b.enrollmentId}
+            renderInput={(params) => <TextField {...params} label="Search student" size="small" />}
+          />
+        </Grid>
+      </Grid>
 
-      {loading ? (
+      {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {!selected ? (
+        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="text.secondary">Select a student to view their bills.</Typography>
+        </Paper>
+      ) : loading ? (
         <LoadingSpinner />
-      ) : selectedCourseId && students.length > 0 ? (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Student</TableCell>
-                <TableCell align="right">Total Amount</TableCell>
-                <TableCell align="right">Paid</TableCell>
-                <TableCell align="right">Due</TableCell>
-                <TableCell align="center">Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {students.map(student => {
-                const fee = getStudentFeeStatus(student.id);
-                return (
-                  <TableRow key={student.id}>
-                    <TableCell sx={{ fontWeight: 500 }}>{student.firstName} {student.lastName}</TableCell>
-                    <TableCell align="right">{fee ? formatCurrency(fee.totalAmount) : '-'}</TableCell>
-                    <TableCell align="right" sx={{ color: 'success.main' }}>{fee ? formatCurrency(fee.paidAmount) : '-'}</TableCell>
-                    <TableCell align="right" sx={{ color: fee && (fee.dueAmount ?? 0) > 0 ? 'error.main' : 'inherit' }}>
-                      {fee ? formatCurrency(fee.dueAmount ?? 0) : '-'}
-                    </TableCell>
-                    <TableCell align="center">
-                      {fee ? (
-                        <>
-                          <Chip label={fee.status} color={statusColorMap[fee.status] || 'default'} size="small" />
-                          {fee.cycleKind && fee.cycleKind !== 'MONTHLY' && (
-                            <Chip label={cycleKindLabel(fee.cycleKind)} color={cycleKindColor(fee.cycleKind)} size="small" variant="outlined" sx={{ ml: 1 }} />
-                          )}
-                        </>
-                      ) : (
-                        <Chip label="No Data" color="default" size="small" />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : selectedCourseId ? (
-        <Typography color="text.secondary">No students found in this course.</Typography>
-      ) : null}
+      ) : (
+        <>
+          <Box display="flex" gap={3} mb={2} flexWrap="wrap">
+            <Typography variant="body2">Total due: <b>{formatCurrency(totals.due)}</b></Typography>
+            <Typography variant="body2" sx={{ color: 'success.main' }}>Paid: <b>{formatCurrency(totals.paid)}</b></Typography>
+            <Typography variant="body2" sx={{ color: totals.outstanding > 0 ? 'error.main' : 'inherit' }}>
+              Outstanding: <b>{formatCurrency(totals.outstanding)}</b>
+            </Typography>
+          </Box>
+
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Fee Type</TableCell>
+                  <TableCell>Period</TableCell>
+                  <TableCell align="right">Amount Due</TableCell>
+                  <TableCell align="right">Paid</TableCell>
+                  <TableCell align="right">Outstanding</TableCell>
+                  <TableCell>Due Date</TableCell>
+                  <TableCell align="center">Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {bills.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} align="center">No bills generated yet.</TableCell></TableRow>
+                ) : bills.map(b => {
+                  const display = b.displayStatus ?? b.status;
+                  return (
+                    <TableRow key={b.id} hover>
+                      <TableCell>{feeTypeLabel(b.feeType)}</TableCell>
+                      <TableCell>{b.billingMonth ? `${b.billingMonth}/${b.billingYear}` : '-'}</TableCell>
+                      <TableCell align="right">{formatCurrency(b.amountDue)}</TableCell>
+                      <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(b.paidAmount)}</TableCell>
+                      <TableCell align="right" sx={{ color: b.outstandingAmount > 0 ? 'error.main' : 'inherit' }}>{formatCurrency(b.outstandingAmount)}</TableCell>
+                      <TableCell>{formatDateDMY(b.dueDate)}</TableCell>
+                      <TableCell align="center">
+                        <Chip label={display} color={statusColorMap[display] || 'default'} size="small" />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
+      )}
     </Box>
   );
 };

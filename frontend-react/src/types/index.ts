@@ -110,6 +110,9 @@ export interface CourseFeeItem {
   // Institute's cut of this fee line (F10): AMOUNT (absolute) or PERCENTAGE (0–100).
   instituteShareType?: ShareType | null;
   instituteShareValue?: number | null;
+  // When this fee falls due (ISO yyyy-MM-dd). Only meaningful on enrollment fee lines; omit to let
+  // the backend compute it from the cadence (ONE_TIME/first MONTHLY → enrollment date).
+  dueDate?: string | null;
 }
 
 export interface Course {
@@ -205,7 +208,7 @@ export interface AttendanceCorrection {
   attendanceType: AttendanceRecordType;
   attendanceId: string;
   subjectId: string;
-  classId: string;
+  timetableId: string;
   attendanceDate: string;
   oldStatus: AttendanceStatus;
   newStatus: AttendanceStatus;
@@ -343,6 +346,62 @@ export interface TeacherRevenueSummary {
   paidDetailCount: number;
 }
 
+/** A name-resolved student for the scoped picker on the fee pages. */
+export interface ScopedStudent {
+  studentId: string;
+  enrollmentId: string;
+  courseId?: string;
+  teacherId?: string;
+  studentName?: string;
+  courseName?: string;
+}
+
+/** An editable STUDENT_FEE_DETAIL catalogue line (before a bill is generated). */
+export interface FeeDetailLine {
+  id: string;
+  enrollmentId: string;
+  feeType: FeeType;
+  amount: number;
+  cadence?: FeeCadence;
+  dueDate?: string | null;
+  instituteShareType?: ShareType | null;
+  instituteShareValue?: number | null;
+}
+
+/** A materialised FEE_BILLS row plus read-derived fields. */
+export interface FeeBill {
+  id: string;
+  enrollmentId: string;
+  studentId: string;
+  billingMonth?: number;
+  billingYear?: number;
+  feeType: FeeType;
+  cadence?: FeeCadence;
+  amountDue: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  status: string;
+  generatedDate?: string;
+  dueDate?: string;
+  paymentDate?: string;
+  outstandingBill?: boolean;
+  teacherId?: string;
+  instituteShareAmount?: number;
+  teacherShareAmount?: number;
+  overridden?: boolean;
+  overdue?: boolean;
+  displayStatus?: string;
+  excessAmount?: number;
+  shortAmount?: number;
+}
+
+/** Result of a Generate-Bill action. */
+export interface FeeGenerateResponse {
+  generated: FeeBill[];
+  alreadyBilled: string[];
+  missingMonths: string[];
+}
+
 export interface Payment {
   id: string;
   studentId: string;
@@ -356,6 +415,8 @@ export interface Payment {
   receiptNumber?: string;
   remarks?: string;
   collectedBy?: string;
+  settledBillIds?: string[];
+  creditBalance?: number;
 }
 
 export interface Notification {

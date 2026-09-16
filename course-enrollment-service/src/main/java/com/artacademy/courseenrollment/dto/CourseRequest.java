@@ -1,7 +1,6 @@
 package com.artacademy.courseenrollment.dto;
 
 import com.artacademy.common.fee.FeeCadence;
-import com.artacademy.common.fee.FeeType;
 import com.artacademy.common.fee.ShareType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -49,14 +48,15 @@ public class CourseRequest {
     @AllArgsConstructor
     public static class FeeItem {
 
-        @NotNull(message = "Fee type is required")
-        private FeeType feeType;
+        @NotBlank(message = "Fee type is required")
+        @Size(max = 50, message = "Fee type code must not exceed 50 characters")
+        private String feeType;
 
         @NotNull(message = "Fee amount is required")
         @DecimalMin(value = "0.0", message = "Fee amount must be non-negative")
         private BigDecimal amount;
 
-        /** Optional — defaults to the fee type's intrinsic cadence when omitted. */
+        /** Optional — defaults to the fee type's catalog frequency when omitted. */
         private FeeCadence cadence;
 
         /**

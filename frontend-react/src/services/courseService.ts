@@ -9,6 +9,8 @@ const normFee = (f: any): CourseFeeItem => ({
   feeType: f.feeType,
   amount: f.amount ?? 0,
   cadence: f.cadence,
+  instituteShareType: f.instituteShareType ?? null,
+  instituteShareValue: f.instituteShareValue ?? null,
 });
 
 const normCourse = (c: any): Course => ({

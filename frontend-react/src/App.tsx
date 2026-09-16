@@ -32,7 +32,9 @@ import MarkTeacherAttendancePage from './pages/principal/MarkTeacherAttendancePa
 import ExamsPage from './pages/principal/ExamsPage';
 import RevenuePage from './pages/principal/RevenuePage';
 import DefaultersPage from './pages/principal/DefaultersPage';
-import PrincipalPaymentsPage from './pages/principal/PaymentsPage';
+import StudentFeeDetailPage from './pages/principal/StudentFeeDetailPage';
+import FeeBillsPage from './pages/principal/FeeBillsPage';
+import ExamFeePage from './pages/principal/ExamFeePage';
 import AnalyticsPage from './pages/principal/AnalyticsPage';
 import AuditLogsPage from './pages/principal/AuditLogsPage';
 import UserManagementPage from './pages/principal/UserManagementPage';
@@ -131,7 +133,10 @@ const App: React.FC = () => {
         <Route path="attendance-corrections" element={<AttendanceCorrectionsPage />} />
         <Route path="revenue" element={<RevenuePage />} />
         <Route path="defaulters" element={<DefaultersPage />} />
-        <Route path="payments" element={<PrincipalPaymentsPage />} />
+        <Route path="student-fee-detail" element={<StudentFeeDetailPage />} />
+        <Route path="fee-bills" element={<FeeBillsPage />} />
+        <Route path="exam-fee" element={<ExamFeePage />} />
+        <Route path="payments" element={<Navigate to="/principal/student-fee-detail" replace />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="users" element={<UserManagementPage />} />

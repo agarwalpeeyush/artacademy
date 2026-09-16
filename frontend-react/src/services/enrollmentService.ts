@@ -35,6 +35,7 @@ const norm = (e: any): Enrollment => ({
     cadence: f.cadence,
     instituteShareType: f.instituteShareType ?? null,
     instituteShareValue: f.instituteShareValue != null ? Number(f.instituteShareValue) : null,
+    dueDate: f.dueDate ?? null,
   })),
   timetables: (e.timetables ?? []).map(normTimetable),
   timetableIds: (e.timetables ?? []).map((t: any) => t.id),

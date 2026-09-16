@@ -151,3 +151,15 @@ export const teacherShare = (
   billed: number | null | undefined,
   institute: number | null | undefined,
 ): number => Math.round((Math.max((billed ?? 0) - (institute ?? 0), 0)) * 100) / 100;
+
+/**
+ * Human label for a course fee's institute-share template (F2). PERCENTAGE renders as "N%",
+ * AMOUNT as a currency value. A null/absent type means no institute cut.
+ */
+export const instituteShareLabel = (
+  type: 'AMOUNT' | 'PERCENTAGE' | null | undefined,
+  value: number | null | undefined,
+): string => {
+  if (!type || value == null) return 'No institute cut';
+  return type === 'PERCENTAGE' ? `${value}%` : formatCurrency(value);
+};

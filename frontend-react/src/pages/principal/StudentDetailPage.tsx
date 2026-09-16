@@ -15,14 +15,14 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchStudentById } from '../../store/slices/studentSlice';
-import { Enrollment, FeeCycle, StudentAttendance } from '../../types';
+import { Enrollment, FeeBill, StudentAttendance } from '../../types';
 import enrollmentService from '../../services/enrollmentService';
 import attendanceService from '../../services/attendanceService';
 import feeService from '../../services/feeService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, feeTypeLabel } from '../../utils/formatters';
 
 interface AttendanceStats {
   totalDays?: number;
@@ -50,7 +50,7 @@ const StudentDetailPage: React.FC = () => {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [attendance, setAttendance] = useState<StudentAttendance[]>([]);
   const [stats, setStats] = useState<AttendanceStats | null>(null);
-  const [fees, setFees] = useState<FeeCycle[]>([]);
+  const [fees, setFees] = useState<FeeBill[]>([]);
 
   useEffect(() => {
     if (id) dispatch(fetchStudentById(id));
@@ -61,7 +61,7 @@ const StudentDetailPage: React.FC = () => {
     enrollmentService.getByStudent(id).then(setEnrollments).catch(() => setEnrollments([]));
     attendanceService.getStudentAttendance({ studentId: id }).then(setAttendance).catch(() => setAttendance([]));
     attendanceService.getStudentStats(id).then(setStats).catch(() => setStats(null));
-    feeService.getFeeCycles({ studentId: id }).then(setFees).catch(() => setFees([]));
+    feeService.getBills(id).then(setFees).catch(() => setFees([]));
   }, [id]);
 
   const enrollmentCols: Column<Record<string, unknown>>[] = [
@@ -79,9 +79,9 @@ const StudentDetailPage: React.FC = () => {
   ];
 
   const feeCols: Column<Record<string, unknown>>[] = [
-    { id: 'month', label: 'Month', minWidth: 80, align: 'center' },
-    { id: 'year', label: 'Year', minWidth: 80, align: 'center' },
-    { id: 'totalAmount', label: 'Total', minWidth: 110, align: 'right', format: (v) => formatCurrency(v as number) },
+    { id: 'feeType', label: 'Fee Type', minWidth: 130, format: (v) => feeTypeLabel(v as string) },
+    { id: 'billingMonth', label: 'Period', minWidth: 90, align: 'center', format: (v, row) => (v ? `${v}/${(row as Record<string, unknown>).billingYear}` : '-') },
+    { id: 'amountDue', label: 'Amount Due', minWidth: 110, align: 'right', format: (v) => formatCurrency(v as number) },
     { id: 'paidAmount', label: 'Paid', minWidth: 110, align: 'right', format: (v) => formatCurrency(v as number) },
     { id: 'outstandingAmount', label: 'Outstanding', minWidth: 120, align: 'right', format: (v) => formatCurrency(v as number) },
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'PAID' ? 'success' : 'warning'} /> },

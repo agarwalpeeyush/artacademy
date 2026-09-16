@@ -25,6 +25,7 @@ import HowToRegIcon from '@mui/icons-material/HowToReg';
 import RuleIcon from '@mui/icons-material/Rule';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import PaymentIcon from '@mui/icons-material/Payment';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import WarningIcon from '@mui/icons-material/Warning';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -55,7 +56,9 @@ const navItems = [
   { label: 'Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/teacher-attendance' },
   { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
   { label: 'Revenue', icon: <AttachMoneyIcon />, path: '/principal/revenue' },
-  { label: 'Payments', icon: <PaymentIcon />, path: '/principal/payments' },
+  { label: 'Student Fee Detail', icon: <PaymentIcon />, path: '/principal/student-fee-detail' },
+  { label: 'Fee Bills', icon: <ReceiptLongIcon />, path: '/principal/fee-bills' },
+  { label: 'Exam Fee', icon: <EventNoteIcon />, path: '/principal/exam-fee' },
   { label: 'Defaulters', icon: <WarningIcon />, path: '/principal/defaulters' },
   { label: 'Analytics', icon: <BarChartIcon />, path: '/principal/analytics' },
   { label: 'Audit Logs', icon: <SecurityIcon />, path: '/principal/audit-logs' },

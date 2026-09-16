@@ -17,12 +17,16 @@ import java.util.UUID;
 public class PaymentResponse {
 
     private UUID id;
-    private UUID feeCycleId;
     private UUID studentId;
     private BigDecimal amount;
     private String paymentMode;
     private String transactionReference;
     private LocalDateTime paymentDate;
     private String remarks;
-    private List<PaymentAllocationResponse> allocations;
+
+    /** Bills this payment settled (fully or partially), oldest first in waterfall order. */
+    private List<UUID> settledBillIds;
+
+    /** Amount that landed in the student's credit balance after all bills were settled. */
+    private BigDecimal creditBalance;
 }

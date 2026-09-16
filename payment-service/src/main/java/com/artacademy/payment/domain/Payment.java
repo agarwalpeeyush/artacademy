@@ -5,10 +5,9 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
+/** A student-level payment (§ PAYMENTS). Not tied to a single bill; settled via waterfall. */
 @Entity
 @Table(name = "PAYMENTS")
 @Getter
@@ -22,17 +21,13 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "FEE_CYCLE_ID", nullable = false)
-    private StudentFeeCycle feeCycle;
-
     @Column(name = "STUDENT_ID", nullable = false)
     private UUID studentId;
 
     @Column(name = "AMOUNT", nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "PAYMENT_MODE", nullable = false, length = 50)
+    @Column(name = "PAYMENT_MODE", length = 50)
     private String paymentMode;
 
     @Column(name = "TRANSACTION_REFERENCE", length = 200)
@@ -43,8 +38,4 @@ public class Payment {
 
     @Column(name = "REMARKS", columnDefinition = "TEXT")
     private String remarks;
-
-    @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private List<PaymentAllocation> allocations = new ArrayList<>();
 }

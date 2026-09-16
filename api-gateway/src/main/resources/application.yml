@@ -28,7 +28,7 @@ spring:
         - id: user-service
           uri: lb://user-service
           predicates:
-            - Path=/teachers/**,/students/**,/parents/**,/users/**
+            - Path=/teachers/**,/students/**,/parents/**,/users/**,/principals/**
           filters:
             - JwtAuth
         - id: course-enrollment-service

@@ -25,15 +25,20 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchCourses, createCourse, updateCourse, deleteCourse } from '../../store/slices/courseSlice';
-import { Course, CourseType, FeeType, FeeCadence } from '../../types';
+import { Course, CourseType, FeeType, FeeCadence, ShareType } from '../../types';
 import courseTypeService from '../../services/courseTypeService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, feeTypeLabel } from '../../utils/formatters';
+import { formatCurrency, feeTypeLabel, instituteShareLabel } from '../../utils/formatters';
 
 const FEE_TYPES: FeeType[] = ['ADMISSION', 'MONTHLY', 'EXAM', 'ONE_TIME_SHORT_TERM'];
+const SHARE_TYPES: { value: '' | ShareType; label: string }[] = [
+  { value: '', label: 'None' },
+  { value: 'PERCENTAGE', label: 'Percentage (%)' },
+  { value: 'AMOUNT', label: 'Amount (₹)' },
+];
 
 // Default cadence per fee type (matches backend FeeType enum).
 const DEFAULT_CADENCE: Record<FeeType, FeeCadence> = {
@@ -50,7 +55,13 @@ interface CourseFormData {
   description: string;
   durationMonths: number;
   status: string;
-  fees: { feeType: FeeType; amount: number; cadence: FeeCadence }[];
+  fees: {
+    feeType: FeeType;
+    amount: number;
+    cadence: FeeCadence;
+    instituteShareType: '' | ShareType;
+    instituteShareValue: number | '';
+  }[];
 }
 
 const emptyForm: CourseFormData = {
@@ -60,7 +71,7 @@ const emptyForm: CourseFormData = {
   description: '',
   durationMonths: 12,
   status: 'ACTIVE',
-  fees: [{ feeType: 'MONTHLY', amount: 0, cadence: 'RECURRING' }],
+  fees: [{ feeType: 'MONTHLY', amount: 0, cadence: 'RECURRING', instituteShareType: '', instituteShareValue: '' }],
 };
 
 const CoursesPage: React.FC = () => {
@@ -99,8 +110,14 @@ const CoursesPage: React.FC = () => {
       durationMonths: course.durationMonths,
       status: course.status,
       fees: course.fees.length
-        ? course.fees.map(f => ({ feeType: f.feeType, amount: f.amount, cadence: f.cadence ?? DEFAULT_CADENCE[f.feeType] }))
-        : [{ feeType: 'MONTHLY', amount: 0, cadence: 'RECURRING' }],
+        ? course.fees.map(f => ({
+            feeType: f.feeType,
+            amount: f.amount,
+            cadence: f.cadence ?? DEFAULT_CADENCE[f.feeType],
+            instituteShareType: f.instituteShareType ?? '',
+            instituteShareValue: f.instituteShareValue ?? '',
+          }))
+        : [{ feeType: 'MONTHLY' as FeeType, amount: 0, cadence: 'RECURRING' as FeeCadence, instituteShareType: '' as const, instituteShareValue: '' as const }],
     });
     setDialogOpen(true);
   };
@@ -112,6 +129,9 @@ const CoursesPage: React.FC = () => {
         feeType: f.feeType,
         amount: Number(f.amount),
         cadence: f.cadence ?? DEFAULT_CADENCE[f.feeType],
+        instituteShareType: f.instituteShareType || null,
+        instituteShareValue: f.instituteShareType && f.instituteShareValue !== ''
+          ? Number(f.instituteShareValue) : null,
       })),
     } as Omit<Course, 'id'>;
     try {
@@ -154,7 +174,7 @@ const CoursesPage: React.FC = () => {
             {course.fees.map((f, i) => (
               <Chip
                 key={f.id ?? i}
-                label={`${feeTypeLabel(f.feeType)}: ${formatCurrency(f.amount)}`}
+                label={`${feeTypeLabel(f.feeType)}: ${formatCurrency(f.amount)}${f.instituteShareType ? ` · Inst ${instituteShareLabel(f.instituteShareType, f.instituteShareValue)}` : ''}`}
                 size="small"
                 variant="outlined"
               />
@@ -239,7 +259,7 @@ const CoursesPage: React.FC = () => {
                 <Divider sx={{ my: 1 }} />
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                   <Typography variant="subtitle2">Fee Structure</Typography>
-                  <Button size="small" startIcon={<AddIcon />} onClick={() => append({ feeType: 'MONTHLY', amount: 0, cadence: 'RECURRING' })}>
+                  <Button size="small" startIcon={<AddIcon />} onClick={() => append({ feeType: 'MONTHLY', amount: 0, cadence: 'RECURRING', instituteShareType: '', instituteShareValue: '' })}>
                     Add Fee
                   </Button>
                 </Box>
@@ -247,7 +267,7 @@ const CoursesPage: React.FC = () => {
 
               {fields.map((f, index) => (
                 <React.Fragment key={f.id}>
-                  <Grid item xs={5}>
+                  <Grid item xs={6} sm={3}>
                     <Controller
                       name={`fees.${index}.feeType`}
                       control={control}
@@ -264,7 +284,7 @@ const CoursesPage: React.FC = () => {
                       )}
                     />
                   </Grid>
-                  <Grid item xs={5}>
+                  <Grid item xs={6} sm={3}>
                     <Controller
                       name={`fees.${index}.amount`}
                       control={control}
@@ -274,7 +294,28 @@ const CoursesPage: React.FC = () => {
                       )}
                     />
                   </Grid>
-                  <Grid item xs={2} sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Grid item xs={6} sm={3}>
+                    <Controller
+                      name={`fees.${index}.instituteShareType`}
+                      control={control}
+                      render={({ field }) => (
+                        <TextField {...field} label="Institute Share" select fullWidth size="small">
+                          {SHARE_TYPES.map(s => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+                        </TextField>
+                      )}
+                    />
+                  </Grid>
+                  <Grid item xs={4} sm={2}>
+                    <Controller
+                      name={`fees.${index}.instituteShareValue`}
+                      control={control}
+                      rules={{ min: { value: 0, message: 'Min 0' } }}
+                      render={({ field }) => (
+                        <TextField {...field} label="Share Value" type="number" fullWidth size="small" />
+                      )}
+                    />
+                  </Grid>
+                  <Grid item xs={2} sm={1} sx={{ display: 'flex', alignItems: 'center' }}>
                     <IconButton
                       size="small"
                       color="error"

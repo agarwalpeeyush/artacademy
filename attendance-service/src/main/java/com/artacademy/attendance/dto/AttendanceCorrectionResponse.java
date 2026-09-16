@@ -24,7 +24,7 @@ public class AttendanceCorrectionResponse {
     private AttendanceRecordType attendanceType;
     private UUID attendanceId;
     private UUID subjectId;
-    private UUID classId;
+    private UUID timetableId;
     private LocalDate attendanceDate;
     private AttendanceStatus oldStatus;
     private AttendanceStatus newStatus;

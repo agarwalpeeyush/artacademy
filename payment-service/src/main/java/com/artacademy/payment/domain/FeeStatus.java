@@ -1,7 +1,8 @@
 package com.artacademy.payment.domain;
 
+/** Payment status of a single fee bill. */
 public enum FeeStatus {
-    PAID,
+    UNPAID,
     PARTIAL,
-    UNPAID
+    PAID
 }

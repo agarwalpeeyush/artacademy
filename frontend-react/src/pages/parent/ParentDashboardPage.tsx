@@ -5,17 +5,14 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchMyChildren, fetchMyProfile } from '../../store/slices/parentSlice';
-import feeService from '../../services/feeService';
 import attendanceService from '../../services/attendanceService';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency } from '../../utils/formatters';
 
 const ParentDashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { children, profile, loading } = useSelector((state: RootState) => state.parents);
-  const [outstanding, setOutstanding] = useState(0);
   const [avgAttendance, setAvgAttendance] = useState<number | null>(null);
 
   useEffect(() => {
@@ -25,16 +22,6 @@ const ParentDashboardPage: React.FC = () => {
 
   useEffect(() => {
     if (children.length === 0) return;
-    Promise.all(
-      children.map(c =>
-        feeService.getFeeCycles({ studentId: c.id }).catch(() => [])
-      )
-    ).then(results => {
-      const total = results.flat().filter(f => f.status !== 'PAID')
-        .reduce((sum, f) => sum + (f.dueAmount ?? f.outstandingAmount ?? 0), 0);
-      setOutstanding(total);
-    });
-
     Promise.all(
       children.map(c =>
         attendanceService.getStudentStats(c.id)
@@ -60,7 +47,7 @@ const ParentDashboardPage: React.FC = () => {
       ) : (
         <>
           <Grid container spacing={3} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6}>
               <Card>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Typography variant="body2" color="text.secondary">Children</Typography>
@@ -69,7 +56,7 @@ const ParentDashboardPage: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6}>
               <Card>
                 <CardContent sx={{ textAlign: 'center' }}>
                   <Typography variant="body2" color="text.secondary">Avg Attendance</Typography>
@@ -78,17 +65,6 @@ const ParentDashboardPage: React.FC = () => {
                     {avgAttendance == null ? 'N/A' : `${avgAttendance.toFixed(1)}%`}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">across all children</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Card>
-                <CardContent sx={{ textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Outstanding Fees</Typography>
-                  <Typography variant="h5" fontWeight={700} color={outstanding > 0 ? 'error.main' : 'success.main'} mt={1}>
-                    {formatCurrency(outstanding)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">{outstanding > 0 ? 'total due' : 'all clear!'}</Typography>
                 </CardContent>
               </Card>
             </Grid>

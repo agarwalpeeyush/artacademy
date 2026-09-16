@@ -1,8 +1,7 @@
 package com.artacademy.payment.service;
 
+import com.artacademy.payment.domain.FeeBill;
 import com.artacademy.payment.domain.Payment;
-import com.artacademy.payment.domain.PaymentAllocation;
-import com.artacademy.payment.domain.StudentFeeCycle;
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
@@ -14,6 +13,7 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -27,9 +27,8 @@ public class ReceiptService {
     private static final Font VALUE_FONT = new Font(Font.HELVETICA, 10, Font.NORMAL);
     private static final Font TABLE_HEAD_FONT = new Font(Font.HELVETICA, 10, Font.BOLD, Color.WHITE);
 
-    /** Builds a downloadable PDF receipt for a single payment. */
-    public byte[] generateReceipt(Payment payment) {
-        StudentFeeCycle cycle = payment.getFeeCycle();
+    /** Builds a downloadable PDF receipt for a student-level payment and the bills it settled. */
+    public byte[] generateReceipt(Payment payment, List<FeeBill> settledBills) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         Document document = new Document(PageSize.A4, 48, 48, 48, 48);
@@ -37,7 +36,6 @@ public class ReceiptService {
             PdfWriter.getInstance(document, out);
             document.open();
 
-            // Header
             Paragraph title = new Paragraph("Art Academy", TITLE_FONT);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
@@ -49,7 +47,6 @@ public class ReceiptService {
 
             document.add(divider());
 
-            // Receipt meta
             PdfPTable meta = new PdfPTable(2);
             meta.setWidthPercentage(100);
             meta.setSpacingBefore(12);
@@ -58,67 +55,38 @@ public class ReceiptService {
             addKeyValue(meta, "Payment Date",
                     payment.getPaymentDate() != null ? payment.getPaymentDate().format(DATE_FMT) : "-");
             addKeyValue(meta, "Student ID", payment.getStudentId().toString());
-            addKeyValue(meta, "Billing Period",
-                    cycle != null ? monthYear(cycle.getBillingMonth(), cycle.getBillingYear()) : "-");
             addKeyValue(meta, "Payment Mode", nvl(payment.getPaymentMode()));
             addKeyValue(meta, "Transaction Ref", nvl(payment.getTransactionReference()));
             document.add(meta);
 
-            // Allocation breakdown
-            Paragraph breakdownHeading = new Paragraph("Allocation Breakdown", HEADING_FONT);
+            Paragraph breakdownHeading = new Paragraph("Bills Settled", HEADING_FONT);
             breakdownHeading.setSpacingBefore(8);
             breakdownHeading.setSpacingAfter(6);
             document.add(breakdownHeading);
 
-            PdfPTable table = new PdfPTable(2);
+            PdfPTable table = new PdfPTable(3);
             table.setWidthPercentage(100);
-            table.setWidths(new float[]{3f, 1f});
-            addTableHeader(table, "Course ID");
-            addTableHeader(table, "Allocated Amount");
+            table.setWidths(new float[]{2f, 2f, 1.5f});
+            addTableHeader(table, "Fee Type");
+            addTableHeader(table, "Period");
+            addTableHeader(table, "Paid");
 
-            if (payment.getAllocations() != null) {
-                for (PaymentAllocation alloc : payment.getAllocations()) {
-                    String courseId = alloc.getFeeDetail() != null && alloc.getFeeDetail().getCourseId() != null
-                            ? alloc.getFeeDetail().getCourseId().toString()
-                            : "-";
-                    addTableCell(table, courseId, Element.ALIGN_LEFT);
-                    addTableCell(table, money(alloc.getAllocatedAmount()), Element.ALIGN_RIGHT);
+            if (settledBills != null) {
+                for (FeeBill bill : settledBills) {
+                    addTableCell(table, bill.getFeeType() != null ? bill.getFeeType().name() : "-",
+                            Element.ALIGN_LEFT);
+                    addTableCell(table, monthYear(bill.getBillingMonth(), bill.getBillingYear()),
+                            Element.ALIGN_LEFT);
+                    addTableCell(table, money(bill.getPaidAmount()), Element.ALIGN_RIGHT);
                 }
             }
             document.add(table);
 
-            // Amount paid
             Paragraph amountPaid = new Paragraph("Amount Paid: " + money(payment.getAmount()),
                     new Font(Font.HELVETICA, 12, Font.BOLD, new Color(46, 125, 50)));
             amountPaid.setSpacingBefore(12);
             amountPaid.setAlignment(Element.ALIGN_RIGHT);
             document.add(amountPaid);
-
-            // Cycle summary
-            if (cycle != null) {
-                document.add(divider());
-                Paragraph cycleHeading = new Paragraph("Fee Cycle Summary", HEADING_FONT);
-                cycleHeading.setSpacingBefore(12);
-                cycleHeading.setSpacingAfter(6);
-                document.add(cycleHeading);
-
-                PdfPTable summary = new PdfPTable(2);
-                summary.setWidthPercentage(100);
-                addKeyValue(summary, "Total Amount", money(cycle.getTotalAmount()));
-                addKeyValue(summary, "Total Paid", money(cycle.getPaidAmount()));
-                addKeyValue(summary, "Outstanding", money(cycle.getOutstandingAmount()));
-
-                BigDecimal total = nz(cycle.getTotalAmount());
-                BigDecimal paid = nz(cycle.getPaidAmount());
-                BigDecimal diff = paid.subtract(total);
-                if (diff.signum() > 0) {
-                    addKeyValue(summary, "Excess (Advance)", money(diff));
-                } else if (diff.signum() < 0) {
-                    addKeyValue(summary, "Short (Due)", money(diff.negate()));
-                }
-                addKeyValue(summary, "Status", nvl(cycle.getStatus() != null ? cycle.getStatus().name() : null));
-                document.add(summary);
-            }
 
             Paragraph footer = new Paragraph(
                     "This is a computer-generated receipt and does not require a signature.",
@@ -174,7 +142,7 @@ public class ReceiptService {
     }
 
     private static String monthYear(Integer month, Integer year) {
-        if (month == null || year == null) return "-";
+        if (month == null || year == null || month == 0) return "-";
         String[] names = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
         String m = (month >= 1 && month <= 12) ? names[month] : String.valueOf(month);

@@ -39,7 +39,7 @@ const normCorrection = (c: any): AttendanceCorrection => ({
   attendanceType: c.attendanceType,
   attendanceId: c.attendanceId,
   subjectId: c.subjectId,
-  classId: c.classId,
+  timetableId: c.timetableId,
   attendanceDate: c.attendanceDate,
   oldStatus: c.oldStatus,
   newStatus: c.newStatus,

@@ -36,48 +36,32 @@ public class SecurityConfig {
                             "/swagger-ui.html"
                     ).permitAll()
 
-                    // Generate fees – PRINCIPAL only
-                    .requestMatchers(HttpMethod.POST, "/fees/generate")
+                    // Bill generation – EXAM cohort is PRINCIPAL only; per-enrollment is TEACHER/PRINCIPAL
+                    .requestMatchers(HttpMethod.POST, "/fees/generate/exam")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/fees/generate/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+
+                    // Bill edit / share override – PRINCIPAL only
+                    .requestMatchers(HttpMethod.PUT, "/fees/bill/**")
                             .hasRole("PRINCIPAL")
 
-                    // View defaulters and revenue summary – PRINCIPAL only
-                    .requestMatchers(HttpMethod.GET, "/fees/defaulters")
-                            .hasRole("PRINCIPAL")
-                    .requestMatchers(HttpMethod.GET, "/fees/revenue-summary")
+                    // Teacher revenue rollups – PRINCIPAL only
+                    .requestMatchers(HttpMethod.GET, "/fees/teachers/summary")
                             .hasRole("PRINCIPAL")
 
-                    // Students can view their own fees and payments
-                    .requestMatchers(HttpMethod.GET, "/fees/student/**")
-                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
-                    .requestMatchers(HttpMethod.GET, "/payments/student/**")
-                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
-
-                    // Fee cycle details – any authenticated role
-                    .requestMatchers(HttpMethod.GET, "/fees/cycle/**")
-                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
+                    // Fee catalogue, bills, picker, single-teacher summary – TEACHER or PRINCIPAL
+                    .requestMatchers("/fees/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
 
                     // List all payments (with date filter) – PRINCIPAL only
                     .requestMatchers(HttpMethod.GET, "/payments")
                             .hasRole("PRINCIPAL")
 
-                    // Receipts, payments-by-cycle and single payment – any authenticated role
-                    .requestMatchers(HttpMethod.GET, "/payments/*/receipt")
-                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
-                    .requestMatchers(HttpMethod.GET, "/payments/fee-cycle/**")
-                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
-                    .requestMatchers(HttpMethod.GET, "/payments/*")
-                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
-
-                    // View fee details – TEACHER or PRINCIPAL
-                    .requestMatchers(HttpMethod.GET, "/fees/**")
+                    // Payments (record, reads, receipt) – TEACHER or PRINCIPAL
+                    .requestMatchers("/payments/**")
                             .hasAnyRole("TEACHER", "PRINCIPAL")
-
-                    // Record payments – PRINCIPAL or TEACHER
                     .requestMatchers(HttpMethod.POST, "/payments")
-                            .hasAnyRole("PRINCIPAL", "TEACHER")
-
-                    // View payments – TEACHER or PRINCIPAL
-                    .requestMatchers(HttpMethod.GET, "/payments/**")
                             .hasAnyRole("TEACHER", "PRINCIPAL")
 
                     .anyRequest().authenticated()

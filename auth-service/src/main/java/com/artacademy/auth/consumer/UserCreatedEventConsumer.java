@@ -57,11 +57,6 @@ public class UserCreatedEventConsumer {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
             }
-            if (event.getEmail() != null && userRepository.existsByEmail(event.getEmail())) {
-                log.warn("Auth user email={} already in use, skipping StudentCreatedEvent for username={}",
-                        event.getEmail(), event.getUsername());
-                return;
-            }
             List<String> roleNames = (event.getRoles() != null && !event.getRoles().isEmpty())
                     ? event.getRoles() : List.of(RoleName.STUDENT);
             Set<Role> roles = resolveRoles(roleNames);
@@ -96,11 +91,6 @@ public class UserCreatedEventConsumer {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
                 return;
             }
-            if (event.getEmail() != null && userRepository.existsByEmail(event.getEmail())) {
-                log.warn("Auth user email={} already in use, skipping TeacherCreatedEvent for username={}",
-                        event.getEmail(), event.getUsername());
-                return;
-            }
             List<String> roleNames = (event.getRoles() != null && !event.getRoles().isEmpty())
                     ? event.getRoles() : List.of(RoleName.TEACHER);
             Set<Role> roles = resolveRoles(roleNames);
@@ -133,11 +123,6 @@ public class UserCreatedEventConsumer {
             }
             if (userRepository.existsByUsername(event.getUsername())) {
                 log.warn("Auth user already exists for username={}, skipping", event.getUsername());
-                return;
-            }
-            if (event.getEmail() != null && userRepository.existsByEmail(event.getEmail())) {
-                log.warn("Auth user email={} already in use, skipping ParentCreatedEvent for username={}",
-                        event.getEmail(), event.getUsername());
                 return;
             }
             List<String> roleNames = (event.getRoles() != null && !event.getRoles().isEmpty())

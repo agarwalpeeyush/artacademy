@@ -50,6 +50,9 @@ type FeeLine = {
   cadence: FeeCadence;
   instituteShareType: ShareType | null;
   instituteShareValue: number | null;
+  // Optional per-line due-date override as ISO yyyy-MM-dd (native date input); empty lets the
+  // backend compute the default.
+  dueDate: string;
 };
 
 const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
@@ -100,6 +103,7 @@ const EnrollmentsPage: React.FC = () => {
       cadence: FEE_CADENCE[f.feeType],
       instituteShareType: f.instituteShareType ?? null,
       instituteShareValue: f.instituteShareValue ?? null,
+      dueDate: '',
     }));
   };
 
@@ -144,7 +148,6 @@ const EnrollmentsPage: React.FC = () => {
     if (dialogOpen) {
       setEnrollFeeLines(selectedCourseId ? seedFeeLinesFromCourse(selectedCourseId) : []);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCourseId, dialogOpen]);
 
   const handleSubmitForm = async (data: EnrollmentFormData) => {
@@ -158,6 +161,7 @@ const EnrollmentsPage: React.FC = () => {
       cadence: f.cadence,
       instituteShareType: f.instituteShareType,
       instituteShareValue: f.instituteShareType ? f.instituteShareValue : null,
+      dueDate: f.dueDate || null,
     }));
     try {
       await dispatch(createEnrollment({
@@ -208,6 +212,7 @@ const EnrollmentsPage: React.FC = () => {
         feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType],
         instituteShareType: f.instituteShareType ?? null,
         instituteShareValue: f.instituteShareValue ?? null,
+        dueDate: f.dueDate ? f.dueDate.slice(0, 10) : '',
       });
     });
     courseFees.forEach(f => {
@@ -217,6 +222,7 @@ const EnrollmentsPage: React.FC = () => {
         feeType: f.feeType, amount: f.amount, cadence: FEE_CADENCE[f.feeType],
         instituteShareType: f.instituteShareType ?? null,
         instituteShareValue: f.instituteShareValue ?? null,
+        dueDate: '',
       });
     });
     setEditFeeLines(lines);
@@ -234,7 +240,7 @@ const EnrollmentsPage: React.FC = () => {
     setEditFeeLines(prev => {
       const used = new Set(prev.map(f => f.feeType));
       const next = FEE_TYPES.find(t => !used.has(t)) ?? FEE_TYPES[0];
-      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next], instituteShareType: null, instituteShareValue: null }];
+      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next], instituteShareType: null, instituteShareValue: null, dueDate: '' }];
     });
   };
 
@@ -264,6 +270,7 @@ const EnrollmentsPage: React.FC = () => {
       feeType: f.feeType, amount: f.amount, cadence: f.cadence,
       instituteShareType: f.instituteShareType,
       instituteShareValue: f.instituteShareType ? f.instituteShareValue : null,
+      dueDate: f.dueDate || null,
     }));
     setSavingFees(true);
     try {
@@ -288,7 +295,7 @@ const EnrollmentsPage: React.FC = () => {
     setter(prev => {
       const used = new Set(prev.map(f => f.feeType));
       const next = FEE_TYPES.find(t => !used.has(t)) ?? FEE_TYPES[0];
-      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next], instituteShareType: null, instituteShareValue: null }];
+      return [...prev, { feeType: next, amount: 0, cadence: FEE_CADENCE[next], instituteShareType: null, instituteShareValue: null, dueDate: '' }];
     });
 
   const removeLine = (setter: FeeLineSetter, idx: number) =>
@@ -347,6 +354,12 @@ const EnrollmentsPage: React.FC = () => {
                 value={f.instituteShareValue ?? ''}
                 disabled={!f.instituteShareType}
                 onChange={e => mutateLine(setter, idx, { instituteShareValue: e.target.value === '' ? null : Number(e.target.value) })}
+              />
+              <TextField
+                type="date" size="small" label="Due Date" sx={{ width: 160 }}
+                InputLabelProps={{ shrink: true }}
+                value={f.dueDate}
+                onChange={e => mutateLine(setter, idx, { dueDate: e.target.value })}
               />
               <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
                 Institute {formatCurrency(inst)} · Teacher {formatCurrency(teach)}

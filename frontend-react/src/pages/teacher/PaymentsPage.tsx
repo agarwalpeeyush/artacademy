@@ -1,126 +1,117 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Box, Typography, Chip, TextField, MenuItem, Button, Grid,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
+  Box, Autocomplete, TextField, Button, Grid, Chip, Typography, Paper, Tooltip, Alert,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Dialog, DialogTitle, DialogContent, DialogActions, MenuItem,
 } from '@mui/material';
+import PaymentIcon from '@mui/icons-material/Payment';
 import DownloadIcon from '@mui/icons-material/Download';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
-import { fetchTeacherTimetables } from '../../store/slices/timetableSlice';
-import { fetchFeeCycles } from '../../store/slices/feeSlice';
-import { recordPayment, fetchPaymentsByFeeCycle } from '../../store/slices/paymentSlice';
-import studentService from '../../services/studentService';
+import {
+  fetchScopedStudents, fetchFeeDetails, fetchStudentBills, generateBills, clearDetails, clearBills,
+} from '../../store/slices/feeSlice';
+import { fetchStudentPayments, recordPayment } from '../../store/slices/paymentSlice';
 import paymentService from '../../services/paymentService';
-import { Student, FeeCycle, Payment } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDateDMY, parseDMYtoISO, todayDMY, cycleKindLabel, cycleKindColor } from '../../utils/formatters';
+import { formatCurrency, formatDateDMY, parseDMYtoISO, todayDMY, feeTypeLabel } from '../../utils/formatters';
+import { ScopedStudent } from '../../types';
 
 const statusColorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-  PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', UNPAID: 'default', PENDING: 'default',
+  PAID: 'success', PARTIAL: 'warning', OVERDUE: 'error', UNPAID: 'default',
 };
 
 const paymentModes = ['CASH', 'ONLINE', 'CHEQUE', 'UPI'];
 
-interface PayForm {
-  amount: string;
-  paymentMode: string;
-  transactionReference: string;
-  paymentDate: string;
-  remarks: string;
-}
-
-const emptyForm = (outstanding: number): PayForm => ({
-  amount: outstanding > 0 ? String(outstanding) : '',
-  paymentMode: 'CASH',
-  transactionReference: '',
-  paymentDate: todayDMY(),
-  remarks: '',
-});
-
 const PaymentsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { teacherTimetables } = useSelector((state: RootState) => state.timetables);
-  const { feeCycles } = useSelector((state: RootState) => state.fees);
-  const { cyclePayments } = useSelector((state: RootState) => state.payments);
+  const { students, details, bills, loading, error } = useSelector((state: RootState) => state.fees);
+  const { studentPayments } = useSelector((state: RootState) => state.payments);
 
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-  const [students, setStudents] = useState<Student[]>([]);
-  const [nameFilter, setNameFilter] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [payCycle, setPayCycle] = useState<FeeCycle | null>(null);
-  const [payStudentId, setPayStudentId] = useState<string>('');
-  const [form, setForm] = useState<PayForm>(emptyForm(0));
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [selected, setSelected] = useState<ScopedStudent | null>(null);
+
+  const [missingPrompt, setMissingPrompt] = useState<string[] | null>(null);
+  const [genBusy, setGenBusy] = useState(false);
+  const [genNotice, setGenNotice] = useState<string | null>(null);
+
+  const [payOpen, setPayOpen] = useState(false);
+  const [payForm, setPayForm] = useState({ amount: '', paymentMode: 'CASH', transactionReference: '', paymentDate: todayDMY(), remarks: '' });
+  const [payErr, setPayErr] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
-    if (user?.id) dispatch(fetchTeacherTimetables(user.id));
+    if (user?.id) dispatch(fetchScopedStudents(user.id));
   }, [dispatch, user]);
 
   useEffect(() => {
-    if (selectedCourseId) {
-      setLoading(true);
-      studentService.getByCourse(selectedCourseId)
-        .then(data => {
-          setStudents(data);
-          data.forEach(s => dispatch(fetchFeeCycles({ studentId: s.id })));
-        })
-        .catch(() => setStudents([]))
-        .finally(() => setLoading(false));
+    if (selected) {
+      dispatch(fetchFeeDetails(selected.enrollmentId));
+      dispatch(fetchStudentBills(selected.studentId));
+      dispatch(fetchStudentPayments(selected.studentId));
     } else {
-      setStudents([]);
+      dispatch(clearDetails());
+      dispatch(clearBills());
     }
-  }, [selectedCourseId, dispatch]);
+  }, [dispatch, selected]);
 
-  const uniqueCourses = useMemo(
-    () => [...new Map(teacherTimetables.map(s => [s.courseId, s])).values()],
-    [teacherTimetables],
-  );
-
-  const filteredStudents = useMemo(
-    () => students.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(nameFilter.toLowerCase())),
-    [students, nameFilter],
-  );
-
-  const latestCycle = (studentId: string): FeeCycle | undefined =>
-    feeCycles.filter(f => f.studentId === studentId)
-      .sort((a, b) => ((b.year ?? 0) - (a.year ?? 0)) || ((b.month ?? 0) - (a.month ?? 0)))[0];
-
-  const openPayDialog = (cycle: FeeCycle, studentId: string) => {
-    const outstanding = cycle.dueAmount ?? cycle.outstandingAmount ?? 0;
-    setPayCycle(cycle);
-    setPayStudentId(studentId);
-    setForm(emptyForm(outstanding));
-    setFormError(null);
-    dispatch(fetchPaymentsByFeeCycle(cycle.id));
+  const refresh = () => {
+    if (!selected) return;
+    dispatch(fetchFeeDetails(selected.enrollmentId));
+    dispatch(fetchStudentBills(selected.studentId));
+    dispatch(fetchStudentPayments(selected.studentId));
   };
 
-  const handleSubmit = async () => {
-    if (!payCycle || !payStudentId) return;
-    const amount = Number(form.amount);
-    if (!amount || amount <= 0) { setFormError('Enter a valid amount'); return; }
-    const isoDate = parseDMYtoISO(form.paymentDate);
-    if (!isoDate) { setFormError('Payment date must be dd/MM/yyyy'); return; }
-    setSubmitting(true);
+  const totalOutstanding = useMemo(
+    () => bills.reduce((s, b) => s + (b.outstandingAmount ?? 0), 0),
+    [bills],
+  );
+
+  const runGenerate = async (generateMissing: boolean) => {
+    if (!selected) return;
+    setGenBusy(true);
+    setGenNotice(null);
+    try {
+      const res = await dispatch(generateBills({ enrollmentId: selected.enrollmentId, generateMissing })).unwrap();
+      const parts: string[] = [];
+      if (res.generated.length) parts.push(`${res.generated.length} bill(s) generated`);
+      if (res.alreadyBilled.length) parts.push(`already billed: ${res.alreadyBilled.join(', ')}`);
+      setGenNotice(parts.length ? parts.join(' · ') : 'Nothing new to generate');
+      if (!generateMissing && res.missingMonths.length > 0) setMissingPrompt(res.missingMonths);
+      else setMissingPrompt(null);
+      refresh();
+    } catch (e) {
+      setGenNotice(typeof e === 'string' ? e : 'Failed to generate bills');
+    } finally {
+      setGenBusy(false);
+    }
+  };
+
+  const submitPayment = async () => {
+    if (!selected) return;
+    const amount = Number(payForm.amount);
+    if (!amount || amount <= 0) { setPayErr('Enter a valid amount'); return; }
+    const isoDate = parseDMYtoISO(payForm.paymentDate);
+    if (!isoDate) { setPayErr('Payment date must be dd/MM/yyyy'); return; }
+    setPaying(true);
+    setPayErr(null);
     try {
       await dispatch(recordPayment({
-        feeCycleId: payCycle.id,
-        studentId: payStudentId,
+        studentId: selected.studentId,
         amount,
+        paymentMode: payForm.paymentMode,
+        transactionReference: payForm.transactionReference || undefined,
+        remarks: payForm.remarks || undefined,
         paymentDate: isoDate,
-        paymentMode: form.paymentMode as Payment['paymentMode'],
-        transactionReference: form.transactionReference || undefined,
-        remarks: form.remarks || undefined,
-      } as Omit<Payment, 'id'>)).unwrap();
-      setPayCycle(null);
-      dispatch(fetchFeeCycles({ studentId: payStudentId }));
+      })).unwrap();
+      setPayOpen(false);
+      setPayForm({ amount: '', paymentMode: 'CASH', transactionReference: '', paymentDate: todayDMY(), remarks: '' });
+      refresh();
     } catch (e) {
-      setFormError(typeof e === 'string' ? e : 'Failed to record payment');
+      setPayErr(typeof e === 'string' ? e : 'Failed to record payment');
     } finally {
-      setSubmitting(false);
+      setPaying(false);
     }
   };
 
@@ -128,146 +119,199 @@ const PaymentsPage: React.FC = () => {
     <Box>
       <PageHeader
         title="Payments"
-        subtitle="View students in your courses and record fee payments"
+        subtitle="Generate bills and record fee payments for your students"
         breadcrumbs={[{ label: 'Teacher' }, { label: 'Payments' }]}
       />
 
-      <Box mb={3} display="flex" gap={2} flexWrap="wrap">
-        <TextField select label="Select Course" size="small" sx={{ minWidth: 260 }}
-          value={selectedCourseId} onChange={e => setSelectedCourseId(e.target.value)}>
-          <MenuItem value="">-- Select a course --</MenuItem>
-          {uniqueCourses.map(s => <MenuItem key={s.courseId} value={s.courseId}>{s.courseName}</MenuItem>)}
-        </TextField>
-        <TextField label="Search student by name" size="small" sx={{ minWidth: 260 }}
-          value={nameFilter} onChange={e => setNameFilter(e.target.value)} />
-      </Box>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={12} sm={6} md={5}>
+          <Autocomplete
+            options={students}
+            value={selected}
+            onChange={(_, v) => setSelected(v)}
+            getOptionLabel={(o) => `${o.studentName ?? o.studentId}${o.courseName ? ` — ${o.courseName}` : ''}`}
+            isOptionEqualToValue={(a, b) => a.enrollmentId === b.enrollmentId}
+            renderInput={(params) => <TextField {...params} label="Search student" size="small" />}
+          />
+        </Grid>
+      </Grid>
 
-      {loading ? (
+      {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
+      {genNotice && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setGenNotice(null)}>{genNotice}</Alert>}
+
+      {!selected ? (
+        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="text.secondary">Select a student to view fee lines and bills.</Typography>
+        </Paper>
+      ) : loading ? (
         <LoadingSpinner />
-      ) : selectedCourseId && filteredStudents.length > 0 ? (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Student</TableCell>
-                <TableCell>Period</TableCell>
-                <TableCell align="right">Amount Due</TableCell>
-                <TableCell align="right">Paid</TableCell>
-                <TableCell align="right">Outstanding</TableCell>
-                <TableCell align="right">Excess / Short</TableCell>
-                <TableCell>Fee Paid Date</TableCell>
-                <TableCell align="center">Status</TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredStudents.map(student => {
-                const cycle = latestCycle(student.id);
-                const outstanding = cycle ? (cycle.dueAmount ?? cycle.outstandingAmount ?? 0) : 0;
-                const excess = cycle?.excessAmount ?? 0;
-                const short = cycle?.shortAmount ?? 0;
-                const display = cycle ? (cycle.displayStatus ?? cycle.status) : 'No Data';
-                return (
-                  <TableRow key={student.id} hover>
-                    <TableCell sx={{ fontWeight: 500 }}>{student.firstName} {student.lastName}</TableCell>
-                    <TableCell>
-                      {cycle ? `${cycle.month ?? cycle.billingMonth}/${cycle.year ?? cycle.billingYear}` : '-'}
-                      {cycle?.cycleKind && cycle.cycleKind !== 'MONTHLY' && (
-                        <Chip label={cycleKindLabel(cycle.cycleKind)} color={cycleKindColor(cycle.cycleKind)} size="small" variant="outlined" sx={{ ml: 1 }} />
-                      )}
-                    </TableCell>
-                    <TableCell align="right">{cycle ? formatCurrency(cycle.totalAmount) : '-'}</TableCell>
-                    <TableCell align="right" sx={{ color: 'success.main' }}>{cycle ? formatCurrency(cycle.paidAmount) : '-'}</TableCell>
-                    <TableCell align="right" sx={{ color: outstanding > 0 ? 'error.main' : 'inherit' }}>{cycle ? formatCurrency(outstanding) : '-'}</TableCell>
-                    <TableCell align="right">
-                      {excess > 0 ? (
-                        <Typography variant="body2" color="success.main">+{formatCurrency(excess)}</Typography>
-                      ) : short > 0 ? (
-                        <Typography variant="body2" color="error.main">-{formatCurrency(short)}</Typography>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell>{cycle ? formatDateDMY(cycle.dueDate) : '-'}</TableCell>
-                    <TableCell align="center">
-                      <Chip label={display} color={statusColorMap[display] || 'default'} size="small" />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Box display="flex" gap={1} justifyContent="center">
-                        <Button size="small" variant="outlined" disabled={!cycle || display === 'PAID'}
-                          onClick={() => cycle && openPayDialog(cycle, student.id)}>
-                          Record Payment
-                        </Button>
-                        <Tooltip title="Online payment coming soon">
-                          <span><Button size="small" variant="contained" disabled>Pay Now</Button></span>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : selectedCourseId ? (
-        <Typography color="text.secondary">No students found in this course.</Typography>
       ) : (
-        <Typography color="text.secondary">Select a course to view students.</Typography>
+        <>
+          <Box display="flex" gap={2} mb={2} flexWrap="wrap">
+            <Button variant="contained" onClick={() => runGenerate(false)} disabled={genBusy}>
+              Generate Bill
+            </Button>
+            <Tooltip title={bills.length === 0 ? 'Generate at least one bill before recording a payment' : ''}>
+              <span>
+                <Button
+                  variant="outlined"
+                  startIcon={<PaymentIcon />}
+                  disabled={bills.length === 0}
+                  onClick={() => { setPayForm(f => ({ ...f, amount: String(totalOutstanding || '') })); setPayOpen(true); }}
+                >
+                  Record Payment
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
+
+          <Typography variant="h6" gutterBottom>Fee Lines</Typography>
+          <TableContainer component={Paper} variant="outlined" sx={{ mb: 4 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Fee Type</TableCell>
+                  <TableCell>Cadence</TableCell>
+                  <TableCell align="right">Amount</TableCell>
+                  <TableCell>Due Date</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {details.length === 0 ? (
+                  <TableRow><TableCell colSpan={4} align="center">No fee lines.</TableCell></TableRow>
+                ) : details.map(d => (
+                  <TableRow key={d.id} hover>
+                    <TableCell>{feeTypeLabel(d.feeType)}</TableCell>
+                    <TableCell>{d.cadence ?? '-'}</TableCell>
+                    <TableCell align="right">{formatCurrency(d.amount)}</TableCell>
+                    <TableCell>{formatDateDMY(d.dueDate)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <Typography variant="h6" gutterBottom>Bills</Typography>
+          <TableContainer component={Paper} variant="outlined" sx={{ mb: 4 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Fee Type</TableCell>
+                  <TableCell>Period</TableCell>
+                  <TableCell align="right">Amount Due</TableCell>
+                  <TableCell align="right">Paid</TableCell>
+                  <TableCell align="right">Outstanding</TableCell>
+                  <TableCell>Due Date</TableCell>
+                  <TableCell>Paid Date</TableCell>
+                  <TableCell align="center">Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {bills.length === 0 ? (
+                  <TableRow><TableCell colSpan={8} align="center">No bills generated yet.</TableCell></TableRow>
+                ) : bills.map(b => {
+                  const display = b.displayStatus ?? b.status;
+                  return (
+                    <TableRow key={b.id} hover>
+                      <TableCell>{feeTypeLabel(b.feeType)}</TableCell>
+                      <TableCell>{b.billingMonth ? `${b.billingMonth}/${b.billingYear}` : '-'}</TableCell>
+                      <TableCell align="right">{formatCurrency(b.amountDue)}</TableCell>
+                      <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(b.paidAmount)}</TableCell>
+                      <TableCell align="right" sx={{ color: b.outstandingAmount > 0 ? 'error.main' : 'inherit' }}>{formatCurrency(b.outstandingAmount)}</TableCell>
+                      <TableCell>{formatDateDMY(b.dueDate)}</TableCell>
+                      <TableCell>{formatDateDMY(b.paymentDate)}</TableCell>
+                      <TableCell align="center">
+                        <Chip label={display} color={statusColorMap[display] || 'default'} size="small" />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {studentPayments.length > 0 && (
+            <>
+              <Typography variant="h6" gutterBottom>Payments</Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Date</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                      <TableCell>Mode</TableCell>
+                      <TableCell>Reference</TableCell>
+                      <TableCell align="center">Receipt</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {studentPayments.map(p => (
+                      <TableRow key={p.id} hover>
+                        <TableCell>{formatDateDMY(p.paymentDate)}</TableCell>
+                        <TableCell align="right">{formatCurrency(p.amount)}</TableCell>
+                        <TableCell>{p.paymentMode}</TableCell>
+                        <TableCell>{p.transactionReference || '-'}</TableCell>
+                        <TableCell align="center">
+                          <Button size="small" startIcon={<DownloadIcon />} onClick={() => paymentService.downloadReceipt(p.id)}>Receipt</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
+          )}
+        </>
       )}
 
-      <Dialog open={!!payCycle} onClose={() => setPayCycle(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Record Payment</DialogTitle>
+      <Dialog open={!!missingPrompt} onClose={() => setMissingPrompt(null)}>
+        <DialogTitle>Back-fill missing months?</DialogTitle>
         <DialogContent>
-          {payCycle && (
-            <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary">
-                  Outstanding: {formatCurrency(payCycle.dueAmount ?? payCycle.outstandingAmount ?? 0)}
-                </Typography>
-              </Grid>
-              {cyclePayments.length > 0 && (
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" gutterBottom>Payment History</Typography>
-                  {cyclePayments.map(p => (
-                    <Box key={p.id} display="flex" alignItems="center" justifyContent="space-between" py={0.5}>
-                      <Typography variant="body2">
-                        {formatDateDMY(p.paymentDate)} — {formatCurrency(p.amount)} ({p.paymentMode})
-                      </Typography>
-                      <Button size="small" startIcon={<DownloadIcon />}
-                        onClick={() => paymentService.downloadReceipt(p.id)}>Receipt</Button>
-                    </Box>
-                  ))}
-                </Grid>
-              )}
-              <Grid item xs={6}>
-                <TextField label="Amount" type="number" fullWidth size="small"
-                  value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField select label="Payment Mode" fullWidth size="small"
-                  value={form.paymentMode} onChange={e => setForm({ ...form, paymentMode: e.target.value })}>
-                  {paymentModes.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
-                </TextField>
-              </Grid>
-              <Grid item xs={6}>
-                <TextField label="Payment Date (dd/MM/yyyy)" fullWidth size="small"
-                  value={form.paymentDate} onChange={e => setForm({ ...form, paymentDate: e.target.value })} />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField label="Transaction Reference" fullWidth size="small"
-                  value={form.transactionReference} onChange={e => setForm({ ...form, transactionReference: e.target.value })} />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField label="Remarks" fullWidth size="small" multiline rows={2}
-                  value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} />
-              </Grid>
-              {formError && (
-                <Grid item xs={12}><Typography color="error" variant="body2">{formError}</Typography></Grid>
-              )}
-            </Grid>
-          )}
+          <Typography variant="body2">
+            These earlier months are not yet billed: {missingPrompt?.join(', ')}. Generate bills for them too?
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPayCycle(null)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSubmit} disabled={submitting}>Record Payment</Button>
+          <Button onClick={() => setMissingPrompt(null)}>No</Button>
+          <Button variant="contained" disabled={genBusy} onClick={() => { setMissingPrompt(null); runGenerate(true); }}>Yes, back-fill</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={payOpen} onClose={() => setPayOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Record Payment</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12}>
+              <Typography variant="body2" color="text.secondary">Total outstanding: {formatCurrency(totalOutstanding)}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField label="Amount" type="number" fullWidth size="small"
+                value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField select label="Payment Mode" fullWidth size="small"
+                value={payForm.paymentMode} onChange={e => setPayForm({ ...payForm, paymentMode: e.target.value })}>
+                {paymentModes.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField label="Payment Date (dd/MM/yyyy)" fullWidth size="small"
+                value={payForm.paymentDate} onChange={e => setPayForm({ ...payForm, paymentDate: e.target.value })} />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField label="Transaction Reference" fullWidth size="small"
+                value={payForm.transactionReference} onChange={e => setPayForm({ ...payForm, transactionReference: e.target.value })} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField label="Remarks" fullWidth size="small" multiline rows={2}
+                value={payForm.remarks} onChange={e => setPayForm({ ...payForm, remarks: e.target.value })} />
+            </Grid>
+            {payErr && <Grid item xs={12}><Typography color="error" variant="body2">{payErr}</Typography></Grid>}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPayOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={submitPayment} disabled={paying}>Record Payment</Button>
         </DialogActions>
       </Dialog>
     </Box>
