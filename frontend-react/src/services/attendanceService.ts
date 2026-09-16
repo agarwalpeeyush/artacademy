@@ -147,44 +147,6 @@ const attendanceService = {
     return toArray(unwrap(response)).map(normTeacherAttendance);
   },
 
-  markTeacherAttendance: async (
-    data: Omit<TeacherAttendance, 'id'> & { timetableId: string; courseId: string }
-  ): Promise<TeacherAttendance> => {
-    const { date, ...rest } = data as Omit<TeacherAttendance, 'id'> & {
-      date?: string;
-      timetableId: string;
-      courseId: string;
-    };
-    const response = await api.post('/attendance/teachers', { ...rest, attendanceDate: date });
-    return normTeacherAttendance(unwrap(response));
-  },
-
-  // GET /attendance/teachers/timetable/{timetableId}/date
-  getTeacherTimetableAttendanceForDate: async (
-    timetableId: string,
-    date: string
-  ): Promise<TeacherAttendance[]> => {
-    const response = await api.get(`/attendance/teachers/timetable/${timetableId}/date`, { params: { date } });
-    return toArray(unwrap(response)).map(normTeacherAttendance);
-  },
-
-  // POST /attendance/teachers/timetable/{timetableId}/bulk-range
-  markTeacherBulkRange: async (data: {
-    timetableId: string;
-    courseId: string;
-    sessionDates: string[];
-    status: AttendanceStatus;
-    teacherIds: string[];
-    remarks?: string;
-  }): Promise<TeacherAttendance[]> => {
-    const { timetableId, status, ...rest } = data;
-    const response = await api.post(
-      `/attendance/teachers/timetable/${timetableId}/bulk-range`,
-      { ...rest, defaultStatus: status }
-    );
-    return toArray(unwrap(response)).map(normTeacherAttendance);
-  },
-
   // ---- Corrections (R16 direct bulk edit — no approval workflow) ----
   editStudentAttendance: async (data: {
     editedByUserId: string;
@@ -193,16 +155,6 @@ const attendanceService = {
     edits: AttendanceEdit[];
   }): Promise<AttendanceCorrection[]> => {
     const response = await api.post('/attendance/corrections/students', data);
-    return toArray(unwrap(response)).map(normCorrection);
-  },
-
-  editTeacherAttendance: async (data: {
-    editedByUserId: string;
-    editorRole: string;
-    reason?: string;
-    edits: AttendanceEdit[];
-  }): Promise<AttendanceCorrection[]> => {
-    const response = await api.post('/attendance/corrections/teachers', data);
     return toArray(unwrap(response)).map(normCorrection);
   },
 

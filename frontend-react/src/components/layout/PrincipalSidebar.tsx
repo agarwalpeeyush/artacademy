@@ -22,7 +22,6 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
-import RuleIcon from '@mui/icons-material/Rule';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import PaymentIcon from '@mui/icons-material/Payment';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -49,12 +48,7 @@ const masterDataItems = [
 const navItems = [
   { label: 'Dashboard', icon: <DashboardIcon />, path: '/principal/dashboard' },
   { label: 'Enrollments', icon: <AssignmentIcon />, path: '/principal/enrollments' },
-  { label: 'Exams', icon: <EventNoteIcon />, path: '/principal/exams' },
   { label: 'Mark Student Attendance', icon: <HowToRegIcon />, path: '/principal/mark-student-attendance' },
-  { label: 'Mark Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/mark-teacher-attendance' },
-  { label: 'Attendance Report', icon: <EventNoteIcon />, path: '/principal/attendance' },
-  { label: 'Teacher Attendance', icon: <HowToRegIcon />, path: '/principal/teacher-attendance' },
-  { label: 'Attendance Corrections', icon: <RuleIcon />, path: '/principal/attendance-corrections' },
   { label: 'Revenue', icon: <AttachMoneyIcon />, path: '/principal/revenue' },
   { label: 'Student Fee Detail', icon: <PaymentIcon />, path: '/principal/student-fee-detail' },
   { label: 'Fee Bills', icon: <ReceiptLongIcon />, path: '/principal/fee-bills' },

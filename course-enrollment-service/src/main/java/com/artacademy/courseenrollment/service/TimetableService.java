@@ -2,12 +2,14 @@ package com.artacademy.courseenrollment.service;
 
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.courseenrollment.client.UserServiceClient;
+import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.Timetable;
 import com.artacademy.courseenrollment.dto.TimetableConflictResponse;
 import com.artacademy.courseenrollment.dto.TimetableRequest;
 import com.artacademy.courseenrollment.dto.TimetableResponse;
 import com.artacademy.courseenrollment.dto.UpcomingClassResponse;
 import com.artacademy.courseenrollment.mapper.TimetableMapper;
+import com.artacademy.courseenrollment.repository.CourseRepository;
 import com.artacademy.courseenrollment.repository.TimetableRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,32 +33,33 @@ public class TimetableService {
     private final TimetableRepository timetableRepository;
     private final TimetableMapper timetableMapper;
     private final UserServiceClient userServiceClient;
+    private final CourseRepository courseRepository;
 
     private static final LocalTime DAY_START = LocalTime.of(8, 0);
     private static final LocalTime DAY_END = LocalTime.of(20, 0);
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getAllTimetables() {
-        return enrichTeacherNames(timetableRepository.findAll().stream()
+        return enrich(timetableRepository.findAll().stream()
                 .map(timetableMapper::toResponse)
                 .toList());
     }
 
     @Transactional(readOnly = true)
     public TimetableResponse getById(UUID id) {
-        return enrichTeacherNames(List.of(timetableMapper.toResponse(findTimetableById(id)))).get(0);
+        return enrich(List.of(timetableMapper.toResponse(findTimetableById(id)))).get(0);
     }
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getByTeacher(UUID teacherId) {
-        return enrichTeacherNames(timetableRepository.findByTeacherId(teacherId).stream()
+        return enrich(timetableRepository.findByTeacherId(teacherId).stream()
                 .map(timetableMapper::toResponse)
                 .toList());
     }
 
     @Transactional(readOnly = true)
     public List<TimetableResponse> getByCourse(UUID courseId) {
-        return enrichTeacherNames(timetableRepository.findByCourseId(courseId).stream()
+        return enrich(timetableRepository.findByCourseId(courseId).stream()
                 .map(timetableMapper::toResponse)
                 .toList());
     }
@@ -66,18 +69,31 @@ public class TimetableService {
         if (courseIds == null || courseIds.isEmpty()) {
             return List.of();
         }
-        return enrichTeacherNames(timetableRepository.findByCourseIdIn(courseIds).stream()
+        return enrich(timetableRepository.findByCourseIdIn(courseIds).stream()
                 .map(timetableMapper::toResponse)
                 .toList());
     }
 
-    /** Populate {@code teacherName} on each response from user-service (one bulk lookup per call). */
-    private List<TimetableResponse> enrichTeacherNames(List<TimetableResponse> responses) {
+    /**
+     * Populate {@code teacherName} (from user-service) and {@code courseName} (from the local
+     * course table) on each response. One bulk lookup per source, per call.
+     */
+    private List<TimetableResponse> enrich(List<TimetableResponse> responses) {
         if (responses.isEmpty()) {
             return responses;
         }
-        Map<UUID, String> names = userServiceClient.fetchTeacherNames();
-        responses.forEach(r -> r.setTeacherName(names.get(r.getTeacherId())));
+        Map<UUID, String> teacherNames = userServiceClient.fetchTeacherNames();
+        List<UUID> courseIds = responses.stream()
+                .map(TimetableResponse::getCourseId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, String> courseNames = courseRepository.findAllById(courseIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Course::getId, Course::getCourseName));
+        responses.forEach(r -> {
+            r.setTeacherName(teacherNames.get(r.getTeacherId()));
+            r.setCourseName(courseNames.get(r.getCourseId()));
+        });
         return responses;
     }
 

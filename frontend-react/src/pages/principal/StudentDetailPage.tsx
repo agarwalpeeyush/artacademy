@@ -22,7 +22,7 @@ import feeService from '../../services/feeService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { formatCurrency, formatDate, feeTypeLabel } from '../../utils/formatters';
+import { formatCurrency, formatDate, feeTypeLabel, formatTime, getDayName } from '../../utils/formatters';
 
 interface AttendanceStats {
   totalDays?: number;
@@ -32,6 +32,18 @@ interface AttendanceStats {
   halfDays?: number;
   attendancePercentage?: number;
 }
+
+/** ISO yyyy-MM-dd range covering the last 3 months up to today. */
+const lastThreeMonths = (): { from: string; to: string } => {
+  const to = new Date();
+  const from = new Date();
+  from.setMonth(from.getMonth() - 3);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: iso(from), to: iso(to) };
+};
+
+const slotLabel = (t: { dayOfWeek?: string; startTime?: string; endTime?: string }): string =>
+  `${t.dayOfWeek ? getDayName(t.dayOfWeek) : ''} ${formatTime(t.startTime)}–${formatTime(t.endTime)}`.trim();
 
 const Info: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <Grid item xs={12} sm={6} md={4}>
@@ -58,22 +70,36 @@ const StudentDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
+    const { from, to } = lastThreeMonths();
     enrollmentService.getByStudent(id).then(setEnrollments).catch(() => setEnrollments([]));
-    attendanceService.getStudentAttendance({ studentId: id }).then(setAttendance).catch(() => setAttendance([]));
+    attendanceService.getStudentAttendanceById(id, from, to).then(setAttendance).catch(() => setAttendance([]));
     attendanceService.getStudentStats(id).then(setStats).catch(() => setStats(null));
     feeService.getBills(id).then(setFees).catch(() => setFees([]));
   }, [id]);
 
   const enrollmentCols: Column<Record<string, unknown>>[] = [
-    { id: 'courseName', label: 'Course', minWidth: 160 },
-    { id: 'className', label: 'Class', minWidth: 140 },
+    { id: 'courseName', label: 'Course', minWidth: 160, format: (v) => (v as string) || '-' },
+    { id: 'teacherName', label: 'Teacher', minWidth: 140, format: (v) => (v as string) || '-' },
     { id: 'enrollmentDate', label: 'Enrolled On', minWidth: 120, format: (v) => formatDate(v as string) },
+    {
+      id: 'timetables', label: 'Timetable Slots', minWidth: 220,
+      format: (v) => {
+        const slots = (v as Enrollment['timetables']) ?? [];
+        return slots.length ? slots.map(slotLabel).join(', ') : '-';
+      },
+    },
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'ACTIVE' ? 'success' : 'default'} /> },
   ];
 
   const attendanceCols: Column<Record<string, unknown>>[] = [
     { id: 'attendanceDate', label: 'Date', minWidth: 120, format: (v) => formatDate(v as string) },
-    { id: 'className', label: 'Class', minWidth: 140 },
+    {
+      id: 'startTime', label: 'Time Slot', minWidth: 140,
+      format: (v, row) => {
+        const r = row as Record<string, unknown>;
+        return v ? `${formatTime(v as string)}–${formatTime(r.endTime as string)}` : '-';
+      },
+    },
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'error' : 'warning'} /> },
     { id: 'remarks', label: 'Remarks', minWidth: 160 },
   ];
@@ -85,12 +111,6 @@ const StudentDetailPage: React.FC = () => {
     { id: 'paidAmount', label: 'Paid', minWidth: 110, align: 'right', format: (v) => formatCurrency(v as number) },
     { id: 'outstandingAmount', label: 'Outstanding', minWidth: 120, align: 'right', format: (v) => formatCurrency(v as number) },
     { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'PAID' ? 'success' : 'warning'} /> },
-  ];
-
-  const timetableCols: Column<Record<string, unknown>>[] = [
-    { id: 'courseName', label: 'Course', minWidth: 160 },
-    { id: 'className', label: 'Class', minWidth: 160 },
-    { id: 'status', label: 'Status', minWidth: 100 },
   ];
 
   if (loading && !student) return <LoadingSpinner />;
@@ -137,7 +157,6 @@ const StudentDetailPage: React.FC = () => {
         <Tab label="Enrollments" />
         <Tab label="Attendance" />
         <Tab label="Fees" />
-        <Tab label="Timetable" />
       </Tabs>
 
       {tab === 0 && (
@@ -160,10 +179,6 @@ const StudentDetailPage: React.FC = () => {
 
       {tab === 2 && (
         <DataTable columns={feeCols} rows={fees as unknown as Record<string, unknown>[]} emptyMessage="No fee records." />
-      )}
-
-      {tab === 3 && (
-        <DataTable columns={timetableCols} rows={enrollments as unknown as Record<string, unknown>[]} emptyMessage="No scheduled classes." />
       )}
     </Box>
   );

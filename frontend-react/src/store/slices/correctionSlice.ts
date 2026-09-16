@@ -30,17 +30,6 @@ export const editStudentAttendance = createAsyncThunk<
   }
 });
 
-export const editTeacherAttendance = createAsyncThunk<
-  AttendanceCorrection[],
-  { editedByUserId: string; editorRole: string; reason?: string; edits: AttendanceEdit[] }
->('corrections/editTeacher', async (data, { rejectWithValue }) => {
-  try {
-    return await attendanceService.editTeacherAttendance(data);
-  } catch (error: unknown) {
-    return rejectWithValue(errMsg(error, 'Failed to edit attendance'));
-  }
-});
-
 export const fetchCorrectionsForSubject = createAsyncThunk<
   AttendanceCorrection[],
   string
@@ -83,9 +72,7 @@ const correctionSlice = createSlice({
       .addCase(fetchCorrectionsForAttendance.fulfilled, (state, action) => { state.loading = false; state.corrections = action.payload; })
       .addCase(fetchCorrectionsForAttendance.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
       .addCase(editStudentAttendance.fulfilled, (state, action) => { prepend(state, action.payload); })
-      .addCase(editStudentAttendance.rejected, (state, action) => { state.error = action.payload as string; })
-      .addCase(editTeacherAttendance.fulfilled, (state, action) => { prepend(state, action.payload); })
-      .addCase(editTeacherAttendance.rejected, (state, action) => { state.error = action.payload as string; });
+      .addCase(editStudentAttendance.rejected, (state, action) => { state.error = action.payload as string; });
   },
 });
 

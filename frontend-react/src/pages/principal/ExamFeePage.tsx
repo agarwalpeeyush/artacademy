@@ -4,11 +4,13 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip,
 } from '@mui/material';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import EventNoteIcon from '@mui/icons-material/EventNote';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchScopedStudents, generateExamBills } from '../../store/slices/feeSlice';
 import feeService from '../../services/feeService';
 import teacherService from '../../services/teacherService';
+import examService from '../../services/examService';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatCurrency, feeTypeLabel } from '../../utils/formatters';
@@ -20,6 +22,15 @@ interface CohortRow {
   student: ScopedStudent;
   examLine: FeeDetailLine | null;
 }
+
+interface ExamFormData {
+  title: string;
+  examDate: string;
+  startTime: string;
+  endTime: string;
+}
+
+const emptyExamForm: ExamFormData = { title: '', examDate: '', startTime: '', endTime: '' };
 
 const ExamFeePage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -34,6 +45,9 @@ const ExamFeePage: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [examForm, setExamForm] = useState<ExamFormData>(emptyExamForm);
+  const [schedulingExam, setSchedulingExam] = useState(false);
 
   useEffect(() => {
     dispatch(fetchScopedStudents(undefined));
@@ -74,6 +88,7 @@ const ExamFeePage: React.FC = () => {
   useEffect(() => {
     if (course) loadCohort(course.courseId);
     else setCohort([]);
+    setExamForm(emptyExamForm);
   }, [course]);
 
   const withExam = cohort.filter(r => r.examLine);
@@ -91,6 +106,31 @@ const ExamFeePage: React.FC = () => {
       setError(typeof e === 'string' ? e : 'Failed to generate exam bills');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const canScheduleExam = !!course && !!examForm.examDate && !!examForm.startTime && !!examForm.endTime;
+
+  const scheduleExam = async () => {
+    if (!course || !canScheduleExam) return;
+    setSchedulingExam(true);
+    setNotice(null);
+    setError(null);
+    try {
+      await examService.create({
+        courseId: course.courseId,
+        title: examForm.title || undefined,
+        examDate: examForm.examDate,
+        startTime: examForm.startTime,
+        endTime: examForm.endTime,
+      });
+      setNotice('Exam scheduled successfully');
+      setExamForm(emptyExamForm);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      setError(e.response?.data?.message || 'Failed to schedule exam');
+    } finally {
+      setSchedulingExam(false);
     }
   };
 
@@ -149,6 +189,60 @@ const ExamFeePage: React.FC = () => {
               {withExam.length} student(s) with an exam fee line
             </Typography>
           </Box>
+
+          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ mb: 1.5 }}>Schedule Exam</Typography>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  label="Course" size="small" fullWidth
+                  value={course.courseName}
+                  InputProps={{ readOnly: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <TextField
+                  label="Exam Name" size="small" fullWidth
+                  value={examForm.title}
+                  onChange={(e) => setExamForm(f => ({ ...f, title: e.target.value }))}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4} md={2}>
+                <TextField
+                  label="Exam Date" type="date" size="small" fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  value={examForm.examDate}
+                  onChange={(e) => setExamForm(f => ({ ...f, examDate: e.target.value }))}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4} md={2}>
+                <TextField
+                  label="Start Time" type="time" size="small" fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  value={examForm.startTime}
+                  onChange={(e) => setExamForm(f => ({ ...f, startTime: e.target.value }))}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4} md={2}>
+                <TextField
+                  label="End Time" type="time" size="small" fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  value={examForm.endTime}
+                  onChange={(e) => setExamForm(f => ({ ...f, endTime: e.target.value }))}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Button
+                  variant="contained"
+                  startIcon={<EventNoteIcon />}
+                  disabled={schedulingExam || !canScheduleExam}
+                  onClick={scheduleExam}
+                >
+                  Schedule Exam
+                </Button>
+              </Grid>
+            </Grid>
+          </Paper>
 
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">

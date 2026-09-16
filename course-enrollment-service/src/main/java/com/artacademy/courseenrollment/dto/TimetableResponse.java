@@ -17,6 +17,7 @@ public class TimetableResponse {
 
     private UUID id;
     private UUID courseId;
+    private String courseName;
     private UUID teacherId;
     private String teacherName;
     private LocalTime startTime;

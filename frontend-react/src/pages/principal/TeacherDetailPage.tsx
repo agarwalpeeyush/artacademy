@@ -15,13 +15,32 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { AppDispatch, RootState } from '../../store/store';
 import { fetchTeacherById } from '../../store/slices/teacherSlice';
-import { Timetable } from '../../types';
+import { Timetable, TeacherAttendance } from '../../types';
 import timetableService from '../../services/timetableService';
 import teacherService from '../../services/teacherService';
+import attendanceService from '../../services/attendanceService';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { Column } from '../../components/common/DataTable';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatDate, getDayName, formatTime } from '../../utils/formatters';
+
+/** ISO yyyy-MM-dd range covering the last 3 months up to today. */
+const lastThreeMonths = (): { from: string; to: string } => {
+  const to = new Date();
+  const from = new Date();
+  from.setMonth(from.getMonth() - 3);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: iso(from), to: iso(to) };
+};
+
+const slotLabel = (t: { dayOfWeek?: string; startTime?: string; endTime?: string }): string =>
+  `${t.dayOfWeek ? getDayName(t.dayOfWeek) : ''} ${formatTime(t.startTime)}–${formatTime(t.endTime)}`.trim();
+
+interface CourseRow {
+  courseId: string;
+  courseName: string;
+  slots: string;
+}
 
 interface AttendanceStats {
   totalDays?: number;
@@ -45,7 +64,7 @@ const TeacherDetailPage: React.FC = () => {
 
   const [tab, setTab] = useState(0);
   const [timetables, setTimetables] = useState<Timetable[]>([]);
-  const [availability, setAvailability] = useState<Record<string, unknown>[]>([]);
+  const [attendance, setAttendance] = useState<TeacherAttendance[]>([]);
   const [stats, setStats] = useState<AttendanceStats | null>(null);
 
   useEffect(() => {
@@ -54,40 +73,53 @@ const TeacherDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
+    const { from, to } = lastThreeMonths();
     timetableService.getByTeacher(id).then(setTimetables).catch(() => setTimetables([]));
-    teacherService.getAvailability(id)
-      .then((d) => setAvailability(Array.isArray(d) ? d : d?.content ?? []))
-      .catch(() => setAvailability([]));
+    attendanceService.getTeacherAttendanceById(id, from, to).then(setAttendance).catch(() => setAttendance([]));
     teacherService.getAttendanceStats(id)
       .then((d) => setStats(d?.data ?? d))
       .catch(() => setStats(null));
   }, [id]);
 
-  const courses = useMemo(() => {
-    const map = new Map<string, string>();
+  // Courses the teacher takes, each with its timetable slots (grouped from the timetable rows).
+  const courses = useMemo<CourseRow[]>(() => {
+    const map = new Map<string, { courseName: string; slots: string[] }>();
     timetables.forEach((t) => {
-      if (t.courseId && !map.has(t.courseId)) {
-        map.set(t.courseId, t.courseName ?? t.courseId);
-      }
+      if (!t.courseId) return;
+      const entry = map.get(t.courseId) ?? { courseName: t.courseName ?? t.courseId, slots: [] };
+      entry.slots.push(slotLabel(t));
+      map.set(t.courseId, entry);
     });
-    return Array.from(map.entries()).map(([courseId, courseName]) => ({ courseId, courseName }));
+    return Array.from(map.entries()).map(([courseId, { courseName, slots }]) => ({
+      courseId,
+      courseName,
+      slots: slots.join(', '),
+    }));
   }, [timetables]);
 
-  const scheduleCols: Column<Record<string, unknown>>[] = [
-    { id: 'dayOfWeek', label: 'Day', minWidth: 120, format: (v) => getDayName(v as string) },
-    { id: 'courseName', label: 'Course', minWidth: 160, format: (v) => (v as string) || '—' },
-    { id: 'startTime', label: 'Start', minWidth: 100, format: (v) => formatTime(v as string) },
-    { id: 'endTime', label: 'End', minWidth: 100, format: (v) => formatTime(v as string) },
-  ];
+  // Resolve a teacher-attendance row's timetableId to its day/time slot label.
+  const slotById = useMemo(() => {
+    const m = new Map<string, Timetable>();
+    timetables.forEach((t) => m.set(t.id, t));
+    return m;
+  }, [timetables]);
 
   const courseCols: Column<Record<string, unknown>>[] = [
     { id: 'courseName', label: 'Course', minWidth: 200 },
+    { id: 'slots', label: 'Timetable Slots', minWidth: 260, format: (v) => (v as string) || '-' },
   ];
 
-  const availabilityCols: Column<Record<string, unknown>>[] = [
-    { id: 'dayOfWeek', label: 'Day', minWidth: 120, format: (v) => (v ? getDayName(String(v)) : '-') },
-    { id: 'startTime', label: 'From', minWidth: 100, format: (v) => (v ? formatTime(String(v)) : '-') },
-    { id: 'endTime', label: 'To', minWidth: 100, format: (v) => (v ? formatTime(String(v)) : '-') },
+  const attendanceCols: Column<Record<string, unknown>>[] = [
+    { id: 'date', label: 'Date', minWidth: 120, format: (v) => formatDate(v as string) },
+    {
+      id: 'timetableId', label: 'Time Slot', minWidth: 200,
+      format: (v) => {
+        const slot = v ? slotById.get(v as string) : undefined;
+        return slot ? slotLabel(slot) : '-';
+      },
+    },
+    { id: 'status', label: 'Status', minWidth: 100, format: (v) => <Chip label={v as string} size="small" color={v === 'PRESENT' ? 'success' : v === 'ABSENT' ? 'error' : 'warning'} /> },
+    { id: 'remarks', label: 'Remarks', minWidth: 160 },
   ];
 
   if (loading && !teacher) return <LoadingSpinner />;
@@ -122,8 +154,6 @@ const TeacherDetailPage: React.FC = () => {
 
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab label={`Courses (${courses.length})`} />
-        <Tab label={`Schedule (${timetables.length})`} />
-        <Tab label="Availability" />
         <Tab label="Attendance" />
       </Tabs>
 
@@ -132,25 +162,16 @@ const TeacherDetailPage: React.FC = () => {
       )}
 
       {tab === 1 && (
-        <DataTable columns={scheduleCols} rows={timetables as unknown as Record<string, unknown>[]} emptyMessage="No scheduled timetable slots." />
-      )}
-
-      {tab === 2 && (
-        <DataTable columns={availabilityCols} rows={availability} emptyMessage="No availability configured." />
-      )}
-
-      {tab === 3 && (
         <Box>
-          {stats ? (
-            <Grid container spacing={2}>
+          {stats && (
+            <Grid container spacing={2} mb={2}>
               <Info label="Total Days" value={stats.totalDays ?? '-'} />
               <Info label="Present" value={stats.presentCount ?? '-'} />
               <Info label="Absent" value={stats.absentCount ?? '-'} />
               <Info label="Attendance %" value={stats.attendancePercentage != null ? `${stats.attendancePercentage}%` : '-'} />
             </Grid>
-          ) : (
-            <Typography color="text.secondary">No attendance data.</Typography>
           )}
+          <DataTable columns={attendanceCols} rows={attendance as unknown as Record<string, unknown>[]} emptyMessage="No attendance records in the last 3 months." />
         </Box>
       )}
     </Box>

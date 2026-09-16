@@ -218,28 +218,6 @@ export interface AttendanceCorrection {
   editedAt?: string;
 }
 
-export interface CourseAttendanceSummary {
-  courseId?: string;
-  courseName: string;
-  attendanceMonth: number;
-  attendanceYear: number;
-  studentCount: number;
-  totalDays: number;
-  presentDays: number;
-  attendancePercentage: number;
-}
-
-export interface AttendanceException {
-  subjectId: string;
-  subjectName: string;
-  subjectType: string;
-  attendanceMonth?: number;
-  attendanceYear?: number;
-  totalDays: number;
-  presentDays: number;
-  attendancePercentage: number;
-}
-
 export interface Timetable {
   id: string;
   courseId: string;
@@ -467,17 +445,6 @@ export interface DefaulterStudent {
   overdueMonths: number;
   lastPaymentDate?: string;
   enrolledCourses: string[];
-}
-
-export interface AttendanceReport {
-  studentId?: string;
-  teacherId?: string;
-  name: string;
-  totalClasses: number;
-  presentCount: number;
-  absentCount: number;
-  lateCount: number;
-  attendancePercentage: number;
 }
 
 export interface DashboardStats {

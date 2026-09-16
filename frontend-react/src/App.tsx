@@ -24,12 +24,7 @@ import CoursesPage from './pages/principal/CoursesPage';
 import CourseTypesPage from './pages/principal/CourseTypesPage';
 import EnrollmentsPage from './pages/principal/EnrollmentsPage';
 import TimetablePage from './pages/principal/TimetablePage';
-import AttendanceReportPage from './pages/principal/AttendanceReportPage';
-import AttendanceCorrectionsPage from './pages/principal/AttendanceCorrectionsPage';
-import TeacherAttendancePage from './pages/principal/TeacherAttendancePage';
 import MarkStudentAttendancePage from './pages/principal/MarkStudentAttendancePage';
-import MarkTeacherAttendancePage from './pages/principal/MarkTeacherAttendancePage';
-import ExamsPage from './pages/principal/ExamsPage';
 import RevenuePage from './pages/principal/RevenuePage';
 import DefaultersPage from './pages/principal/DefaultersPage';
 import StudentFeeDetailPage from './pages/principal/StudentFeeDetailPage';
@@ -125,12 +120,8 @@ const App: React.FC = () => {
         <Route path="enrollments" element={<EnrollmentsPage />} />
         <Route path="timetable" element={<TimetablePage />} />
         <Route path="conflicts" element={<Navigate to="/principal/dashboard" replace />} />
-        <Route path="exams" element={<ExamsPage />} />
+        <Route path="exams" element={<Navigate to="/principal/exam-fee" replace />} />
         <Route path="mark-student-attendance" element={<MarkStudentAttendancePage />} />
-        <Route path="mark-teacher-attendance" element={<MarkTeacherAttendancePage />} />
-        <Route path="attendance" element={<AttendanceReportPage />} />
-        <Route path="teacher-attendance" element={<TeacherAttendancePage />} />
-        <Route path="attendance-corrections" element={<AttendanceCorrectionsPage />} />
         <Route path="revenue" element={<RevenuePage />} />
         <Route path="defaulters" element={<DefaultersPage />} />
         <Route path="student-fee-detail" element={<StudentFeeDetailPage />} />
