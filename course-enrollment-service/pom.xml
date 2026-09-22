@@ -99,6 +99,13 @@
             <artifactId>mapstruct</artifactId>
         </dependency>
 
+        <!-- PDF receipts (merged from payment-service) -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.30</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

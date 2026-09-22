@@ -8,6 +8,7 @@ import com.artacademy.courseenrollment.domain.CourseFee;
 import com.artacademy.courseenrollment.domain.Exam;
 import com.artacademy.courseenrollment.dto.ExamRequest;
 import com.artacademy.courseenrollment.dto.ExamResponse;
+import com.artacademy.courseenrollment.payment.service.StudentFeeSyncService;
 import com.artacademy.courseenrollment.repository.CourseRepository;
 import com.artacademy.courseenrollment.repository.EnrollmentRepository;
 import com.artacademy.courseenrollment.repository.ExamRepository;
@@ -35,6 +36,7 @@ public class ExamService {
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final StudentFeeSyncService studentFeeSyncService;
 
     @Transactional(readOnly = true)
     public List<ExamResponse> getAllExams() {
@@ -93,6 +95,9 @@ public class ExamService {
                 .students(students)
                 .occurredAt(Instant.now())
                 .build();
+        // Direct in-process fee sync (formerly payment-service's EXAM_SCHEDULED consumer).
+        studentFeeSyncService.upsertExamFee(event);
+
         kafkaTemplate.send(KafkaTopics.EXAM_SCHEDULED, saved.getId().toString(), event);
         log.info("Published ExamScheduledEvent for examId={}, {} enrolled students", saved.getId(), students.size());
 

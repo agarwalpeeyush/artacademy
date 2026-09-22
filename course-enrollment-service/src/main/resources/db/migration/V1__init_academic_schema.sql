@@ -1,4 +1,11 @@
 -- Course-enrollment service schema (academic_db).
+-- Consolidated migration: academic + user + attendance + payment tables live in one database
+-- after the four services were merged into course-enrollment-service. No cross-domain FKs
+-- (all cross-domain references are bare UUIDs), so the schemas concatenate cleanly.
+
+-- ============================================================================
+-- ACADEMIC
+-- ============================================================================
 
 -- Open-ended course-type catalog. New types are added as data, not code.
 CREATE TABLE COURSE_TYPES (
@@ -126,6 +133,222 @@ CREATE TABLE ENROLLMENT_TIMETABLES (
 
 CREATE INDEX idx_enrollment_timetables_timetable_id ON ENROLLMENT_TIMETABLES (TIMETABLE_ID);
 
+-- ============================================================================
+-- USER (Person + role-profiles model)
+-- ============================================================================
+-- One PERSONS row per human; zero-or-one of each profile (teacher/student/parent) hangs off it, so
+-- roles accumulate on a single account. Phone is an indexed LOOKUP key (D2), never unique. Login_id
+-- is a credential that may change on staff promotion (D3); identity is the stable PERSONS.ID (== auth User.id).
+
+CREATE TABLE PERSONS (
+    ID           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    LOGIN_ID     VARCHAR(255) UNIQUE,
+    FIRST_NAME   VARCHAR(255) NOT NULL,
+    LAST_NAME    VARCHAR(255),
+    EMAIL        VARCHAR(255),
+    PHONE_NUMBER VARCHAR(255),
+    STATUS       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    -- Elevated roles that have NO profile (PRINCIPAL/ADMIN), granted explicitly (OQ2). Comma-joined.
+    -- Effective roles = {role per profile held} ∪ {these}.
+    ELEVATED_ROLES VARCHAR(255)
+);
+
+CREATE INDEX idx_persons_phone ON PERSONS (PHONE_NUMBER);
+CREATE INDEX idx_persons_login ON PERSONS (LOGIN_ID);
+
+CREATE TABLE TEACHER_PROFILES (
+    PERSON_ID     UUID PRIMARY KEY,
+    EMPLOYEE_CODE VARCHAR(50) UNIQUE,
+    QUALIFICATION VARCHAR(255),
+    JOINING_DATE  DATE,
+    STATUS        VARCHAR(20) NOT NULL,
+    CONSTRAINT fk_teacher_profile_person FOREIGN KEY (PERSON_ID) REFERENCES PERSONS (ID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_teacher_profiles_employee_code ON TEACHER_PROFILES (EMPLOYEE_CODE);
+
+CREATE TABLE STUDENT_PROFILES (
+    PERSON_ID       UUID PRIMARY KEY,
+    DATE_OF_BIRTH   DATE,
+    ADDRESS         TEXT,
+    SCHOOL_NAME     VARCHAR(255),
+    CLASS_NAME      VARCHAR(100),
+    ENROLLMENT_DATE DATE,
+    STATUS          VARCHAR(20) NOT NULL,
+    -- Denormalized non-login guardian (D4): the "other parent" (e.g. father when the mother holds
+    -- the login) is stored inline here, not as a Person or a GUARDIANSHIPS edge.
+    OTHER_PARENT_NAME  VARCHAR(255),
+    OTHER_PARENT_PHONE VARCHAR(30),
+    OTHER_PARENT_REL   VARCHAR(20),
+    CONSTRAINT fk_student_profile_person FOREIGN KEY (PERSON_ID) REFERENCES PERSONS (ID) ON DELETE CASCADE
+);
+
+CREATE TABLE PARENT_PROFILES (
+    PERSON_ID  UUID PRIMARY KEY,
+    OCCUPATION VARCHAR(255),
+    STATUS     VARCHAR(20) NOT NULL,
+    CONSTRAINT fk_parent_profile_person FOREIGN KEY (PERSON_ID) REFERENCES PERSONS (ID) ON DELETE CASCADE
+);
+
+-- Only login-holding guardians get a row (D4). Parent<->child edge across two PERSONS.
+CREATE TABLE GUARDIANSHIPS (
+    GUARDIAN_PERSON_ID UUID NOT NULL,
+    STUDENT_PERSON_ID  UUID NOT NULL,
+    RELATIONSHIP       VARCHAR(20),
+    PRIMARY KEY (GUARDIAN_PERSON_ID, STUDENT_PERSON_ID),
+    CONSTRAINT fk_guardian FOREIGN KEY (GUARDIAN_PERSON_ID) REFERENCES PERSONS (ID) ON DELETE CASCADE,
+    CONSTRAINT fk_ward     FOREIGN KEY (STUDENT_PERSON_ID)  REFERENCES PERSONS (ID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_guardianship_student ON GUARDIANSHIPS (STUDENT_PERSON_ID);
+
+-- ============================================================================
+-- ATTENDANCE
+-- ============================================================================
+
+-- STUDENT_ATTENDANCE is keyed by (student_id, timetable_id, attendance_date) with course_id as a
+-- scope column. START_TIME/END_TIME record the actual session times (prefilled from the timetable
+-- slot, editable per record).
+CREATE TABLE STUDENT_ATTENDANCE (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ID      UUID NOT NULL,
+    COURSE_ID       UUID NOT NULL,
+    TIMETABLE_ID    UUID NOT NULL,
+    ATTENDANCE_DATE DATE NOT NULL,
+    START_TIME      TIME,
+    END_TIME        TIME,
+    STATUS          VARCHAR(20) NOT NULL,
+    REMARKS         TEXT,
+    CONSTRAINT uq_student_attendance UNIQUE (STUDENT_ID, TIMETABLE_ID, ATTENDANCE_DATE)
+);
+
+CREATE INDEX idx_student_attendance_student_date ON STUDENT_ATTENDANCE (STUDENT_ID, ATTENDANCE_DATE);
+CREATE INDEX idx_student_attendance_timetable_date ON STUDENT_ATTENDANCE (TIMETABLE_ID, ATTENDANCE_DATE);
+
+-- TEACHER_ATTENDANCE is keyed by (teacher_id, timetable_id, attendance_date) with course_id scope.
+CREATE TABLE TEACHER_ATTENDANCE (
+    ID              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    TEACHER_ID      UUID NOT NULL,
+    COURSE_ID       UUID NOT NULL,
+    TIMETABLE_ID    UUID NOT NULL,
+    ATTENDANCE_DATE DATE NOT NULL,
+    STATUS          VARCHAR(20) NOT NULL,
+    REMARKS         TEXT,
+    CONSTRAINT uq_teacher_attendance UNIQUE (TEACHER_ID, TIMETABLE_ID, ATTENDANCE_DATE)
+);
+
+CREATE INDEX idx_teacher_attendance_date ON TEACHER_ATTENDANCE (ATTENDANCE_DATE);
+CREATE INDEX idx_teacher_attendance_timetable_date ON TEACHER_ATTENDANCE (TIMETABLE_ID, ATTENDANCE_DATE);
+
+-- Audit log of direct attendance edits (R16). No request/approve/reject workflow: one row is
+-- appended per edit capturing old->new status, who made it, their role, and when.
+CREATE TABLE ATTENDANCE_CORRECTION (
+    ID                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ATTENDANCE_TYPE   VARCHAR(20) NOT NULL,
+    ATTENDANCE_ID     UUID NOT NULL,
+    SUBJECT_ID        UUID NOT NULL,
+    TIMETABLE_ID      UUID NOT NULL,
+    ATTENDANCE_DATE   DATE NOT NULL,
+    OLD_STATUS        VARCHAR(20) NOT NULL,
+    NEW_STATUS        VARCHAR(20) NOT NULL,
+    REASON            TEXT,
+    EDITED_BY_USER_ID UUID NOT NULL,
+    EDITOR_ROLE       VARCHAR(20) NOT NULL,
+    EDITED_AT         TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX idx_correction_attendance ON ATTENDANCE_CORRECTION (ATTENDANCE_ID);
+CREATE INDEX idx_correction_subject ON ATTENDANCE_CORRECTION (SUBJECT_ID);
+CREATE INDEX idx_correction_editor ON ATTENDANCE_CORRECTION (EDITED_BY_USER_ID);
+
+-- ============================================================================
+-- PAYMENT (fee-lifecycle model)
+-- ============================================================================
+-- STUDENT_FEE (enrollment header) → STUDENT_FEE_DETAIL (editable fee catalogue)
+-- → FEE_BILLS (per-period payable, carries revenue share) ; PAYMENTS (student-level)
+-- + STUDENT_CREDIT (over-payment balance).
+
+CREATE TABLE STUDENT_FEE (
+    ENROLLMENT_ID UUID PRIMARY KEY,
+    STUDENT_ID    UUID NOT NULL,
+    COURSE_ID     UUID NOT NULL,
+    TEACHER_ID    UUID,
+    STATUS        VARCHAR(20) NOT NULL
+);
+
+CREATE INDEX idx_student_fee_student_id ON STUDENT_FEE (STUDENT_ID);
+CREATE INDEX idx_student_fee_teacher_id ON STUDENT_FEE (TEACHER_ID);
+
+CREATE TABLE STUDENT_FEE_DETAIL (
+    ID                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ENROLLMENT_ID         UUID NOT NULL,
+    FEE_TYPE              VARCHAR(30) NOT NULL,
+    AMOUNT                NUMERIC(12, 2) NOT NULL,
+    CADENCE               VARCHAR(20) NOT NULL,
+    DUE_DATE              DATE,
+    INSTITUTE_SHARE_TYPE  VARCHAR(10),
+    INSTITUTE_SHARE_VALUE NUMERIC(12, 2),
+    CONSTRAINT uq_student_fee_detail_enrollment_type UNIQUE (ENROLLMENT_ID, FEE_TYPE),
+    CONSTRAINT fk_student_fee_detail_enrollment FOREIGN KEY (ENROLLMENT_ID)
+        REFERENCES STUDENT_FEE (ENROLLMENT_ID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_student_fee_detail_enrollment ON STUDENT_FEE_DETAIL (ENROLLMENT_ID);
+
+CREATE TABLE FEE_BILLS (
+    ID                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ENROLLMENT_ID            UUID NOT NULL,
+    STUDENT_ID               UUID NOT NULL,
+    BILLING_MONTH            INTEGER NOT NULL,
+    BILLING_YEAR             INTEGER NOT NULL,
+    FEE_TYPE                 VARCHAR(30) NOT NULL,
+    CADENCE                  VARCHAR(20) NOT NULL,
+    AMOUNT_DUE               NUMERIC(12, 2) NOT NULL,
+    PAID_AMOUNT              NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    OUTSTANDING_AMOUNT       NUMERIC(12, 2) NOT NULL,
+    STATUS                   VARCHAR(20) NOT NULL,
+    GENERATED_DATE           TIMESTAMP,
+    DUE_DATE                 TIMESTAMP,
+    PAYMENT_DATE             TIMESTAMP,
+    OUTSTANDING_BILL         BOOLEAN NOT NULL DEFAULT TRUE,
+    TEACHER_ID               UUID,
+    INSTITUTE_SHARE_TYPE     VARCHAR(10),
+    INSTITUTE_SHARE_VALUE    NUMERIC(12, 2),
+    INSTITUTE_SHARE_AMOUNT   NUMERIC(12, 2),
+    TEACHER_SHARE_AMOUNT     NUMERIC(12, 2),
+    OVERRIDE_INSTITUTE_SHARE NUMERIC(12, 2),
+    OVERRIDE_TEACHER_SHARE   NUMERIC(12, 2),
+    OVERRIDDEN_BY            UUID,
+    OVERRIDDEN_AT           TIMESTAMP,
+    CONSTRAINT uq_fee_bills_enrollment_type_period UNIQUE (ENROLLMENT_ID, FEE_TYPE, BILLING_MONTH, BILLING_YEAR)
+);
+
+CREATE INDEX idx_fee_bills_student_id ON FEE_BILLS (STUDENT_ID);
+CREATE INDEX idx_fee_bills_student_outstanding ON FEE_BILLS (STUDENT_ID, OUTSTANDING_BILL);
+CREATE INDEX idx_fee_bills_teacher_id ON FEE_BILLS (TEACHER_ID);
+
+CREATE TABLE PAYMENTS (
+    ID                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    STUDENT_ID            UUID NOT NULL,
+    AMOUNT                NUMERIC(12, 2) NOT NULL,
+    PAYMENT_MODE          VARCHAR(50),
+    TRANSACTION_REFERENCE VARCHAR(200),
+    PAYMENT_DATE          TIMESTAMP,
+    REMARKS               TEXT
+);
+
+CREATE INDEX idx_payments_student_id ON PAYMENTS (STUDENT_ID);
+
+CREATE TABLE STUDENT_CREDIT (
+    STUDENT_ID UUID PRIMARY KEY,
+    BALANCE    NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    UPDATED_AT TIMESTAMP
+);
+
+-- ============================================================================
+-- REFERENCE DATA + SEED
+-- ============================================================================
+
 -- Standard course types. Reference/master data, not dev seed. New types can be added at runtime
 -- via the course-type API.
 INSERT INTO COURSE_TYPES (ID, CODE, NAME, STATUS) VALUES
@@ -140,3 +363,9 @@ INSERT INTO COURSE_FEE_TYPES (CODE, NAME, FREQUENCY, STATUS) VALUES
     ('MONTHLY',             'Monthly',             'RECURRING', 'ACTIVE'),
     ('EXAM',                'Exam',                'ONE_TIME',  'ACTIVE'),
     ('ONE_TIME_SHORT_TERM', 'One Time Short Term', 'ONE_TIME',  'ACTIVE');
+
+-- Bootstrap seed: the single standing admin. ID matches the auth_db admin user. A PERSONS row with
+-- no role-profile; its ADMIN role is granted in auth_db, not derived from a profile here.
+INSERT INTO PERSONS (ID, LOGIN_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE_NUMBER, STATUS) VALUES
+    ('00000000-0000-0000-0001-000000000001', 'admin', 'Bootstrap', 'Admin', 'admin@artacademy.test', NULL, 'ACTIVE')
+ON CONFLICT (ID) DO NOTHING;

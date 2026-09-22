@@ -196,19 +196,6 @@ services:
       SERVER_PORT: 8081
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
 
-  user-service:
-    <<: *svc
-    container_name: artacademy-user-service
-    ports:
-      - "8082:8082"
-    volumes:
-      - ../user-service/target/user-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
-    entrypoint: ["java", "-jar", "/app.jar"]
-    environment:
-      <<: *env
-      SERVER_PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_db
-
   course-enrollment-service:
     <<: *svc
     container_name: artacademy-course-enrollment-service
@@ -221,32 +208,6 @@ services:
       <<: *env
       SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/academic_db
-
-  attendance-service:
-    <<: *svc
-    container_name: artacademy-attendance-service
-    ports:
-      - "8084:8084"
-    volumes:
-      - ../attendance-service/target/attendance-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
-    entrypoint: ["java", "-jar", "/app.jar"]
-    environment:
-      <<: *env
-      SERVER_PORT: 8084
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/attendance_db
-
-  payment-service:
-    <<: *svc
-    container_name: artacademy-payment-service
-    ports:
-      - "8086:8086"
-    volumes:
-      - ../payment-service/target/payment-service-1.0.0-SNAPSHOT.jar:/app.jar:ro
-    entrypoint: ["java", "-jar", "/app.jar"]
-    environment:
-      <<: *env
-      SERVER_PORT: 8086
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payment_db
 
   notification-service:
     <<: *svc

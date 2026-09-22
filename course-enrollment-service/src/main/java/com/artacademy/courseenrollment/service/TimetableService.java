@@ -1,7 +1,7 @@
 package com.artacademy.courseenrollment.service;
 
 import com.artacademy.common.exception.ApiException;
-import com.artacademy.courseenrollment.client.UserServiceClient;
+import com.artacademy.courseenrollment.user.service.TeacherService;
 import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.Timetable;
 import com.artacademy.courseenrollment.dto.TimetableConflictResponse;
@@ -32,7 +32,7 @@ public class TimetableService {
 
     private final TimetableRepository timetableRepository;
     private final TimetableMapper timetableMapper;
-    private final UserServiceClient userServiceClient;
+    private final TeacherService teacherService;
     private final CourseRepository courseRepository;
 
     private static final LocalTime DAY_START = LocalTime.of(8, 0);
@@ -82,7 +82,7 @@ public class TimetableService {
         if (responses.isEmpty()) {
             return responses;
         }
-        Map<UUID, String> teacherNames = userServiceClient.fetchTeacherNames();
+        Map<UUID, String> teacherNames = teacherService.fetchTeacherNames();
         List<UUID> courseIds = responses.stream()
                 .map(TimetableResponse::getCourseId)
                 .filter(java.util.Objects::nonNull)

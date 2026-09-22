@@ -24,9 +24,9 @@ import CoursesPage from './pages/principal/CoursesPage';
 import CourseTypesPage from './pages/principal/CourseTypesPage';
 import EnrollmentsPage from './pages/principal/EnrollmentsPage';
 import TimetablePage from './pages/principal/TimetablePage';
+import TimetableViewPage from './pages/principal/TimetableViewPage';
 import MarkStudentAttendancePage from './pages/principal/MarkStudentAttendancePage';
 import RevenuePage from './pages/principal/RevenuePage';
-import DefaultersPage from './pages/principal/DefaultersPage';
 import StudentFeeDetailPage from './pages/principal/StudentFeeDetailPage';
 import FeeBillsPage from './pages/principal/FeeBillsPage';
 import ExamFeePage from './pages/principal/ExamFeePage';
@@ -46,7 +46,6 @@ import AssignedStudentsPage from './pages/teacher/AssignedStudentsPage';
 import FeeStatusPage from './pages/teacher/FeeStatusPage';
 import TeacherPaymentsPage from './pages/teacher/PaymentsPage';
 import TeacherTimetablePage from './pages/teacher/TeacherTimetablePage';
-import AvailabilityExceptionsPage from './pages/teacher/AvailabilityExceptionsPage';
 import TeacherEnrollmentsPage from './pages/teacher/TeacherEnrollmentsPage';
 import TeacherProfilePage from './pages/teacher/TeacherProfilePage';
 import TeacherNotificationsPage from './pages/teacher/NotificationsPage';
@@ -119,11 +118,11 @@ const App: React.FC = () => {
         <Route path="classes" element={<Navigate to="/principal/courses" replace />} />
         <Route path="enrollments" element={<EnrollmentsPage />} />
         <Route path="timetable" element={<TimetablePage />} />
+        <Route path="timetable-view" element={<TimetableViewPage />} />
         <Route path="conflicts" element={<Navigate to="/principal/dashboard" replace />} />
         <Route path="exams" element={<Navigate to="/principal/exam-fee" replace />} />
         <Route path="mark-student-attendance" element={<MarkStudentAttendancePage />} />
         <Route path="revenue" element={<RevenuePage />} />
-        <Route path="defaulters" element={<DefaultersPage />} />
         <Route path="student-fee-detail" element={<StudentFeeDetailPage />} />
         <Route path="fee-bills" element={<FeeBillsPage />} />
         <Route path="exam-fee" element={<ExamFeePage />} />
@@ -155,7 +154,6 @@ const App: React.FC = () => {
         <Route path="fee-status" element={<FeeStatusPage />} />
         <Route path="payments" element={<TeacherPaymentsPage />} />
         <Route path="timetable" element={<TeacherTimetablePage />} />
-        <Route path="availability-exceptions" element={<AvailabilityExceptionsPage />} />
         <Route path="notifications" element={<TeacherNotificationsPage />} />
         <Route path="announcements" element={<TeacherAnnouncementsPage />} />
       </Route>

@@ -263,16 +263,6 @@ export interface UpcomingClass {
   className?: string;
 }
 
-export interface TeacherAvailabilityException {
-  id: string;
-  teacherId: string;
-  date: string;
-  reason?: string;
-  unavailableAllDay: boolean;
-  startTime?: string;
-  endTime?: string;
-}
-
 export interface FeeCycle {
   id: string;
   studentId: string;

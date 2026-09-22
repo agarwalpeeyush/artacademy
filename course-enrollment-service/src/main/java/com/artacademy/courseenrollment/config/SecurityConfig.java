@@ -62,6 +62,75 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT,    "/timetables/**").hasRole("PRINCIPAL")
                     .requestMatchers(HttpMethod.DELETE, "/timetables/**").hasRole("PRINCIPAL")
 
+                    // ---- merged from user-service ----
+                    // Self-service profile updates – owning role only. Must precede the wildcards below.
+                    .requestMatchers(HttpMethod.PUT, "/teachers/me").hasRole("TEACHER")
+                    .requestMatchers(HttpMethod.PUT, "/students/me").hasRole("STUDENT")
+                    .requestMatchers(HttpMethod.PUT, "/parents/me").hasRole("PARENT")
+
+                    .requestMatchers(HttpMethod.POST, "/principals").hasRole("ADMIN")
+
+                    .requestMatchers(HttpMethod.POST,   "/teachers").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST,   "/teachers/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT,    "/teachers/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/teachers/**").hasAnyRole("ADMIN", "PRINCIPAL")
+
+                    .requestMatchers(HttpMethod.POST,   "/students").hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.PUT,    "/students/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/students/**").hasAnyRole("ADMIN", "PRINCIPAL")
+
+                    .requestMatchers(HttpMethod.POST,   "/parents").hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.PUT,    "/parents/**").hasAnyRole("ADMIN", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.DELETE, "/parents/**").hasAnyRole("ADMIN", "PRINCIPAL")
+
+                    .requestMatchers(HttpMethod.GET, "/users/login-id/available")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+                    .requestMatchers(HttpMethod.GET, "/persons/lookup")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER")
+
+                    .requestMatchers(HttpMethod.GET, "/teachers/**")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER", "STUDENT")
+                    .requestMatchers(HttpMethod.GET, "/students/**")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
+                    .requestMatchers(HttpMethod.GET, "/parents/**")
+                            .hasAnyRole("ADMIN", "PRINCIPAL", "TEACHER", "STUDENT", "PARENT")
+
+                    // ---- merged from attendance-service ----
+                    .requestMatchers(HttpMethod.POST, "/attendance/teachers/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/attendance/corrections/teachers")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/attendance/corrections/students")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/attendance/corrections/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/attendance/students/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT, "/attendance/students/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/attendance/teachers/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/attendance/students/**")
+                            .hasAnyRole("STUDENT", "TEACHER", "PRINCIPAL")
+
+                    // ---- merged from payment-service ----
+                    .requestMatchers(HttpMethod.POST, "/fees/generate/exam")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/fees/generate/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.PUT, "/fees/bill/**")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/fees/teachers/summary")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers("/fees/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.GET, "/payments")
+                            .hasRole("PRINCIPAL")
+                    .requestMatchers("/payments/**")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+                    .requestMatchers(HttpMethod.POST, "/payments")
+                            .hasAnyRole("TEACHER", "PRINCIPAL")
+
                     // Read endpoints – any authenticated user
                     .requestMatchers(HttpMethod.GET, "/courses/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/classes/**").authenticated()

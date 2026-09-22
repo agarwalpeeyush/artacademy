@@ -16,10 +16,7 @@
         <module>config-server</module>
         <module>api-gateway</module>
         <module>auth-service</module>
-        <module>user-service</module>
         <module>course-enrollment-service</module>
-        <module>attendance-service</module>
-        <module>payment-service</module>
         <module>notification-service</module>
         <module>reporting-service</module>
     </modules>

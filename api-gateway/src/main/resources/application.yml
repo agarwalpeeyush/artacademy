@@ -25,28 +25,10 @@ spring:
           uri: lb://auth-service
           predicates:
             - Path=/auth/**
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/teachers/**,/students/**,/parents/**,/users/**,/principals/**
-          filters:
-            - JwtAuth
         - id: course-enrollment-service
           uri: lb://course-enrollment-service
           predicates:
-            - Path=/courses/**,/course-types/**,/enrollments/**,/timetables/**,/exams/**
-          filters:
-            - JwtAuth
-        - id: attendance-service
-          uri: lb://attendance-service
-          predicates:
-            - Path=/attendance/**
-          filters:
-            - JwtAuth
-        - id: payment-service
-          uri: lb://payment-service
-          predicates:
-            - Path=/fees/**,/payments/**
+            - Path=/courses/**,/course-types/**,/enrollments/**,/timetables/**,/exams/**,/teachers/**,/students/**,/parents/**,/users/**,/principals/**,/persons/**,/attendance/**,/fees/**,/payments/**
           filters:
             - JwtAuth
         - id: notification-service

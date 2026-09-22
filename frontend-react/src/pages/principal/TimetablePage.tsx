@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Grid, Alert, Snackbar, MenuItem, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Paper, Typography,
+  TextField, Grid, Alert, Snackbar, MenuItem, Paper, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -18,9 +16,9 @@ import { fetchCourses } from '../../store/slices/courseSlice';
 import { Timetable } from '../../types';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { getDayName, formatTime } from '../../utils/formatters';
-
-const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+import { getDayName } from '../../utils/formatters';
+import WeeklyTimetable, { CalendarBlock } from '../../components/timetable/WeeklyTimetable';
+import { DAYS, slotToIso, isoToSlot, hhmm, colorForCourse, ANCHOR_ISO } from '../../components/timetable/weekAdapter';
 
 const schema = yup.object({
   courseId: yup.string().required('Course is required'),
@@ -58,22 +56,67 @@ const TimetablePage: React.FC = () => {
     dispatch(fetchCourses());
   }, [dispatch]);
 
+  const courseNameById = useMemo(
+    () => new Map(courses.map(c => [c.id, c.courseName])),
+    [courses],
+  );
+  const teacherNameById = useMemo(
+    () => new Map(teachers.map(t => [t.id, `${t.firstName} ${t.lastName}`.trim()])),
+    [teachers],
+  );
+
+  const notify = (message: string, severity: 'success' | 'error' = 'success') =>
+    setSnackbar({ open: true, message, severity });
+
   const handleAdd = () => {
     setEditing(null);
     reset({ courseId: '', teacherId: '', daysOfWeek: ['MONDAY'], startTime: '09:00', endTime: '10:00' });
     setDialogOpen(true);
   };
 
-  const handleEdit = (s: Timetable) => {
+  // Click / drag on an empty slot: open the add dialog prefilled with that day + time range.
+  const handleSelectRange = (startIso: string, endIso: string) => {
+    const s = isoToSlot(startIso);
+    const e = isoToSlot(endIso);
+    setEditing(null);
+    reset({ courseId: '', teacherId: '', daysOfWeek: [s.dayOfWeek], startTime: s.time, endTime: e.time });
+    setDialogOpen(true);
+  };
+
+  const handleEditById = (id: string) => {
+    const s = timetables.find(t => t.id === id);
+    if (!s) return;
     setEditing(s);
     reset({
       courseId: s.courseId,
       teacherId: s.teacherId,
       daysOfWeek: [s.dayOfWeek.toUpperCase()],
-      startTime: s.startTime.slice(0, 5),
-      endTime: s.endTime.slice(0, 5),
+      startTime: hhmm(s.startTime),
+      endTime: hhmm(s.endTime),
     });
     setDialogOpen(true);
+  };
+
+  // Drag or resize an existing block: persist the new day/time via update.
+  const handleReschedule = async (id: string, startIso: string, endIso: string) => {
+    const slot = timetables.find(t => t.id === id);
+    if (!slot) return;
+    const s = isoToSlot(startIso);
+    const e = isoToSlot(endIso);
+    try {
+      await dispatch(updateTimetable({
+        id,
+        courseId: slot.courseId,
+        teacherId: slot.teacherId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.time,
+        endTime: e.time,
+      })).unwrap();
+      notify('Class rescheduled');
+    } catch (err: unknown) {
+      notify(String(err) || 'Reschedule failed', 'error');
+      dispatch(fetchTimetables()); // revert optimistic drag
+    }
   };
 
   const handleSubmitForm = async (data: TimetableFormData) => {
@@ -82,16 +125,17 @@ const TimetablePage: React.FC = () => {
     if (editing) {
       try {
         await dispatch(updateTimetable({ id: editing.id, ...rest, dayOfWeek: daysOfWeek[0] })).unwrap();
-        setSnackbar({ open: true, message: 'Timetable entry updated', severity: 'success' });
+        notify('Timetable entry updated');
         setDialogOpen(false);
         setEditing(null);
         reset();
       } catch (err: unknown) {
-        setSnackbar({ open: true, message: String(err) || 'Update failed', severity: 'error' });
+        notify(String(err) || 'Update failed', 'error');
       }
       return;
     }
 
+    // Bulk weekly creation: one class per selected day in a single workflow.
     const failures: string[] = [];
     let successCount = 0;
     for (const day of daysOfWeek) {
@@ -103,107 +147,78 @@ const TimetablePage: React.FC = () => {
       }
     }
     if (failures.length === 0) {
-      setSnackbar({ open: true, message: `Added ${successCount} timetable entr(ies)`, severity: 'success' });
+      notify(`Added ${successCount} class${successCount === 1 ? '' : 'es'} to the weekly schedule`);
       setDialogOpen(false);
       reset();
     } else {
-      setSnackbar({
-        open: true,
-        message: `Added ${successCount}, failed: ${failures.join('; ')}`,
-        severity: 'error',
-      });
+      notify(`Added ${successCount}, failed: ${failures.join('; ')}`, 'error');
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!editing) return;
     try {
-      await dispatch(deleteTimetable(id)).unwrap();
-      setSnackbar({ open: true, message: 'Timetable entry deleted', severity: 'success' });
+      await dispatch(deleteTimetable(editing.id)).unwrap();
+      notify('Timetable entry deleted');
+      setDialogOpen(false);
+      setEditing(null);
     } catch (err: unknown) {
-      setSnackbar({ open: true, message: String(err) || 'Delete failed', severity: 'error' });
+      notify(String(err) || 'Delete failed', 'error');
     }
   };
 
-  const courseNameById = useMemo(
-    () => new Map(courses.map(c => [c.id, c.courseName])),
-    [courses],
+  const blocks: CalendarBlock[] = useMemo(
+    () => timetables.map(s => ({
+      id: s.id,
+      start: slotToIso(s.dayOfWeek, s.startTime),
+      end: slotToIso(s.dayOfWeek, s.endTime),
+      color: colorForCourse(s.courseId),
+      title: s.courseName || courseNameById.get(s.courseId) || 'Course',
+      subtitle: s.teacherName || teacherNameById.get(s.teacherId) || 'Unassigned',
+    })),
+    [timetables, courseNameById, teacherNameById],
   );
-  const teacherNameById = useMemo(
-    () => new Map(teachers.map(t => [t.id, `${t.firstName} ${t.lastName}`.trim()])),
-    [teachers],
-  );
-
-  const groupedByDay = DAYS.reduce<Record<string, Timetable[]>>((acc, day) => {
-    acc[day] = timetables.filter(s => s.dayOfWeek.toUpperCase() === day);
-    return acc;
-  }, {});
 
   if (loading && timetables.length === 0) return <LoadingSpinner />;
 
   return (
     <Box>
       <PageHeader
-        title="Timetable"
-        subtitle="Weekly class timetable"
-        breadcrumbs={[{ label: 'Principal' }, { label: 'Timetable' }]}
+        title="Weekly Schedule"
+        subtitle="Drag on the grid to add a class, drag a block to reschedule, click to edit"
+        breadcrumbs={[{ label: 'Principal' }, { label: 'Weekly Schedule' }]}
         action={
           <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-            Add Schedule
+            Create Weekly Schedule
           </Button>
         }
       />
 
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 700 }}>Day</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
-              <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {DAYS.flatMap(day => {
-              const dayTimetables = groupedByDay[day];
-              if (dayTimetables.length === 0) return [];
-              return dayTimetables.map((s, idx) => (
-                <TableRow key={s.id} sx={{ bgcolor: idx === 0 ? '#f8f9ff' : 'inherit' }}>
-                  {idx === 0 && (
-                    <TableCell rowSpan={dayTimetables.length} sx={{ fontWeight: 600, bgcolor: '#E3F2FD', verticalAlign: 'top', pt: 2 }}>
-                      {getDayName(day)}
-                    </TableCell>
-                  )}
-                  <TableCell>{s.courseName || courseNameById.get(s.courseId) || '-'}</TableCell>
-                  <TableCell>{s.teacherName || teacherNameById.get(s.teacherId) || '-'}</TableCell>
-                  <TableCell>{formatTime(s.startTime)} – {formatTime(s.endTime)}</TableCell>
-                  <TableCell align="center">
-                    <Button size="small" startIcon={<EditIcon />} onClick={() => handleEdit(s)}>
-                      Edit
-                    </Button>
-                    <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(s.id)}>
-                      Remove
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ));
-            })}
-            {timetables.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                  <Typography color="text.secondary">No timetables found. Add a schedule to get started.</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+        {timetables.length === 0 && (
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            No classes scheduled yet. Drag on the grid or use “Create Weekly Schedule” to add classes.
+          </Typography>
+        )}
+        <WeeklyTimetable
+          events={blocks}
+          initialDate={ANCHOR_ISO}
+          onSelectRange={handleSelectRange}
+          onEventClick={handleEditById}
+          onEventDrop={handleReschedule}
+          onEventResize={handleReschedule}
+        />
+      </Paper>
 
       <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setEditing(null); }} maxWidth="sm" fullWidth>
-        <DialogTitle>{editing ? 'Edit Timetable Entry' : 'Add Timetable Entry'}</DialogTitle>
+        <DialogTitle>{editing ? 'Edit Class' : 'Create Weekly Schedule'}</DialogTitle>
         <Box component="form" onSubmit={handleSubmit(handleSubmitForm)}>
           <DialogContent>
+            {!editing && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select one or more days to schedule this class across the week in a single step.
+              </Typography>
+            )}
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <Controller name="courseId" control={control} render={({ field }) => (
@@ -250,21 +265,30 @@ const TimetablePage: React.FC = () => {
                   )
                 )} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <Controller name="startTime" control={control} render={({ field }) => (
                   <TextField {...field} label="Start Time" type="time" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.startTime} helperText={errors.startTime?.message} />
                 )} />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <Controller name="endTime" control={control} render={({ field }) => (
                   <TextField {...field} label="End Time" type="time" fullWidth size="small" InputLabelProps={{ shrink: true }} error={!!errors.endTime} helperText={errors.endTime?.message} />
                 )} />
               </Grid>
             </Grid>
           </DialogContent>
-          <DialogActions sx={{ p: 2 }}>
-            <Button onClick={() => { setDialogOpen(false); setEditing(null); }} variant="outlined">Cancel</Button>
-            <Button type="submit" variant="contained">{editing ? 'Update' : 'Add'}</Button>
+          <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+            <Box>
+              {editing && (
+                <Button color="error" startIcon={<DeleteIcon />} onClick={handleDelete}>
+                  Delete
+                </Button>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button onClick={() => { setDialogOpen(false); setEditing(null); }} variant="outlined">Cancel</Button>
+              <Button type="submit" variant="contained">{editing ? 'Save' : 'Add to Schedule'}</Button>
+            </Box>
           </DialogActions>
         </Box>
       </Dialog>

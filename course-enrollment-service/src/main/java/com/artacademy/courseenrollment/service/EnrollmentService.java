@@ -5,7 +5,9 @@ import com.artacademy.common.events.EnrollmentCreatedEvent;
 import com.artacademy.common.events.KafkaTopics;
 import com.artacademy.common.exception.ApiException;
 import com.artacademy.common.fee.ShareType;
-import com.artacademy.courseenrollment.client.UserServiceClient;
+import com.artacademy.courseenrollment.payment.service.StudentFeeSyncService;
+import com.artacademy.courseenrollment.user.service.StudentService;
+import com.artacademy.courseenrollment.user.service.TeacherService;
 import com.artacademy.courseenrollment.domain.Course;
 import com.artacademy.courseenrollment.domain.CourseFee;
 import com.artacademy.courseenrollment.domain.Enrollment;
@@ -54,7 +56,9 @@ public class EnrollmentService {
     private final FeeTypeRepository feeTypeRepository;
     private final EnrollmentMapper enrollmentMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final UserServiceClient userServiceClient;
+    private final StudentService studentService;
+    private final TeacherService teacherService;
+    private final StudentFeeSyncService studentFeeSyncService;
 
     public EnrollmentResponse enrollStudent(EnrollmentRequest request) {
         // A (studentId, courseId) row may already exist because cancellation is a soft update
@@ -124,6 +128,9 @@ public class EnrollmentService {
                 .courseId(courseId)
                 .occurredAt(Instant.now())
                 .build();
+
+        // Direct in-process fee sync (formerly payment-service's ENROLLMENT_CANCELLED consumer).
+        studentFeeSyncService.markCancelled(event);
 
         kafkaTemplate.send(KafkaTopics.ENROLLMENT_CANCELLED, String.valueOf(id), event);
         log.info("Published EnrollmentCancelledEvent for enrollment id={}", id);
@@ -327,6 +334,9 @@ public class EnrollmentService {
                 .occurredAt(Instant.now())
                 .build();
 
+        // Direct in-process fee sync (formerly payment-service's ENROLLMENT_CREATED consumer).
+        studentFeeSyncService.upsertFromEnrollment(event);
+
         kafkaTemplate.send(KafkaTopics.ENROLLMENT_CREATED, String.valueOf(saved.getId()), event);
         log.info("Published EnrollmentCreatedEvent for enrollment id={} teacherId={}",
                 saved.getId(), saved.getTeacherId());
@@ -394,8 +404,8 @@ public class EnrollmentService {
         if (responses.isEmpty()) {
             return responses;
         }
-        Map<UUID, String> studentNames = userServiceClient.fetchStudentNames();
-        Map<UUID, String> teacherNames = userServiceClient.fetchTeacherNames();
+        Map<UUID, String> studentNames = studentService.fetchStudentNames();
+        Map<UUID, String> teacherNames = teacherService.fetchTeacherNames();
         for (EnrollmentResponse r : responses) {
             r.setStudentName(studentNames.get(r.getStudentId()));
             if (r.getTeacherId() != null) {

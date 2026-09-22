@@ -8,17 +8,8 @@
 SELECT 'CREATE DATABASE auth_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'auth_db')\gexec
 
-SELECT 'CREATE DATABASE user_db'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'user_db')\gexec
-
 SELECT 'CREATE DATABASE academic_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'academic_db')\gexec
-
-SELECT 'CREATE DATABASE attendance_db'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'attendance_db')\gexec
-
-SELECT 'CREATE DATABASE payment_db'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'payment_db')\gexec
 
 SELECT 'CREATE DATABASE notification_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notification_db')\gexec
@@ -30,17 +21,8 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'reporting_db')\gexec
 \c auth_db
 GRANT ALL PRIVILEGES ON DATABASE auth_db TO artacademy;
 
-\c user_db
-GRANT ALL PRIVILEGES ON DATABASE user_db TO artacademy;
-
 \c academic_db
 GRANT ALL PRIVILEGES ON DATABASE academic_db TO artacademy;
-
-\c attendance_db
-GRANT ALL PRIVILEGES ON DATABASE attendance_db TO artacademy;
-
-\c payment_db
-GRANT ALL PRIVILEGES ON DATABASE payment_db TO artacademy;
 
 \c notification_db
 GRANT ALL PRIVILEGES ON DATABASE notification_db TO artacademy;
