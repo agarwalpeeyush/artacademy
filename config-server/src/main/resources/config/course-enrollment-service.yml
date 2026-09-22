@@ -13,3 +13,9 @@ spring:
       ddl-auto: validate
   flyway:
     locations: classpath:db/migration
+
+artacademy:
+  user:
+    # Default initial auth password assigned to newly created users when the UI supplies none.
+    # Users are forced to reset it on first login.
+    default-temporary-password: ChangeMe@123
